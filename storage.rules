@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // users/{uid}/ 경로:
+    // - 인증된 모든 유저가 읽을 수 있다 (프로필 사진 표시에 필요).
+    // - 쓰기는 본인 폴더만 가능하다.
+    match /users/{uid}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+  }
+}
+
+// === 콘솔 적용 방법 ===
+// 1. Firebase 콘솔 → Storage → 규칙(Rules) 탭
+// 2. 이 파일 내용을 붙여넣고 "게시(Publish)" 클릭
+// 또는 Firebase CLI: firebase deploy --only storage

@@ -1,0 +1,153 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // users/{uid} 문서:
+    // - 인증된 모든 유저가 읽을 수 있다 (디스커버리에서 상대 프로필 조회에 필요).
+    // - 쓰기(생성/수정/삭제)는 본인만 가능하다.
+    // - verifications는 프로토타입에서 클라이언트가 Auth 상태를 동기화한다.
+    //   실서비스에서는 서버 검증(Cloud Functions/Admin SDK) 후 true를 써야 한다.
+    // - jelly/boostUntil/likesUnlocked는 목업 결제용 클라이언트 필드다.
+    //   실서비스: 충전/차감은 서버(Functions/IAP 영수증 검증) 경유 필수.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+
+      // 개발용 더미 유저 쓰기 — 출시 전 반드시 제거할 것
+      allow write: if request.auth != null && uid.matches('dummy_.*'); // TODO: 출시 전 제거
+
+      // users/{uid}/swipes/{targetUid}:
+      // - 본인의 스와이프 기록만 읽고 쓸 수 있다.
+      // - 매칭 판정은 Cloud Functions admin SDK가 처리한다.
+      match /swipes/{targetUid} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        // 개발용: DummyDataService가 dummy_* 유저의 역방향 스와이프를 쓸 수 있게 허용.
+        // dummy_001·003·006 → 현재 유저 like 삽입 시 필요.
+        allow write: if request.auth != null && uid.matches('dummy_.*'); // TODO: 출시 전 제거
+      }
+
+      // users/{uid}/dailyFortune/{yyyy-MM-dd} (M6.5):
+      // - 오늘의 운세(애정 중심) 캐시. 본인만 읽을 수 있다.
+      // - 쓰기는 Cloud Functions(admin SDK, generateDailyFortune)만 가능 —
+      //   클라이언트가 직접 GPT 호출을 우회해 위조하지 못하게 막는다.
+      match /dailyFortune/{date} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      // users/{uid}/blocks/{blockedUid}:
+      // - 본인만 자신의 차단 목록을 읽고 쓸 수 있다.
+      // - blockerUid/blockedUid를 문서 경로와 맞춰 저장해 collectionGroup 조회 시
+      //   "나를 차단한 사람"을 안전하게 판별한다.
+      match /blocks/{blockedUid} {
+        allow read, delete: if request.auth != null && request.auth.uid == uid;
+        allow create, update: if request.auth != null &&
+          request.auth.uid == uid &&
+          request.resource.data.blockerUid == uid &&
+          request.resource.data.blockedUid == blockedUid;
+      }
+
+      // users/{uid}/jellyTransactions/{txId}:
+      // 목업 결제/소모 내역. 프로토타입에서는 클라이언트 트랜잭션으로 쓰지만,
+      // 실서비스에서는 Functions에서 IAP 검증 후 Admin SDK로만 써야 한다.
+      match /jellyTransactions/{txId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // matches/{matchId}:
+    // - 읽기(get): 매치의 participants 중 한 명인 유저만 가능.
+    //   resource == null 이면 문서가 존재하지 않는 것(매치 미성사).
+    //   이 경우도 허용해야 checkForMatch가 "문서 없음(exists=false)"을 정상 반환한다.
+    //   resource == null 을 막으면 Firestore가 PERMISSION_DENIED를 반환해,
+    //   like 스와이프마다 오류처럼 보이는 버그가 생긴다.
+    // - list: 필요 시 watchMatches에서 arrayContains 쿼리를 사용하므로
+    //   list 도 participants 기반으로 허용한다.
+    //   (쿼리는 Firestore가 규칙을 문서별로 평가하므로 실질적으로 안전하다.)
+    // - 쓰기: Cloud Functions(admin SDK)만 가능 — 클라이언트는 직접 생성·수정 불가.
+    //
+    // matchId = [uid1, uid2].sort().join('_') 형식.
+    // Firestore 복합 인덱스 필요:
+    //   Collection: matches / participants(arrayContains) + matchedAt(desc)
+    //   앱 실행 시 콘솔에 인덱스 생성 URL이 출력되면 해당 URL을 열어 인덱스를 만들 것.
+    match /matches/{matchId} {
+      allow get: if request.auth != null && (
+        resource == null ||
+        request.auth.uid in resource.data.participants
+      );
+      allow list: if request.auth != null && (
+        resource == null ||
+        request.auth.uid in resource.data.participants
+      );
+      allow create, delete: if false;
+
+      // update: lastMessage 필드만 갱신 허용 (M5 채팅 전송 시 미리보기 갱신용).
+      // matchedAt·participants 등 나머지 필드는 여전히 Cloud Functions만 쓸 수 있다 —
+      // affectedKeys()로 이번 쓰기가 건드리는 필드를 lastMessage 하나로 제한한다.
+      allow update: if request.auth != null &&
+        request.auth.uid in resource.data.participants &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage']);
+
+      // matches/{matchId}/messages/{messageId}:
+      // - read: 이 매치의 participants 중 한 명만 가능.
+      // - create: participants 중 한 명 + senderId가 본인 uid와 일치할 때만
+      //   (다른 사람 이름으로 메시지를 못 보내게 막는다).
+      // - update/delete: 항상 금지 — 메시지 수정·삭제 기능은 아직 없다.
+      //
+      // 부모 matches 문서를 get()으로 한 번 더 읽으므로 매 메시지 read/create마다
+      // 추가 문서 읽기 1회가 발생한다(과금·쿼터에 반영됨). MVP에서는 허용.
+      match /messages/{messageId} {
+        allow read: if request.auth != null &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/matches/$(matchId)).data.participants;
+
+        allow create: if request.auth != null &&
+          request.auth.uid in
+            get(/databases/$(database)/documents/matches/$(matchId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+
+        allow update, delete: if false;
+      }
+    }
+
+    // collectionGroup('swipes') 조회용 규칙:
+    // 받은 좋아요 화면은 users/{다른유저}/swipes/{내uid} 문서를 collectionGroup으로
+    // 읽는다. 남의 스와이프 전체를 열지 않고, targetUid가 본인인 문서만 허용한다.
+    match /{path=**}/swipes/{swipeId} {
+      allow read: if request.auth != null &&
+        resource.data.targetUid == request.auth.uid;
+    }
+
+    // collectionGroup('blocks') 조회용 규칙:
+    // 양방향 숨김을 위해 "나를 차단한 사람"만 읽을 수 있게 제한한다.
+    match /{path=**}/blocks/{blockedUid} {
+      allow read: if request.auth != null &&
+        resource.data.blockedUid == request.auth.uid;
+    }
+
+    // reports/{reportId}:
+    // 클라이언트는 신고 생성만 가능하고, 신고 목록 읽기/수정/삭제는 금지한다.
+    // 운영자 검토 화면은 별도 관리자 권한 또는 Admin SDK로 붙이는 전제다.
+    match /reports/{reportId} {
+      allow create: if request.auth != null &&
+        request.resource.data.reporterUid == request.auth.uid &&
+        request.resource.data.reportedUid is string &&
+        request.resource.data.reason in [
+          'inappropriate_photo',
+          'abusive_language',
+          'spam_scam',
+          'impersonation',
+          'other'
+        ];
+      allow read, update, delete: if false;
+    }
+
+  }
+}
+
+// === 콘솔 적용 방법 ===
+// 1. Firebase 콘솔 (https://console.firebase.google.com) → 프로젝트 선택
+// 2. 왼쪽 메뉴 → Firestore Database → 규칙(Rules) 탭
+// 3. 이 파일 내용을 붙여넣고 "게시(Publish)" 클릭
+// 또는 Firebase CLI가 설치돼 있으면: firebase deploy --only firestore:rules

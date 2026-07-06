@@ -1,0 +1,77 @@
+# Miscellaneous
+*.class
+*.log
+firepit-log*.txt
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ===== Android 네이티브 빌드/로컬 설정 (직접 추가) =====
+# .gradle 캐시, 로컬 SDK 경로, 서명 키 설정 — 기기마다 다르고 커밋 대상 아님
+android/.gradle/
+android/local.properties
+android/key.properties
+
+# ===== iOS 네이티브 빌드/로컬 설정 (직접 추가) =====
+# CocoaPods 설치 산출물, Flutter 임시 파일, Xcode 사용자별 상태
+ios/Pods/
+ios/Flutter/ephemeral/
+ios/.symlinks/
+**/xcuserdata/
+
+# ===== 보안: 비밀/연결 설정 파일 (직접 추가) =====
+# 실제 환경변수 파일 — 절대 커밋 금지 (.env.example 만 커밋한다)
+.env
+
+# Cloud Functions(Node.js) 의존성 — package.json/package-lock.json만 커밋한다.
+functions/node_modules/
+
+# Firebase 연결 설정 파일.
+# flutterfire configure 가 생성하며, 협업/공개 저장소에서는 노출을 줄이기 위해 무시한다.
+# (단, 혼자 쓰는 비공개 저장소라면 커밋해도 무방하다 — 팀 정책에 맞게 결정)
+lib/firebase_options.dart
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
+/ios/firebase_app_id_file.json
+/macos/Runner/GoogleService-Info.plist
+/macos/firebase_app_id_file.json
