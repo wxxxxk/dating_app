@@ -44,6 +44,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _checkingBlock = true;
   bool _blocked = false;
+  // 실제 typing 이벤트가 연결되면 이 값만 갱신하면 된다.
+  final bool _isOtherTyping = false;
 
   @override
   void initState() {
@@ -251,6 +253,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(28),
+          child: _ChatStatusBar(label: '온라인'),
+        ),
         actions: [
           PopupMenuButton<String>(
             tooltip: '안전 메뉴',
@@ -273,6 +279,7 @@ class _ChatScreenState extends State<ChatScreen> {
             : Column(
                 children: [
                   Expanded(child: _buildMessageList()),
+                  _TypingSlot(isTyping: _isOtherTyping),
                   _buildInputBar(),
                 ],
               ),
@@ -316,11 +323,21 @@ class _ChatScreenState extends State<ChatScreen> {
             final msg = messages[i];
             final isMine = msg.senderId == widget.currentUid;
             final showDateDivider = _shouldShowDateDivider(messages, i);
+            final position = _bubblePosition(messages, i);
+            final showTime = _shouldShowTime(messages, i);
             return Column(
+              key: ValueKey('message-row-${msg.id}'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (showDateDivider) _DateDivider(date: msg.createdAt!),
-                _MessageBubble(message: msg, isMine: isMine),
+                _AnimatedMessageRow(
+                  child: _MessageBubble(
+                    message: msg,
+                    isMine: isMine,
+                    position: position,
+                    showTime: showTime,
+                  ),
+                ),
               ],
             );
           },
@@ -341,6 +358,50 @@ class _ChatScreenState extends State<ChatScreen> {
 
   bool _isSameDate(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  _BubblePosition _bubblePosition(List<MessageModel> messages, int index) {
+    final joinsPrevious = _isGroupedWith(messages, index - 1, index);
+    final joinsNext = _isGroupedWith(messages, index, index + 1);
+    if (joinsPrevious && joinsNext) return _BubblePosition.middle;
+    if (joinsNext) return _BubblePosition.top;
+    if (joinsPrevious) return _BubblePosition.bottom;
+    return _BubblePosition.single;
+  }
+
+  bool _shouldShowTime(List<MessageModel> messages, int index) {
+    final current = messages[index];
+    if (current.createdAt == null) return true;
+    if (index == messages.length - 1) return true;
+
+    final next = messages[index + 1];
+    if (current.senderId != next.senderId) return true;
+    if (next.createdAt == null) return true;
+    return !_isSameMinute(current.createdAt!, next.createdAt!);
+  }
+
+  bool _isGroupedWith(
+    List<MessageModel> messages,
+    int firstIndex,
+    int secondIndex,
+  ) {
+    if (firstIndex < 0 || secondIndex >= messages.length) return false;
+    final first = messages[firstIndex];
+    final second = messages[secondIndex];
+    if (first.senderId != second.senderId) return false;
+    final firstTime = first.createdAt;
+    final secondTime = second.createdAt;
+    if (firstTime == null || secondTime == null) return false;
+    if (!_isSameDate(firstTime, secondTime)) return false;
+    return secondTime.difference(firstTime).abs() <= const Duration(minutes: 5);
+  }
+
+  bool _isSameMinute(DateTime a, DateTime b) {
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day &&
+        a.hour == b.hour &&
+        a.minute == b.minute;
   }
 
   Widget _buildInputBar() {
@@ -590,57 +651,104 @@ class _DateDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Text(
-          _formatDate(date),
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textSecondary,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          const Expanded(child: Divider(color: AppColors.border, height: 1)),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              _formatDate(date),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
-        ),
+          const Expanded(child: Divider(color: AppColors.border, height: 1)),
+        ],
       ),
     );
   }
 
   static String _formatDate(DateTime date) {
-    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
-    final weekday = weekdays[date.weekday - 1];
-    return '${date.month}월 ${date.day}일 ($weekday)';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    final diff = today.difference(target).inDays;
+    if (diff == 0) return '오늘';
+    if (diff == 1) return '어제';
+    return '${date.month}월 ${date.day}일';
+  }
+}
+
+enum _BubblePosition { single, top, middle, bottom }
+
+class _AnimatedMessageRow extends StatelessWidget {
+  final Widget child;
+
+  const _AnimatedMessageRow({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 8 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
   }
 }
 
 class _MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMine;
+  final _BubblePosition position;
+  final bool showTime;
 
-  const _MessageBubble({required this.message, required this.isMine});
+  const _MessageBubble({
+    required this.message,
+    required this.isMine,
+    required this.position,
+    required this.showTime,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.only(top: _topSpacing, bottom: showTime ? 5 : 1),
       child: Row(
         mainAxisAlignment: isMine
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMine) const SizedBox(width: 0),
+          if (isMine && showTime) _MessageTime(dateTime: message.createdAt),
+          if (isMine && showTime) const SizedBox(width: 6),
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isMine ? AppColors.primary : AppColors.surface,
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: _radius,
+                border: isMine ? null : Border.all(color: AppColors.border),
               ),
               child: Text(
                 message.text,
@@ -652,23 +760,249 @@ class _MessageBubble extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          if (!isMine && showTime) const SizedBox(width: 6),
+          if (!isMine && showTime) _MessageTime(dateTime: message.createdAt),
+        ],
+      ),
+    );
+  }
+
+  double get _topSpacing {
+    switch (position) {
+      case _BubblePosition.single:
+      case _BubblePosition.top:
+        return 8;
+      case _BubblePosition.middle:
+      case _BubblePosition.bottom:
+        return 2;
+    }
+  }
+
+  BorderRadius get _radius {
+    const large = Radius.circular(18);
+    const small = Radius.circular(6);
+    if (isMine) {
+      switch (position) {
+        case _BubblePosition.single:
+          return const BorderRadius.all(large);
+        case _BubblePosition.top:
+          return const BorderRadius.only(
+            topLeft: large,
+            topRight: large,
+            bottomLeft: large,
+            bottomRight: small,
+          );
+        case _BubblePosition.middle:
+          return const BorderRadius.only(
+            topLeft: large,
+            topRight: small,
+            bottomLeft: large,
+            bottomRight: small,
+          );
+        case _BubblePosition.bottom:
+          return const BorderRadius.only(
+            topLeft: large,
+            topRight: small,
+            bottomLeft: large,
+            bottomRight: large,
+          );
+      }
+    }
+
+    switch (position) {
+      case _BubblePosition.single:
+        return const BorderRadius.all(large);
+      case _BubblePosition.top:
+        return const BorderRadius.only(
+          topLeft: large,
+          topRight: large,
+          bottomLeft: small,
+          bottomRight: large,
+        );
+      case _BubblePosition.middle:
+        return const BorderRadius.only(
+          topLeft: small,
+          topRight: large,
+          bottomLeft: small,
+          bottomRight: large,
+        );
+      case _BubblePosition.bottom:
+        return const BorderRadius.only(
+          topLeft: small,
+          topRight: large,
+          bottomLeft: large,
+          bottomRight: large,
+        );
+    }
+  }
+}
+
+class _MessageTime extends StatelessWidget {
+  final DateTime? dateTime;
+
+  const _MessageTime({required this.dateTime});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Text(
+        _formatTime(dateTime),
+        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+      ),
+    );
+  }
+
+  static String _formatTime(DateTime? dateTime) {
+    if (dateTime == null) return '전송 중';
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+}
+
+class _ChatStatusBar extends StatelessWidget {
+  final String label;
+
+  const _ChatStatusBar({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      width: double.infinity,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.only(left: 72, right: 16, bottom: 8),
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: Color(0xFF34C759),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
           Text(
-            _formatTime(message.createdAt),
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  static String _formatTime(DateTime? dt) {
-    if (dt == null) return '전송 중';
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    return '$h:$m';
+class _TypingSlot extends StatelessWidget {
+  final bool isTyping;
+
+  const _TypingSlot({required this.isTyping});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 160),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: isTyping
+          ? const Padding(
+              key: ValueKey('typing-on'),
+              padding: EdgeInsets.fromLTRB(16, 2, 16, 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _TypingIndicator(),
+              ),
+            )
+          : const SizedBox(key: ValueKey('typing-off'), height: 0),
+    );
+  }
+}
+
+class _TypingIndicator extends StatefulWidget {
+  const _TypingIndicator();
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+          3,
+          (index) => _TypingDot(controller: _controller, index: index),
+        ),
+      ),
+    );
+  }
+}
+
+class _TypingDot extends StatelessWidget {
+  final AnimationController controller;
+  final int index;
+
+  const _TypingDot({required this.controller, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, child) {
+        final shifted = (controller.value + index * 0.18) % 1.0;
+        final lift = shifted < 0.5 ? shifted * 2 : (1 - shifted) * 2;
+        return Transform.translate(
+          offset: Offset(0, -3 * lift),
+          child: Opacity(opacity: 0.35 + 0.65 * lift, child: child),
+        );
+      },
+      child: Container(
+        width: 6,
+        height: 6,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: const BoxDecoration(
+          color: AppColors.textSecondary,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
   }
 }
