@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
@@ -86,8 +87,12 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
           _narrative = narrative;
         });
       }
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('[MatchFortune] 궁합 로드 실패: $e');
+        debugPrint('$stackTrace');
+      }
+      if (mounted) setState(() => _error = '궁합 정보를 불러오지 못했어요.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -133,11 +138,15 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
         text: '우리의 사주 궁합 결과를 확인해보세요.',
         sharePositionOrigin: origin,
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('[MatchFortune] 궁합 이미지 생성 실패: $e');
+        debugPrint('$stackTrace');
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('궁합 이미지 생성 실패: $e')));
+        ..showSnackBar(const SnackBar(content: Text('궁합 이미지를 만드는 데 실패했어요.')));
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -174,7 +183,7 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                '궁합을 불러오지 못했어요\n$_error',
+                _error ?? '궁합 정보를 불러오지 못했어요.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
@@ -223,8 +232,7 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
               onPressed: _sharing ? null : _shareMatchResult,
             ),
             const SizedBox(height: 20),
-            if (narrative.reasons.isNotEmpty)
-              _ReasonList(reasons: narrative.reasons),
+            _AiRecommendationReasons(narrative: narrative),
             if (narrative.relationshipStory != null &&
                 narrative.relationshipStory!.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -435,53 +443,139 @@ class _CharacterCard extends StatelessWidget {
   }
 }
 
-class _ReasonList extends StatelessWidget {
-  final List<FortuneReason> reasons;
-  const _ReasonList({required this.reasons});
+class _AiRecommendationReasons extends StatelessWidget {
+  final FortuneNarrative narrative;
+
+  const _AiRecommendationReasons({required this.narrative});
 
   @override
   Widget build(BuildContext context) {
+    final reasons = _extractReasons(narrative);
+    final hasReasons = reasons.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '궁합 근거',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 10),
-        ...reasons.map(
-          (r) => Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.12),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(r.icon, style: const TextStyle(fontSize: 18)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    r.text,
-                    style: const TextStyle(
-                      fontSize: 14,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'AI 추천 이유',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.textPrimary,
-                      height: 1.4,
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (hasReasons)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: reasons
+                      .map((reason) => _RecommendationChip(reason: reason))
+                      .toList(),
+                )
+              else
+                const Text(
+                  '아직 충분한 추천 이유를 만들 수 없어요. 프로필 정보를 더 채우면 추천 정확도가 높아져요.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  List<FortuneReason> _extractReasons(FortuneNarrative narrative) {
+    final generated = narrative.reasons
+        .where((reason) => reason.text.trim().isNotEmpty)
+        .take(5)
+        .toList();
+    if (generated.isNotEmpty) return generated;
+
+    final source = [
+      narrative.relationshipStory,
+      narrative.summary,
+    ].whereType<String>().join(' ');
+    return _splitIntoReasons(
+      source,
+    ).map((text) => FortuneReason(icon: '✨', text: text)).take(5).toList();
+  }
+
+  List<String> _splitIntoReasons(String source) {
+    final normalized = source.replaceAll('\n', ' ').trim();
+    if (normalized.isEmpty) return const [];
+    return normalized
+        .split(RegExp(r'[.!?。！？]|(?<=요)\s+|(?<=다)\s+'))
+        .map((part) => part.trim())
+        .where((part) => part.length >= 8)
+        .map((part) => part.length > 44 ? '${part.substring(0, 44)}...' : part)
+        .take(5)
+        .toList();
+  }
+}
+
+class _RecommendationChip extends StatelessWidget {
+  final FortuneReason reason;
+
+  const _RecommendationChip({required this.reason});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 42),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(reason.icon.isEmpty ? '✨' : reason.icon),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                reason.text,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                  height: 1.25,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
