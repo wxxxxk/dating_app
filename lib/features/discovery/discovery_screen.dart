@@ -458,10 +458,22 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     return '$minutes:$seconds';
   }
 
+  void _handleMoreAction(String value) {
+    switch (value) {
+      case 'refresh':
+        if (!_loading) _loadDiscovery();
+        return;
+      case 'dummies':
+        _generateDummies();
+        return;
+    }
+  }
+
   // ── 빌드 ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final boostLabel = _boostRemainingLabel();
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
@@ -478,18 +490,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
               jellyService: widget.jellyService,
               jellyPurchaseService: widget.jellyPurchaseService,
             ),
-          TextButton.icon(
+          IconButton(
             onPressed: _loading ? null : _activateBoost,
-            icon: const Icon(Icons.flash_on_rounded, size: 18),
-            label: Text(_boostRemainingLabel() ?? '부스트'),
-          ),
-          // 개발용 — 출시 전 제거
-          if (kDebugMode)
-            IconButton(
-              icon: const Icon(Icons.person_add_outlined),
-              tooltip: '더미 유저 생성 (개발용)',
-              onPressed: _generateDummies,
+            icon: Icon(
+              Icons.flash_on_rounded,
+              color: boostLabel == null ? null : AppColors.primary,
             ),
+            tooltip: boostLabel == null ? '부스트' : '부스트 남은 시간 $boostLabel',
+          ),
           IconButton(
             icon: Icon(
               _filter.hasActiveFilters
@@ -499,10 +507,33 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             tooltip: '필터',
             onPressed: _loading ? null : _openFilterSheet,
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh_outlined),
-            tooltip: '새로고침',
-            onPressed: _loading ? null : _loadDiscovery,
+          PopupMenuButton<String>(
+            tooltip: '더보기',
+            onSelected: _handleMoreAction,
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh_outlined, size: 20),
+                    SizedBox(width: 10),
+                    Text('새로고침'),
+                  ],
+                ),
+              ),
+              // 개발용 — 출시 전 제거
+              if (kDebugMode)
+                const PopupMenuItem(
+                  value: 'dummies',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_add_outlined, size: 20),
+                      SizedBox(width: 10),
+                      Text('더미 유저 생성'),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ],
       ),
