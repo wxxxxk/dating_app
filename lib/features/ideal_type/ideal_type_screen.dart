@@ -1,4 +1,3 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -64,6 +63,12 @@ class _IdealTypeScreenState extends State<IdealTypeScreen> {
         widget.profile.uid,
       );
       if (mounted) setState(() => _result = cached);
+    } catch (e, stackTrace) {
+      // 캐시 조회 실패는 이미지 생성 화면 진입을 막지 않는다. 상세 원인은 개발 로그에만 남긴다.
+      if (kDebugMode) {
+        debugPrint('[IdealType] 캐시 조회 실패: $e');
+        debugPrint('$stackTrace');
+      }
     } finally {
       if (mounted) setState(() => _loadingCache = false);
     }
@@ -98,19 +103,7 @@ class _IdealTypeScreenState extends State<IdealTypeScreen> {
   }
 
   String _friendlyErrorMessage(Object error) {
-    if (error is FirebaseFunctionsException) {
-      final serverMessage = error.message ?? '';
-      if (error.code == 'failed-precondition') {
-        if (serverMessage.contains('정책') || serverMessage.contains('거부')) {
-          return '이미지 생성이 정책상 거부되었어요. 분위기나 스타일을 더 일반적으로 바꿔 다시 시도해보세요.';
-        }
-        if (serverMessage.contains('모델') || serverMessage.contains('파라미터')) {
-          return '이미지 생성 설정을 확인해야 해요. 잠시 후 다시 시도해주세요.';
-        }
-        return '이미지 생성에 실패했어요. 다른 스타일이나 분위기로 다시 시도해보세요.';
-      }
-    }
-    return '이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.';
+    return '잠시 후 다시 시도하거나 다른 스타일로 시도해보세요.';
   }
 
   void _showSnack(String message) {
