@@ -23,7 +23,7 @@ class AuthFailure implements Exception {
 /// - 모든 인증 로직을 이 클래스 한 곳에 모아두면 교체/테스트/에러처리가 쉬워진다.
 class AuthService {
   AuthService({FirebaseAuth? firebaseAuth})
-      : _auth = firebaseAuth ?? FirebaseAuth.instance;
+    : _auth = firebaseAuth ?? FirebaseAuth.instance;
 
   final FirebaseAuth _auth;
 
@@ -220,20 +220,23 @@ class AuthService {
     required void Function(String verificationId) onCodeSent,
     required void Function(UserCredential credential) onVerified,
     required void Function(String message) onFailed,
+    bool linkToCurrentUser = false,
   }) async {
     try {
       await _auth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: const Duration(seconds: 60),
         verificationCompleted: (PhoneAuthCredential credential) async {
-          // 안드로이드 자동 인증: 코드 입력 화면 없이 바로 로그인까지 끝난다.
+          // 안드로이드 자동 인증: 코드 입력 화면 없이 바로 인증까지 끝난다.
           try {
-            final userCredential = await _auth.signInWithCredential(
-              credential,
-            );
+            final userCredential = linkToCurrentUser
+                ? await _linkCredentialToCurrentUser(credential)
+                : await _auth.signInWithCredential(credential);
             onVerified(userCredential);
           } on FirebaseAuthException catch (e) {
             onFailed(_firebaseAuthMessage(e));
+          } on AuthFailure catch (e) {
+            onFailed(e.message);
           }
         },
         verificationFailed: (FirebaseAuthException e) {
@@ -261,16 +264,35 @@ class AuthService {
   Future<UserCredential> confirmSmsCode({
     required String verificationId,
     required String smsCode,
+    bool linkToCurrentUser = false,
   }) async {
     try {
       final credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: smsCode,
       );
-      return await _auth.signInWithCredential(credential);
+      return linkToCurrentUser
+          ? await _linkCredentialToCurrentUser(credential)
+          : await _auth.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
       throw AuthFailure(_firebaseAuthMessage(e));
     }
+  }
+
+  /// 프로필 인증용: 현재 로그인 계정에 전화번호 credential을 연결한다.
+  ///
+  /// 일반 전화 로그인은 새 Firebase 사용자로 전환될 수 있으므로, 내 프로필의
+  /// "전화 인증하기"에서는 반드시 linkWithCredential을 사용해야 한다.
+  Future<UserCredential> _linkCredentialToCurrentUser(
+    PhoneAuthCredential credential,
+  ) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const AuthFailure('로그인이 필요합니다.');
+    }
+    final result = await user.linkWithCredential(credential);
+    await result.user?.reload();
+    return result;
   }
 
   // ===========================================================================
@@ -303,7 +325,9 @@ class AuthService {
     // 진단용 로그 — 실제 Firebase 에러 코드를 터미널에서 확인할 수 있다.
     // kDebugMode로 감싸 release 빌드에서는 출력되지 않게 한다.
     if (kDebugMode) {
-      debugPrint('[AuthService] FirebaseAuthException code="${e.code}" message="${e.message}"');
+      debugPrint(
+        '[AuthService] FirebaseAuthException code="${e.code}" message="${e.message}"',
+      );
     }
     switch (e.code) {
       // ── 이메일/비밀번호 ──────────────────────────────────────────────────
@@ -350,6 +374,8 @@ class AuthService {
         return '인증 세션이 유효하지 않습니다. 인증코드를 다시 받아주세요.';
       case 'credential-already-in-use':
         return '이미 다른 계정에 연결된 전화번호입니다.';
+      case 'provider-already-linked':
+        return '이미 전화번호 인증이 완료된 계정입니다.';
       default:
         return '인증에 실패했습니다. 잠시 후 다시 시도해주세요.';
     }

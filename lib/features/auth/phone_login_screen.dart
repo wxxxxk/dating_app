@@ -14,7 +14,15 @@ import 'otp_verification_screen.dart';
 /// 이동해 2단계(코드 입력)를 진행한다.
 class PhoneLoginScreen extends StatefulWidget {
   final AuthService authService;
-  const PhoneLoginScreen({super.key, required this.authService});
+  final bool linkToCurrentUser;
+  final Future<void> Function()? onVerificationCompleted;
+
+  const PhoneLoginScreen({
+    super.key,
+    required this.authService,
+    this.linkToCurrentUser = false,
+    this.onVerificationCompleted,
+  });
 
   @override
   State<PhoneLoginScreen> createState() => _PhoneLoginScreenState();
@@ -57,28 +65,52 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
       onCodeSent: (verificationId) {
         if (!mounted) return;
         setState(() => _loading = false);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => OtpVerificationScreen(
-              phoneNumber: e164,
-              verificationId: verificationId,
-              authService: widget.authService,
-            ),
-          ),
-        );
+        _openOtpScreen(e164, verificationId);
       },
       onVerified: (_) {
-        // 안드로이드 자동 인증 완료 — _AuthGate가 authStateChanges로
-        // 자동 전환하므로 여기서는 로딩만 해제하면 된다.
-        if (mounted) setState(() => _loading = false);
+        _finishVerification();
       },
       onFailed: (message) {
         if (!mounted) return;
         setState(() => _loading = false);
         _showError(message);
       },
+      linkToCurrentUser: widget.linkToCurrentUser,
     );
+  }
+
+  Future<void> _openOtpScreen(String phoneNumber, String verificationId) async {
+    final completed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OtpVerificationScreen(
+          phoneNumber: phoneNumber,
+          verificationId: verificationId,
+          authService: widget.authService,
+          linkToCurrentUser: widget.linkToCurrentUser,
+          onVerificationCompleted: widget.onVerificationCompleted,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (completed == true && widget.linkToCurrentUser) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _finishVerification() async {
+    try {
+      await widget.onVerificationCompleted?.call();
+      if (!mounted) return;
+      setState(() => _loading = false);
+      if (widget.linkToCurrentUser) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _showError('전화 인증 상태 저장에 실패했어요: $e');
+    }
   }
 
   void _showError(String message) {
@@ -93,7 +125,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('전화번호로 로그인'),
+        title: Text(widget.linkToCurrentUser ? '전화번호 인증' : '전화번호로 로그인'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: _loading ? null : () => Navigator.pop(context),

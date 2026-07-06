@@ -12,6 +12,7 @@ import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../profile/profile_edit_screen.dart';
@@ -118,6 +119,35 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _verificationLoading = false);
     }
+  }
+
+  Future<void> _openPhoneVerification() async {
+    final profile = _profile;
+    if (profile == null || profile.verifications.phone) return;
+
+    final completed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhoneLoginScreen(
+          authService: widget.authService,
+          linkToCurrentUser: true,
+          onVerificationCompleted: _markPhoneVerified,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (completed == true) {
+      _showSnack('전화 인증이 완료됐어요.');
+    }
+  }
+
+  Future<void> _markPhoneVerified() async {
+    final profile = _profile;
+    if (profile == null) return;
+    final synced = profile.verifications.copyWith(phone: true);
+    await widget.firestoreService.updateUserVerifications(profile.uid, synced);
+    if (!mounted) return;
+    setState(() => _profile = profile.copyWith(verifications: synced));
   }
 
   void _showSnack(String message) {
@@ -283,6 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     loading: _verificationLoading,
                     onSendEmail: _sendEmailVerification,
                     onRefreshEmail: _refreshEmailVerification,
+                    onVerifyPhone: _openPhoneVerification,
                   ),
                   const SizedBox(height: 24),
 
@@ -478,12 +509,14 @@ class _VerificationSection extends StatelessWidget {
   final bool loading;
   final VoidCallback onSendEmail;
   final VoidCallback onRefreshEmail;
+  final VoidCallback onVerifyPhone;
 
   const _VerificationSection({
     required this.verifications,
     required this.loading,
     required this.onSendEmail,
     required this.onRefreshEmail,
+    required this.onVerifyPhone,
   });
 
   @override
@@ -548,9 +581,27 @@ class _VerificationSection extends StatelessWidget {
                 ),
               ],
             ),
-          ] else
+          ],
+          if (!verifications.phone) ...[
+            if (!verifications.email) const SizedBox(height: 14),
             const Text(
-              '전화/사진 인증은 다음 단계에서 연결할 수 있게 자리만 준비해뒀어요.',
+              '전화번호 인증을 완료하면 상대에게 더 신뢰감 있게 보여요.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onVerifyPhone,
+              icon: const Icon(Icons.phone_iphone_rounded, size: 17),
+              label: const Text('전화 인증하기'),
+            ),
+          ],
+          if (verifications.email && verifications.phone)
+            const Text(
+              '사진 인증은 다음 단계에서 연결할 수 있게 자리만 준비해뒀어요.',
               style: TextStyle(
                 fontSize: 13,
                 color: AppColors.textSecondary,

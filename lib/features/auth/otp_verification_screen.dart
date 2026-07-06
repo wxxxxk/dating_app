@@ -17,12 +17,16 @@ class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber; // E.164 형식, 예: '+821012345678'
   final String verificationId;
   final AuthService authService;
+  final bool linkToCurrentUser;
+  final Future<void> Function()? onVerificationCompleted;
 
   const OtpVerificationScreen({
     super.key,
     required this.phoneNumber,
     required this.verificationId,
     required this.authService,
+    this.linkToCurrentUser = false,
+    this.onVerificationCompleted,
   });
 
   @override
@@ -83,9 +87,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       await widget.authService.confirmSmsCode(
         verificationId: _verificationId,
         smsCode: code,
+        linkToCurrentUser: widget.linkToCurrentUser,
       );
-      // 성공 시 _AuthGate가 authStateChanges로 자동 전환한다 — 별도 네비게이션 불필요.
+      await widget.onVerificationCompleted?.call();
+      if (!mounted) return;
+      if (widget.linkToCurrentUser) {
+        Navigator.pop(context, true);
+      }
+      // 일반 전화 로그인 성공 시 _AuthGate가 authStateChanges로 자동 전환한다.
     } on AuthFailure catch (e) {
+      if (widget.linkToCurrentUser && e.message.contains('이미 전화번호 인증')) {
+        await widget.onVerificationCompleted?.call();
+        if (mounted) Navigator.pop(context, true);
+        return;
+      }
       if (mounted) _showMessage(e.message);
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -108,14 +123,30 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         _startCooldown();
       },
       onVerified: (_) {
-        if (mounted) setState(() => _resending = false);
+        _finishAutoVerification();
       },
       onFailed: (message) {
         if (!mounted) return;
         setState(() => _resending = false);
         _showMessage(message);
       },
+      linkToCurrentUser: widget.linkToCurrentUser,
     );
+  }
+
+  Future<void> _finishAutoVerification() async {
+    try {
+      await widget.onVerificationCompleted?.call();
+      if (!mounted) return;
+      setState(() => _resending = false);
+      if (widget.linkToCurrentUser) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _resending = false);
+      _showMessage('전화 인증 상태 저장에 실패했어요: $e');
+    }
   }
 
   void _showMessage(String message) {
@@ -144,7 +175,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('인증코드 확인'),
+        title: Text(widget.linkToCurrentUser ? '전화번호 인증' : '인증코드 확인'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: _loading ? null : () => Navigator.pop(context),
