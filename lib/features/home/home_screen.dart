@@ -1,13 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/match_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/charm/charm_service.dart';
 import '../../services/database/firestore_service.dart';
+import '../../services/discovery/discovery_service.dart';
+import '../../services/fortune/fortune_calculator.dart';
+import '../../services/fortune/fortune_service.dart';
 import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
+import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
@@ -16,6 +22,7 @@ import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../profile/profile_edit_screen.dart';
+import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
 import '../safety/blocked_users_screen.dart';
 
@@ -32,20 +39,28 @@ class HomeScreen extends StatefulWidget {
   final AuthService authService;
   final FirestoreService firestoreService;
   final StorageService storageService;
+  final DiscoveryService discoveryService;
+  final MatchesService matchesService;
   final CharmService charmService;
+  final FortuneService fortuneService;
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
+  final VoidCallback? onOpenDiscovery;
 
   const HomeScreen({
     super.key,
     required this.authService,
     required this.firestoreService,
     required this.storageService,
+    required this.discoveryService,
+    required this.matchesService,
     required this.charmService,
+    required this.fortuneService,
     required this.jellyService,
     required this.jellyPurchaseService,
     required this.safetyService,
+    this.onOpenDiscovery,
   });
 
   @override
@@ -54,7 +69,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   UserProfile? _profile;
+  _DailyPick? _dailyPick;
   bool _loading = true;
+  bool _dailyPickLoading = true;
   bool _verificationLoading = false;
 
   @override
@@ -65,7 +82,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadProfile() async {
     final uid = widget.authService.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
     final profile = await widget.firestoreService.getUserProfile(uid);
     final synced = profile == null
         ? null
@@ -75,6 +95,158 @@ class _HomeScreenState extends State<HomeScreen> {
         _profile = synced;
         _loading = false;
       });
+    }
+    if (synced != null) {
+      await _loadDailyPick(synced);
+    }
+  }
+
+  Future<void> _loadDailyPick(UserProfile myProfile) async {
+    if (mounted) {
+      setState(() => _dailyPickLoading = true);
+    }
+    try {
+      final pick = await _findDailyPick(myProfile);
+      if (!mounted) return;
+      setState(() {
+        _dailyPick = pick;
+        _dailyPickLoading = false;
+      });
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('[HomeDailyPick] 추천 로딩 실패: $e');
+        debugPrint('$st');
+      }
+      if (!mounted) return;
+      setState(() {
+        _dailyPick = null;
+        _dailyPickLoading = false;
+      });
+    }
+  }
+
+  Future<_DailyPick?> _findDailyPick(UserProfile myProfile) async {
+    try {
+      final matches = await widget.matchesService
+          .watchMatches(currentUid: myProfile.uid)
+          .first
+          .timeout(const Duration(seconds: 5));
+      final matchPick = await _pickFromMatches(myProfile, matches);
+      if (matchPick != null) return matchPick;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[HomeDailyPick] 매칭 목록 조회 실패: $e');
+    }
+
+    Set<String> blockedUids = const {};
+    try {
+      blockedUids = await widget.safetyService.getBlockedRelationshipUids(
+        myProfile.uid,
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('[HomeDailyPick] 차단 목록 조회 실패: $e');
+    }
+
+    final discoveryProfiles = await widget.discoveryService
+        .getDiscoveryProfiles(
+          currentUid: myProfile.uid,
+          currentLocation: myProfile.location,
+          filter: myProfile.discoveryFilter,
+          excludedUids: blockedUids,
+        )
+        .timeout(const Duration(seconds: 5));
+    if (discoveryProfiles.isEmpty) return null;
+    return _buildDailyPick(
+      myProfile: myProfile,
+      otherProfile: discoveryProfiles.first,
+      source: _DailyPickSource.discovery,
+    );
+  }
+
+  Future<_DailyPick?> _pickFromMatches(
+    UserProfile myProfile,
+    List<MatchWithProfile> matches,
+  ) async {
+    if (matches.isEmpty) return null;
+    final candidates = await Future.wait(
+      matches.take(8).map((match) async {
+        String? cachedReason;
+        try {
+          final cached = await widget.fortuneService.getCachedMatchFortune(
+            match.match.matchId,
+          );
+          cachedReason = cached?.reasons
+              .map((reason) => reason.text.trim())
+              .firstWhere((text) => text.isNotEmpty, orElse: () => '');
+          if (cachedReason != null && cachedReason.isEmpty) {
+            cachedReason = cached?.summary.trim();
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[HomeDailyPick] 궁합 캐시 조회 실패: $e');
+          }
+        }
+        return _buildDailyPick(
+          myProfile: myProfile,
+          otherProfile: match.otherProfile,
+          source: _DailyPickSource.match,
+          cachedReason: cachedReason,
+        );
+      }),
+    );
+    candidates.sort((a, b) => b.score.compareTo(a.score));
+    return candidates.first;
+  }
+
+  _DailyPick _buildDailyPick({
+    required UserProfile myProfile,
+    required UserProfile otherProfile,
+    required _DailyPickSource source,
+    String? cachedReason,
+  }) {
+    final hint = FortuneCalculator.getCompatibilityHint(
+      myProfile.birthDate,
+      otherProfile.birthDate,
+    );
+    final hasCachedReason = cachedReason != null && cachedReason.isNotEmpty;
+    final score = (_scoreForHint(hint) + (hasCachedReason ? 2 : 0)).clamp(
+      72,
+      96,
+    );
+    return _DailyPick(
+      profile: otherProfile,
+      score: score,
+      reason: hasCachedReason ? cachedReason : _fallbackReason(hint, source),
+    );
+  }
+
+  int _scoreForHint(CompatibilityHint hint) {
+    switch (hint.level) {
+      case '상생':
+        return 94;
+      case '조화':
+        return 89;
+      case '균형':
+        return 84;
+      case '보완':
+        return 80;
+      default:
+        return 78;
+    }
+  }
+
+  String _fallbackReason(CompatibilityHint hint, _DailyPickSource source) {
+    final prefix = source == _DailyPickSource.match
+        ? '이미 이어진 인연이라'
+        : '오늘 먼저 대화해보기 좋은';
+    switch (hint.level) {
+      case '상생':
+        return '$prefix 상생 흐름이 강해 대화가 자연스럽게 이어질 가능성이 높아요.';
+      case '조화':
+        return '$prefix 편안한 조화가 보여 서로의 템포를 맞추기 좋아요.';
+      case '보완':
+        return '$prefix 서로 다른 매력이 부족한 부분을 채워줄 수 있어요.';
+      default:
+        return '$prefix 균형 있는 흐름이라 가볍게 말을 걸기 좋아요.';
     }
   }
 
@@ -215,6 +387,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openDailyPickProfile() async {
+    final current = _profile;
+    final pick = _dailyPick;
+    if (current == null || pick == null) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserProfileScreen(
+          currentUid: current.uid,
+          initialProfile: pick.profile,
+          currentLocation: current.location,
+          firestoreService: widget.firestoreService,
+          safetyService: widget.safetyService,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -257,6 +447,16 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+              child: _DailyPickHeroCard(
+                loading: _dailyPickLoading,
+                pick: _dailyPick,
+                onPrimaryTap: _dailyPick == null
+                    ? widget.onOpenDiscovery
+                    : _openDailyPickProfile,
+              ),
+            ),
             // ── 사진 갤러리 ─────────────────────────────────────────────
             _PhotoGallery(photoUrls: profile.photoUrls),
 
@@ -424,7 +624,292 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+enum _DailyPickSource { match, discovery }
+
+class _DailyPick {
+  final UserProfile profile;
+  final int score;
+  final String reason;
+
+  const _DailyPick({
+    required this.profile,
+    required this.score,
+    required this.reason,
+  });
+}
+
 // ── 내부 위젯 ──────────────────────────────────────────────────────────────────
+
+class _DailyPickHeroCard extends StatelessWidget {
+  final bool loading;
+  final _DailyPick? pick;
+  final VoidCallback? onPrimaryTap;
+
+  const _DailyPickHeroCard({
+    required this.loading,
+    required this.pick,
+    required this.onPrimaryTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activePick = pick;
+    final isFallback = activePick == null && !loading;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFEEF3), Color(0xFFFFF7EA)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _AiBadge(),
+              const Spacer(),
+              if (loading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (activePick != null)
+                _ScorePill(score: activePick.score),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '✨ 오늘의 인연',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            loading
+                ? 'AI 추천 데이터를 확인하고 있어요.'
+                : isFallback
+                ? '아직 오늘의 추천을 준비하고 있어요.'
+                : '오늘 AI가 가장 잘 맞는 사람으로 추천합니다.',
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.45,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (loading)
+            const _DailyPickLoadingBody()
+          else if (activePick == null)
+            const _DailyPickFallbackBody()
+          else
+            _DailyPickSuccessBody(pick: activePick),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: loading ? null : onPrimaryTap,
+              icon: Icon(
+                activePick == null
+                    ? Icons.explore_rounded
+                    : Icons.person_search_rounded,
+                size: 19,
+              ),
+              label: Text(activePick == null ? '둘러보기 시작' : '프로필 보기'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiBadge extends StatelessWidget {
+  const _AiBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: const Text(
+        'AI DAILY PICK',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _ScorePill extends StatelessWidget {
+  final int score;
+
+  const _ScorePill({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        '❤️ 궁합 $score%',
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyPickLoadingBody extends StatelessWidget {
+  const _DailyPickLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      '기존 궁합 캐시와 프로필 흐름을 바탕으로 오늘 먼저 보면 좋은 인연을 찾는 중이에요.',
+      style: TextStyle(
+        fontSize: 15,
+        height: 1.55,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+}
+
+class _DailyPickFallbackBody extends StatelessWidget {
+  const _DailyPickFallbackBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      '둘러보기를 시작하면\nAI 추천 정확도가 높아집니다.',
+      style: TextStyle(
+        fontSize: 17,
+        height: 1.55,
+        fontWeight: FontWeight.w700,
+        color: AppColors.textPrimary,
+      ),
+    );
+  }
+}
+
+class _DailyPickSuccessBody extends StatelessWidget {
+  final _DailyPick pick;
+
+  const _DailyPickSuccessBody({required this.pick});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DailyPickAvatar(profile: pick.profile),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pick.profile.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '"${pick.reason}"',
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  height: 1.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DailyPickAvatar extends StatelessWidget {
+  final UserProfile profile;
+
+  const _DailyPickAvatar({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = profile.photoUrls.isEmpty ? null : profile.photoUrls.first;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 78,
+        height: 98,
+        color: Colors.white.withValues(alpha: 0.68),
+        child: imageUrl == null
+            ? const Icon(
+                Icons.person_rounded,
+                color: AppColors.textSecondary,
+                size: 38,
+              )
+            : Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const Icon(
+                  Icons.person_rounded,
+                  color: AppColors.textSecondary,
+                  size: 38,
+                ),
+              ),
+      ),
+    );
+  }
+}
 
 /// 사진 PageView — 여러 장이면 좌우 스와이프, 1장이면 정적 표시.
 class _PhotoGallery extends StatefulWidget {

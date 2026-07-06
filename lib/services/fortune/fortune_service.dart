@@ -69,6 +69,17 @@ class FortuneService {
     );
   }
 
+  /// 매치 궁합 서사 캐시만 읽는다.
+  ///
+  /// 홈의 "오늘의 인연"처럼 빠른 추천 UI에서는 새 GPT 호출을 만들지 않고,
+  /// 이미 생성된 matches/{matchId}.fortuneMatch가 있을 때만 문구를 재사용한다.
+  Future<FortuneNarrative?> getCachedMatchFortune(String matchId) async {
+    final matchDoc = await _db.collection('matches').doc(matchId).get();
+    final cached = matchDoc.data()?['fortuneMatch'] as Map<String, dynamic>?;
+    if (cached == null) return null;
+    return FortuneNarrative.fromMap(cached);
+  }
+
   /// 오늘의 운세(애정 중심)를 가져온다.
   ///
   /// users/{uid}/dailyFortune/{yyyy-MM-dd} 문서로 하루 단위 캐싱한다 —
