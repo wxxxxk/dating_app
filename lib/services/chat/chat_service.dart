@@ -11,7 +11,7 @@ import '../../models/message_model.dart';
 ///     { text, senderId, createdAt } — 매칭 목록 미리보기/정렬용
 class ChatService {
   ChatService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
 
@@ -22,7 +22,7 @@ class ChatService {
   Stream<List<MessageModel>> watchMessages(String matchId) {
     return _matchRef(matchId)
         .collection('messages')
-        .orderBy('createdAt')
+        .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snap) => snap.docs.map(MessageModel.fromFirestore).toList());
   }

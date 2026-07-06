@@ -243,7 +243,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 other.displayName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
               ),
             ),
           ],
@@ -312,11 +315,32 @@ class _ChatScreenState extends State<ChatScreen> {
           itemBuilder: (_, i) {
             final msg = messages[i];
             final isMine = msg.senderId == widget.currentUid;
-            return _MessageBubble(message: msg, isMine: isMine);
+            final showDateDivider = _shouldShowDateDivider(messages, i);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (showDateDivider) _DateDivider(date: msg.createdAt!),
+                _MessageBubble(message: msg, isMine: isMine),
+              ],
+            );
           },
         );
       },
     );
+  }
+
+  bool _shouldShowDateDivider(List<MessageModel> messages, int index) {
+    final current = messages[index].createdAt;
+    if (current == null) return false;
+    if (index == 0) return true;
+
+    final previous = messages[index - 1].createdAt;
+    if (previous == null) return true;
+    return !_isSameDate(current, previous);
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Widget _buildInputBar() {
@@ -556,6 +580,41 @@ class _IcebreakerCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _DateDivider extends StatelessWidget {
+  final DateTime date;
+
+  const _DateDivider({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          _formatDate(date),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatDate(DateTime date) {
+    const weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    final weekday = weekdays[date.weekday - 1];
+    return '${date.month}월 ${date.day}일 ($weekday)';
   }
 }
 
