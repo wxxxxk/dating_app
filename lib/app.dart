@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'core/constants/app_constants.dart';
@@ -17,6 +19,7 @@ import 'services/jelly/jelly_purchase_service.dart';
 import 'services/jelly/jelly_service.dart';
 import 'services/likes/likes_service.dart';
 import 'services/matches/matches_service.dart';
+import 'services/notifications/notification_service.dart';
 import 'services/profile/profile_insight_service.dart';
 import 'services/safety/safety_service.dart';
 import 'services/storage/storage_service.dart';
@@ -49,6 +52,9 @@ class _MyAppState extends State<MyApp> {
   late final LikesService _likesService;
   late final SafetyService _safetyService;
   late final ProfileInsightService _profileInsightService;
+  late final NotificationService _notificationService;
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  final _mainTabRequest = ValueNotifier<int?>(null);
 
   @override
   void initState() {
@@ -65,6 +71,15 @@ class _MyAppState extends State<MyApp> {
     _jellyPurchaseService = JellyPurchaseService();
     _safetyService = SafetyService(firestoreService: _firestoreService);
     _profileInsightService = ProfileInsightService();
+    _notificationService = NotificationService(
+      authService: _authService,
+      firestoreService: _firestoreService,
+      chatService: _chatService,
+      fortuneService: _fortuneService,
+      safetyService: _safetyService,
+      navigatorKey: _navigatorKey,
+      mainTabRequest: _mainTabRequest,
+    );
     _matchesService = MatchesService(
       firestoreService: _firestoreService,
       safetyService: _safetyService,
@@ -73,11 +88,14 @@ class _MyAppState extends State<MyApp> {
       firestoreService: _firestoreService,
       safetyService: _safetyService,
     );
+    unawaited(_notificationService.initialize());
   }
 
   @override
   void dispose() {
     _authState.dispose();
+    _mainTabRequest.dispose();
+    unawaited(_notificationService.dispose());
     super.dispose();
   }
 
@@ -86,6 +104,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
+      navigatorKey: _navigatorKey,
       theme: AppTheme.light,
       home: _AuthGate(
         authState: _authState,
@@ -102,6 +121,8 @@ class _MyAppState extends State<MyApp> {
         likesService: _likesService,
         safetyService: _safetyService,
         profileInsightService: _profileInsightService,
+        notificationService: _notificationService,
+        mainTabRequest: _mainTabRequest,
       ),
       // 이름 기반 라우트는 화면 간 직접 이동이 필요할 때 사용.
       // onGenerateRoute를 쓰는 이유: 각 화면에 서비스를 주입하면서 만들어야 하기 때문.
@@ -128,6 +149,7 @@ class _MyAppState extends State<MyApp> {
                 likesService: _likesService,
                 safetyService: _safetyService,
                 profileInsightService: _profileInsightService,
+                mainTabRequest: _mainTabRequest,
               ),
               settings: settings,
             );
@@ -169,6 +191,8 @@ class _AuthGate extends StatefulWidget {
   final LikesService likesService;
   final SafetyService safetyService;
   final ProfileInsightService profileInsightService;
+  final NotificationService notificationService;
+  final ValueNotifier<int?> mainTabRequest;
 
   const _AuthGate({
     required this.authState,
@@ -185,6 +209,8 @@ class _AuthGate extends StatefulWidget {
     required this.likesService,
     required this.safetyService,
     required this.profileInsightService,
+    required this.notificationService,
+    required this.mainTabRequest,
   });
 
   @override
@@ -241,6 +267,7 @@ class _AuthGateState extends State<_AuthGate> {
         if (synced.email != profile.verifications.email) {
           await widget.firestoreService.updateUserVerifications(uid, synced);
         }
+        unawaited(widget.notificationService.registerForUser(uid));
       }
       debugPrint(
         '[AuthGate] 조회 결과: ${profile != null ? "있음 (기존 유저)" : "없음 (신규 유저)"}',
@@ -285,7 +312,11 @@ class _AuthGateState extends State<_AuthGate> {
         storageService: widget.storageService,
         // 온보딩 완료 후 다시 Firestore를 조회하는 대신 플래그만 뒤집는다.
         // 방금 저장했으니 존재가 확실하고, 불필요한 네트워크 왕복을 줄인다.
-        onCompleted: () => setState(() => _hasProfile = true),
+        onCompleted: () {
+          final uid = widget.authState.currentUser!.uid;
+          setState(() => _hasProfile = true);
+          unawaited(widget.notificationService.registerForUser(uid));
+        },
       );
     }
 
@@ -303,6 +334,7 @@ class _AuthGateState extends State<_AuthGate> {
       likesService: widget.likesService,
       safetyService: widget.safetyService,
       profileInsightService: widget.profileInsightService,
+      mainTabRequest: widget.mainTabRequest,
     );
   }
 }

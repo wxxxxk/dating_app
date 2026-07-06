@@ -24,6 +24,8 @@ service cloud.firestore {
       // 것은 jelly/boostUntil/likesUnlocked를 이 블랭킷 쓰기에서 제외하고
       // Cloud Functions(admin SDK, verifyJellyPurchase 등)로만 쓰게 만드는
       // 더 정교한 규칙(예: matches/{matchId}의 affectedKeys() 패턴 참고)이다.
+      // 이때 FCM 토큰 저장용 fcmTokens/fcmTokenUpdatedAt은 본인 기기 토큰
+      // 등록을 위해 허용 필드에 포함해야 한다.
       //
       // 배포 직전 체크리스트: 이 저장소에서 "RELEASE-BLOCKER"를 검색해
       // verifyJellyPurchase가 실제 App Store Server API / Google Play

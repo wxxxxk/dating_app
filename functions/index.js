@@ -4,7 +4,10 @@
 // 배포: firebase deploy --only functions
 // 로그: firebase functions:log
 
-const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const {
+  onDocumentCreated,
+  onDocumentWritten,
+} = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -13,6 +16,11 @@ const OpenAI = require('openai');
 
 admin.initializeApp();
 const db = admin.firestore();
+
+const INVALID_FCM_TOKEN_CODES = new Set([
+  'messaging/invalid-registration-token',
+  'messaging/registration-token-not-registered',
+]);
 
 // M6: 사주/궁합 GPT 서사 생성에 쓰는 OpenAI API 키.
 // 절대 코드에 하드코딩하지 않고 Firebase 시크릿으로만 주입한다.
@@ -69,6 +77,16 @@ exports.onSwipeCreated = onDocumentWritten(
       matchedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
+    await sendPushToUsers({
+      uids: participants,
+      title: '새로운 매칭!',
+      body: '서로의 마음이 통했어요. 지금 대화를 시작해보세요.',
+      data: {
+        type: 'match',
+        matchId,
+      },
+    });
+
     return null;
   },
 );
@@ -77,6 +95,105 @@ exports.onSwipeCreated = onDocumentWritten(
 function isPositiveSwipe(action) {
   return action === 'like' || action === 'superlike';
 }
+
+function stringData(data) {
+  return Object.fromEntries(
+    Object.entries(data || {}).map(([key, value]) => [key, String(value)]),
+  );
+}
+
+async function userTokens(uid) {
+  const snap = await db.collection('users').doc(uid).get();
+  const tokens = snap.data()?.fcmTokens;
+  if (!Array.isArray(tokens)) return [];
+  return [...new Set(tokens.filter((token) => typeof token === 'string' && token))];
+}
+
+async function removeInvalidTokens(uid, tokens) {
+  if (!tokens.length) return;
+  await db
+    .collection('users')
+    .doc(uid)
+    .set(
+      {
+        fcmTokens: admin.firestore.FieldValue.arrayRemove(...tokens),
+      },
+      { merge: true },
+    );
+}
+
+async function sendPushToUser({ uid, title, body, data }) {
+  const tokens = await userTokens(uid);
+  if (!tokens.length) return;
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens,
+    notification: { title, body },
+    data: stringData({ click_action: 'FLUTTER_NOTIFICATION_CLICK', ...data }),
+    android: {
+      priority: 'high',
+      notification: {
+        clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+        sound: 'default',
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default',
+        },
+      },
+    },
+  });
+
+  const invalidTokens = [];
+  response.responses.forEach((item, index) => {
+    const code = item.error?.code;
+    if (code && INVALID_FCM_TOKEN_CODES.has(code)) {
+      invalidTokens.push(tokens[index]);
+    }
+  });
+  await removeInvalidTokens(uid, invalidTokens);
+}
+
+async function sendPushToUsers({ uids, title, body, data }) {
+  await Promise.all(
+    [...new Set(uids)]
+      .filter(Boolean)
+      .map((uid) => sendPushToUser({ uid, title, body, data })),
+  );
+}
+
+exports.onMessageCreated = onDocumentCreated(
+  'matches/{matchId}/messages/{messageId}',
+  async (event) => {
+    const { matchId } = event.params;
+    const message = event.data?.data();
+    const senderId = message?.senderId;
+    if (typeof senderId !== 'string' || !senderId) return null;
+
+    const matchSnap = await db.collection('matches').doc(matchId).get();
+    const participants = matchSnap.data()?.participants;
+    if (!Array.isArray(participants)) return null;
+
+    const receiverUid = participants.find((uid) => uid !== senderId);
+    if (!receiverUid) return null;
+
+    const senderSnap = await db.collection('users').doc(senderId).get();
+    const senderName = senderSnap.data()?.displayName || '상대방';
+    await sendPushToUser({
+      uid: receiverUid,
+      title: '새 메시지',
+      body: `${senderName}님이 메시지를 보냈어요.`,
+      data: {
+        type: 'chat',
+        matchId,
+        senderUid: senderId,
+      },
+    });
+    return null;
+  },
+);
 
 // ============================================================================
 // M6: 사주/통합운세 — 하이브리드(규칙 계산 + GPT 서사)

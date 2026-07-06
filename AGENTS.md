@@ -91,6 +91,7 @@
 - ✅ 신고: `reports/{reportId}` 생성, 클라이언트 read 차단
 - ✅ 차단: `users/{uid}/blocks/{blockedUid}`, 양방향 숨김에 collectionGroup blocks 사용
 - ✅ 차단 적용: 디스커버리, 매칭, 받은 좋아요, 채팅 진입 확인
+- ✅ Push Notification: FCM 토큰을 `users/{uid}.fcmTokens`에 저장, 매칭/새 메시지 알림 발송, 알림 탭 시 매칭 탭/채팅방 이동
 
 ## 3. 현재 미구현 / 목업
 
@@ -98,7 +99,6 @@
 - ❌ 젤리/부스트/likesUnlocked 서버 전용 쓰기 규칙
 - ❌ AI Conversation Coach
 - ❌ Rewind
-- ❌ Push Notification
 - ❌ 사진 메시지
 - ❌ 메시지별 Read Receipt
 - ❌ 실제 Typing Event 저장/전파
@@ -145,6 +145,7 @@ lib/
 │   ├── likes/                       # LikesService
 │   ├── location/                    # LocationService
 │   ├── matches/                     # MatchesService
+│   ├── notifications/               # NotificationService, FCM 토큰/알림 라우팅
 │   ├── safety/                      # SafetyService
 │   ├── share/                       # ShareImageService
 │   └── storage/                     # StorageService
@@ -163,11 +164,12 @@ test/
 
 ## 5. Cloud Functions
 
-`functions/index.js` 기준 exports 9개.
+`functions/index.js` 기준 exports 10개.
 
 | Function | Trigger | GPT/Image 호출 | 캐시 | 역할 |
 |---|---|---:|---|---|
-| `onSwipeCreated` | Firestore `onDocumentWritten('users/{uid}/swipes/{targetUid}')` | 아니오 | 해당 없음 | like/superlike 상호 관심 확인 후 `matches/{matchId}` 멱등 생성 |
+| `onSwipeCreated` | Firestore `onDocumentWritten('users/{uid}/swipes/{targetUid}')` | 아니오 | 해당 없음 | like/superlike 상호 관심 확인 후 `matches/{matchId}` 멱등 생성, 양쪽 FCM 매칭 알림 |
+| `onMessageCreated` | Firestore `onDocumentCreated('matches/{matchId}/messages/{messageId}')` | 아니오 | 해당 없음 | 새 채팅 메시지 생성 시 수신자 FCM 알림 |
 | `generateFortuneNarrative` | callable | GPT `gpt-4o-mini` | `users/{uid}.fortuneNarrative` | 내 사주 캐릭터/서사 |
 | `generateMatchNarrative` | callable | GPT `gpt-4o-mini` | `matches/{matchId}.fortuneMatch` | 두 사람 궁합 서사. participants 권한 확인 |
 | `generateIcebreakers` | callable | GPT `gpt-4o-mini` | `matches/{matchId}.icebreakers` | 빈 채팅방 첫 대화 주제 3개 |
@@ -190,6 +192,7 @@ test/
   - 인증: `verifications: { email, phone, photo }`
   - 위치: `location: { lat, lng, updatedAt, label? }`
   - 필터: `discoveryFilter: { ageMin, ageMax, maxDistanceKm, gender }`
+  - 푸시 토큰: `fcmTokens`, `fcmTokenUpdatedAt`
   - AI 캐시: `fortuneNarrative`, `charmReport`, `profileInsight`, `idealTypeImage`
   - 젤리/수익화: `jelly`, `boostUntil`, `likesUnlocked`
 - `users/{uid}/swipes/{targetUid}`
@@ -237,6 +240,7 @@ test/
    - 현재 `users/{uid}` 본인 write가 `jelly`, `boostUntil`, `likesUnlocked`까지 열어둔다.
    - `users/{uid}/jellyTransactions`도 본인 write 허용 상태다.
    - 실서비스 전에는 젤리/부스트/해제 관련 쓰기를 Cloud Functions admin SDK로만 제한해야 한다.
+   - 이 rules hardening 때 `fcmTokens`, `fcmTokenUpdatedAt`은 본인 기기 토큰 등록을 위해 허용 필드에 포함해야 한다.
 
 3. **`verifyJellyPurchase` 실제 검증**
    - 현재 `verifyWithAppStore()` / `verifyWithGooglePlay()`는 항상 성공 반환.
@@ -289,13 +293,11 @@ test/
 
 ## 10. 다음 개발 우선순위
 
-1. AI Profile Insight
-2. Conversation Coach
-3. Read Receipt
-4. Push Notification
-5. Photo Message
-6. Rewind
-7. Real Store Verification
+1. Conversation Coach
+2. Read Receipt
+3. Photo Message
+4. Rewind
+5. Real Store Verification
 
 ## 11. 자주 실행하는 검증 명령
 

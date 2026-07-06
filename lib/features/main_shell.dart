@@ -44,6 +44,7 @@ class MainShell extends StatefulWidget {
   final LikesService likesService;
   final SafetyService safetyService;
   final ProfileInsightService profileInsightService;
+  final ValueNotifier<int?> mainTabRequest;
 
   const MainShell({
     super.key,
@@ -60,6 +61,7 @@ class MainShell extends StatefulWidget {
     required this.likesService,
     required this.safetyService,
     required this.profileInsightService,
+    required this.mainTabRequest,
   });
 
   @override
@@ -68,6 +70,38 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.mainTabRequest.addListener(_handleTabRequest);
+    _applyPendingTabRequest();
+  }
+
+  @override
+  void dispose() {
+    widget.mainTabRequest.removeListener(_handleTabRequest);
+    super.dispose();
+  }
+
+  void _handleTabRequest() {
+    _applyPendingTabRequest();
+  }
+
+  void _applyPendingTabRequest() {
+    final requestedIndex = widget.mainTabRequest.value;
+    if (requestedIndex == null) return;
+    if (requestedIndex < 0 || requestedIndex > 3) {
+      widget.mainTabRequest.value = null;
+      return;
+    }
+    if (mounted) {
+      setState(() => _selectedIndex = requestedIndex);
+    } else {
+      _selectedIndex = requestedIndex;
+    }
+    widget.mainTabRequest.value = null;
+  }
 
   @override
   Widget build(BuildContext context) {

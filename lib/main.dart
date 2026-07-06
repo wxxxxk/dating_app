@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
@@ -7,6 +8,11 @@ import 'app.dart';
 //   - 본인이 직접 `flutterfire configure`를 실행하면 이 파일이 실제 값으로 덮어쓰인다.
 //   - 보안상 firebase_options.dart는 .gitignore에 추가하는 것을 권장한다(파일 내 주석 참고).
 import 'firebase_options.dart';
+
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
 
 /// 앱 진입점.
 ///
@@ -20,9 +26,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 플랫폼별 설정(DefaultFirebaseOptions.currentPlatform)으로 Firebase 초기화.
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   runApp(const MyApp());
 }
