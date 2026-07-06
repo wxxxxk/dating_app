@@ -84,6 +84,7 @@ class _OhaengRadarPainter extends CustomPainter {
   _OhaengRadarPainter({required this.balance, required this.progress});
 
   static const _gridFractions = [0.25, 0.5, 0.75, 1.0];
+  static const _visualFloor = 0.07;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -217,14 +218,15 @@ class _OhaengRadarPainter extends CustomPainter {
       ..strokeWidth = 2;
     canvas.drawPath(path, strokePaint);
 
-    // 꼭짓점 강조 점 (해당 원소 색 + 흰 테두리로 팝업 느낌).
+    // 꼭짓점 강조 점. 실제 0%인 축은 시각 바닥값으로만 표시하고 회색 처리한다.
     for (var i = 0; i < points.length; i++) {
       final key = ohaengOrder[i];
-      canvas.drawCircle(
-        points[i],
-        4.5,
-        Paint()..color = ohaengColors[key] ?? AppColors.primary,
-      );
+      final actualValue = (balance[key] ?? 0).clamp(0.0, 1.0);
+      final isZero = actualValue <= 0;
+      final pointColor = isZero
+          ? AppColors.textSecondary.withValues(alpha: 0.45)
+          : ohaengColors[key] ?? AppColors.primary;
+      canvas.drawCircle(points[i], 4.5, Paint()..color = pointColor);
       canvas.drawCircle(
         points[i],
         4.5,
@@ -246,20 +248,22 @@ class _OhaengRadarPainter extends CustomPainter {
   /// 시각화 전용 스케일.
   ///
   /// 원본 비율의 최댓값을 1.0으로 맞춰 폴리곤이 충분히 펼쳐지게 한다.
-  /// 모든 값이 0이면 0으로 유지해 0 나누기를 피한다. 균등한 분포는 모든 축이
-  /// 같은 비율로 바깥까지 펼쳐진 정오각형으로 보인다.
+  /// 0% 축도 중심점까지 완전히 붕괴하지 않도록 표시 전용 바닥값을 둔다.
+  /// 하단 퍼센트 라벨과 강함/부족 판정은 원본 [balance]를 그대로 사용한다.
   Map<String, double> _displayBalance(Map<String, double> source) {
     final values = [
       for (final key in ohaengOrder) (source[key] ?? 0).clamp(0.0, 1.0),
     ];
     final maxValue = values.fold<double>(0, math.max);
-    if (maxValue <= 0) {
-      return {for (final key in ohaengOrder) key: 0};
-    }
     return {
-      for (final key in ohaengOrder)
-        key: ((source[key] ?? 0).clamp(0.0, 1.0) / maxValue),
+      for (final key in ohaengOrder) key: _displayValue(source[key], maxValue),
     };
+  }
+
+  double _displayValue(double? value, double maxValue) {
+    if (maxValue <= 0) return _visualFloor;
+    final normalized = (value ?? 0).clamp(0.0, 1.0) / maxValue;
+    return math.max(_visualFloor, normalized);
   }
 
   @override
