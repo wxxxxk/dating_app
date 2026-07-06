@@ -201,6 +201,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
                 ...matches.map(
                   (mwp) => _MatchTile(
                     mwp: mwp,
+                    currentUid: _currentUid!,
                     onProfileTap: () => _openProfile(mwp.otherProfile),
                     onChatTap: () => _openChat(mwp),
                     onFortuneTap: () => _openFortune(mwp),
@@ -333,11 +334,13 @@ class _EmptyMatchesInline extends StatelessWidget {
 
 class _MatchTile extends StatelessWidget {
   final MatchWithProfile mwp;
+  final String currentUid;
   final VoidCallback onProfileTap;
   final VoidCallback onChatTap;
   final VoidCallback onFortuneTap;
   const _MatchTile({
     required this.mwp,
+    required this.currentUid,
     required this.onProfileTap,
     required this.onChatTap,
     required this.onFortuneTap,
@@ -347,6 +350,8 @@ class _MatchTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final profile = mwp.otherProfile;
     final photoUrl = profile.photoUrls.isNotEmpty ? profile.photoUrls[0] : null;
+    final lastMessage = mwp.match.lastMessage;
+    final hasUnread = _hasUnread(mwp, currentUid);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -387,6 +392,13 @@ class _MatchTile extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (lastMessage != null) ...[
+              _MessageMeta(
+                createdAt: lastMessage.createdAt,
+                hasUnread: hasUnread,
+              ),
+              const SizedBox(width: 4),
+            ],
             IconButton(
               icon: const Icon(
                 Icons.auto_awesome_rounded,
@@ -394,6 +406,7 @@ class _MatchTile extends StatelessWidget {
               ),
               tooltip: '궁합 보기',
               onPressed: onFortuneTap,
+              visualDensity: VisualDensity.compact,
             ),
             IconButton(
               icon: const Icon(
@@ -402,6 +415,7 @@ class _MatchTile extends StatelessWidget {
               ),
               tooltip: '채팅 열기',
               onPressed: onChatTap,
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),
@@ -414,6 +428,98 @@ class _MatchTile extends StatelessWidget {
     final last = mwp.match.lastMessage;
     if (last == null) return '매칭됐어요! 대화를 시작해보세요';
     return last.text;
+  }
+
+  static bool _hasUnread(MatchWithProfile mwp, String currentUid) {
+    final last = mwp.match.lastMessage;
+    if (last == null || last.senderId == currentUid) return false;
+
+    final lastReadAt = mwp.match.lastReadAtFor(currentUid);
+    if (lastReadAt == null) return true;
+    return last.createdAt.isAfter(lastReadAt);
+  }
+}
+
+class _MessageMeta extends StatelessWidget {
+  final DateTime createdAt;
+  final bool hasUnread;
+
+  const _MessageMeta({required this.createdAt, required this.hasUnread});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 48,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            _formatLastMessageTime(createdAt),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (hasUnread) ...[const SizedBox(height: 6), const _UnreadBadge()],
+        ],
+      ),
+    );
+  }
+
+  static String _formatLastMessageTime(DateTime value) {
+    final createdAt = value.toLocal();
+    final now = DateTime.now();
+    final diff = now.difference(createdAt);
+
+    if (!diff.isNegative && diff < const Duration(minutes: 1)) {
+      return '방금 전';
+    }
+    if (!diff.isNegative && diff < const Duration(hours: 1)) {
+      return '${diff.inMinutes}분 전';
+    }
+
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDay = DateTime(createdAt.year, createdAt.month, createdAt.day);
+    if (today == messageDay) {
+      final period = createdAt.hour < 12 ? '오전' : '오후';
+      final hour = createdAt.hour % 12 == 0 ? 12 : createdAt.hour % 12;
+      final minute = createdAt.minute.toString().padLeft(2, '0');
+      return '$period $hour:$minute';
+    }
+
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (messageDay == yesterday) return '어제';
+    return '${createdAt.month}/${createdAt.day}';
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  const _UnreadBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        color: AppColors.error,
+        shape: BoxShape.circle,
+      ),
+      child: const Text(
+        '1',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          height: 1,
+        ),
+      ),
+    );
   }
 }
 

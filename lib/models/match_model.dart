@@ -41,6 +41,7 @@ class MatchModel {
   final String uid2;
   final DateTime matchedAt;
   final LastMessage? lastMessage;
+  final Map<String, DateTime> lastReadAtByUid;
 
   const MatchModel({
     required this.matchId,
@@ -49,10 +50,13 @@ class MatchModel {
     required this.uid2,
     required this.matchedAt,
     this.lastMessage,
+    this.lastReadAtByUid = const {},
   });
 
   /// 현재 유저의 UID를 받아 상대방 UID를 반환한다.
   String otherUid(String currentUid) => uid1 == currentUid ? uid2 : uid1;
+
+  DateTime? lastReadAtFor(String uid) => lastReadAtByUid[uid];
 
   factory MatchModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
@@ -64,8 +68,25 @@ class MatchModel {
       uid1: d['uid1'] as String? ?? '',
       uid2: d['uid2'] as String? ?? '',
       matchedAt: (d['matchedAt'] as Timestamp?)?.toDate() ?? DateTime(1970),
-      lastMessage: LastMessage.fromMap(d['lastMessage'] as Map<String, dynamic>?),
+      lastMessage: LastMessage.fromMap(
+        d['lastMessage'] as Map<String, dynamic>?,
+      ),
+      lastReadAtByUid: _parseLastReadAtByUid(d['lastReadAtByUid']),
     );
+  }
+
+  static Map<String, DateTime> _parseLastReadAtByUid(Object? value) {
+    final map = value as Map<String, dynamic>?;
+    if (map == null) return const {};
+
+    final parsed = <String, DateTime>{};
+    for (final entry in map.entries) {
+      final timestamp = entry.value;
+      if (timestamp is Timestamp) {
+        parsed[entry.key] = timestamp.toDate();
+      }
+    }
+    return parsed;
   }
 }
 

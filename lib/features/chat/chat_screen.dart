@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -44,6 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _checkingBlock = true;
   bool _blocked = false;
+  String? _lastReadMarker;
   // 실제 typing 이벤트가 연결되면 이 값만 갱신하면 된다.
   final bool _isOtherTyping = false;
 
@@ -51,6 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _stream = widget.chatService.watchMessages(widget.matchId);
+    _markMatchRead();
     _checkBlocked();
   }
 
@@ -78,10 +81,11 @@ class _ChatScreenState extends State<ChatScreen> {
       _scrollToBottom();
     } catch (e) {
       _textController.text = text;
+      _debugLog('[Chat] 메시지 전송 실패 matchId=${widget.matchId} error=$e');
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('전송 실패: $e')));
+          ..showSnackBar(const SnackBar(content: Text('메시지를 보내지 못했어요.')));
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -102,23 +106,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<List<Icebreaker>> _ensureIcebreakers() {
     if (_icebreakersFuture != null) {
-      debugPrint('[Icebreakers] 기존 요청 재사용 matchId=${widget.matchId}');
+      _debugLog('[Icebreakers] 기존 요청 재사용 matchId=${widget.matchId}');
       return _icebreakersFuture!;
     }
 
-    debugPrint('[Icebreakers] 요청 생성 matchId=${widget.matchId}');
+    _debugLog('[Icebreakers] 요청 생성 matchId=${widget.matchId}');
     _icebreakersFuture = widget.fortuneService
         .getIcebreakers(widget.matchId)
         .then((items) {
-          debugPrint(
+          _debugLog(
             '[Icebreakers] 화면 수신 matchId=${widget.matchId} count=${items.length}',
           );
           return items;
         })
         .catchError((Object e, StackTrace st) {
           // 채팅 핵심 기능을 막지 않기 위해 화면에는 실패를 노출하지 않고 로그만 남긴다.
-          debugPrint('[Icebreakers] 화면 숨김 matchId=${widget.matchId} error=$e');
-          debugPrint('$st');
+          _debugLog('[Icebreakers] 화면 숨김 matchId=${widget.matchId} error=$e');
+          _debugLog('$st');
           return <Icebreaker>[];
         });
     return _icebreakersFuture!;
@@ -143,8 +147,41 @@ class _ChatScreenState extends State<ChatScreen> {
         _checkingBlock = false;
       });
     } catch (e) {
-      debugPrint('[Safety] 채팅 차단 상태 확인 실패: $e');
+      _debugLog('[Safety] 채팅 차단 상태 확인 실패: $e');
       if (mounted) setState(() => _checkingBlock = false);
+    }
+  }
+
+  Future<void> _markMatchRead() async {
+    try {
+      await widget.chatService.markMatchRead(
+        matchId: widget.matchId,
+        currentUid: widget.currentUid,
+      );
+    } catch (e) {
+      _debugLog('[Chat] 읽음 상태 갱신 실패 matchId=${widget.matchId} error=$e');
+    }
+  }
+
+  void _markLatestMessagesRead(List<MessageModel> messages) {
+    MessageModel? latest;
+    for (final message in messages.reversed) {
+      if (message.createdAt != null) {
+        latest = message;
+        break;
+      }
+    }
+    if (latest == null) return;
+
+    final marker = '${latest.id}:${latest.createdAt!.microsecondsSinceEpoch}';
+    if (_lastReadMarker == marker) return;
+    _lastReadMarker = marker;
+    _markMatchRead();
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
     }
   }
 
@@ -169,7 +206,10 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _blocked = submission.blockUser || _blocked);
       _showSnack(submission.blockUser ? '신고가 접수되고 차단했어요.' : '신고가 접수되었어요.');
     } catch (e) {
-      if (mounted) _showSnack('신고에 실패했어요: $e');
+      _debugLog(
+        '[Safety] 신고 실패 reportedUid=${widget.otherProfile.uid} error=$e',
+      );
+      if (mounted) _showSnack('신고에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -203,7 +243,10 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _blocked = true);
       _showSnack('차단했어요.');
     } catch (e) {
-      if (mounted) _showSnack('차단에 실패했어요: $e');
+      _debugLog(
+        '[Safety] 차단 실패 blockedUid=${widget.otherProfile.uid} error=$e',
+      );
+      if (mounted) _showSnack('차단에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -295,25 +338,29 @@ class _ChatScreenState extends State<ChatScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
-          return Center(
+          _debugLog(
+            '[Chat] 메시지 목록 로드 실패 matchId=${widget.matchId} error=${snap.error}',
+          );
+          return const Center(
             child: Text(
-              '메시지를 불러오지 못했어요: ${snap.error}',
-              style: const TextStyle(color: AppColors.textSecondary),
+              '메시지를 불러오지 못했어요.',
+              style: TextStyle(color: AppColors.textSecondary),
             ),
           );
         }
         final messages = snap.data ?? [];
-        debugPrint(
+        _debugLog(
           '[Chat] messages matchId=${widget.matchId} count=${messages.length}',
         );
         if (messages.isEmpty) {
-          debugPrint('[Icebreakers] 빈 채팅방 표시 조건 충족 matchId=${widget.matchId}');
+          _debugLog('[Icebreakers] 빈 채팅방 표시 조건 충족 matchId=${widget.matchId}');
           return _EmptyState(
             icebreakersFuture: _ensureIcebreakers(),
             onSelected: _fillInput,
           );
         }
 
+        _markLatestMessagesRead(messages);
         _scrollToBottom();
         return ListView.builder(
           controller: _scrollController,
@@ -523,12 +570,12 @@ class _IcebreakerSection extends StatelessWidget {
       future: future,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          debugPrint('[Icebreakers] 렌더 상태 loading');
+          _debugLog('[Icebreakers] 렌더 상태 loading');
           return const _IcebreakerLoadingCard();
         }
 
         final icebreakers = snap.data ?? [];
-        debugPrint('[Icebreakers] 렌더 상태 done count=${icebreakers.length}');
+        _debugLog('[Icebreakers] 렌더 상태 done count=${icebreakers.length}');
         if (icebreakers.isEmpty) return const SizedBox.shrink();
 
         return Column(
@@ -556,6 +603,12 @@ class _IcebreakerSection extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+void _debugLog(String message) {
+  if (kDebugMode) {
+    debugPrint(message);
   }
 }
 

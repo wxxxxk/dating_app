@@ -9,6 +9,8 @@ import '../../models/message_model.dart';
 ///     senderId: string, text: string, createdAt: Timestamp
 ///   matches/{matchId}.lastMessage
 ///     { text, senderId, createdAt } — 매칭 목록 미리보기/정렬용
+///   matches/{matchId}.lastReadAtByUid.{uid}
+///     Timestamp — 매칭 목록 안읽음 표시용
 class ChatService {
   ChatService({FirebaseFirestore? firestore})
     : _db = firestore ?? FirebaseFirestore.instance;
@@ -57,5 +59,15 @@ class ChatService {
       },
     });
     await batch.commit();
+  }
+
+  /// 현재 유저가 이 매치의 메시지를 확인한 시각을 기록한다.
+  Future<void> markMatchRead({
+    required String matchId,
+    required String currentUid,
+  }) async {
+    await _matchRef(matchId).update({
+      FieldPath(['lastReadAtByUid', currentUid]): FieldValue.serverTimestamp(),
+    });
   }
 }

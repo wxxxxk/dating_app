@@ -51,6 +51,7 @@
 - ✅ AppBar 아래 온라인 상태 mock 표시
 - ✅ 새 메시지 Fade + Slide 애니메이션
 - ✅ 빈 채팅방 아이스브레이커 카드
+- ✅ 매칭 목록 마지막 메시지 시간/안읽음 뱃지: `matches/{matchId}.lastMessage`, `lastReadAtByUid.{uid}` 기반
 
 ### Fortune / AI 사주
 
@@ -99,7 +100,7 @@
 - ❌ Rewind
 - ❌ Push Notification
 - ❌ 사진 메시지
-- ❌ Read Receipt
+- ❌ 메시지별 Read Receipt
 - ❌ 실제 Typing Event 저장/전파
 - ❌ 실제 온라인/최근 접속 상태 저장/전파
 - ❌ 사진 인증
@@ -203,6 +204,7 @@ test/
   - `type`, `amount`, `reason`, `createdAt`, IAP 경로에서는 `platform`, `productId`, `transactionId`
 - `matches/{matchId}`
   - `participants`, `uid1`, `uid2`, `matchedAt`, `lastMessage`
+  - 읽음 상태: `lastReadAtByUid.{uid}`. 매칭 목록 안읽음 뱃지 판정에 사용
   - AI 캐시: `fortuneMatch`, `icebreakers`
 - `matches/{matchId}/messages/{messageId}`
   - `senderId`, `text`, `createdAt`
