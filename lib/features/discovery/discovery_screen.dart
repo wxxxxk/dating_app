@@ -605,12 +605,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                     profile: _profiles[_currentIndex],
                     currentUserBirthDate: _currentUserProfile?.birthDate,
                     currentUserLocation: _currentUserLocation,
-                  ),
-                  Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () => _openProfile(_profiles[_currentIndex]),
-                    ),
+                    onProfileTap: () => _openProfile(_profiles[_currentIndex]),
                   ),
                   Positioned(
                     top: 12,

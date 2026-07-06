@@ -11,17 +11,55 @@ import '../../profile/widgets/verification_badge.dart';
 ///
 /// 사진, 이름/나이/MBTI, 소개글, 관심사 칩을 렌더링한다.
 /// [SwipeCard]의 child로 사용된다.
-class ProfileCardContent extends StatelessWidget {
+class ProfileCardContent extends StatefulWidget {
   final UserProfile profile;
   final DateTime? currentUserBirthDate;
   final UserLocation? currentUserLocation;
+  final VoidCallback? onProfileTap;
 
   const ProfileCardContent({
     super.key,
     required this.profile,
     this.currentUserBirthDate,
     this.currentUserLocation,
+    this.onProfileTap,
   });
+
+  @override
+  State<ProfileCardContent> createState() => _ProfileCardContentState();
+}
+
+class _ProfileCardContentState extends State<ProfileCardContent> {
+  int _photoIndex = 0;
+
+  UserProfile get profile => widget.profile;
+  DateTime? get currentUserBirthDate => widget.currentUserBirthDate;
+  UserLocation? get currentUserLocation => widget.currentUserLocation;
+
+  @override
+  void didUpdateWidget(covariant ProfileCardContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profile.uid != widget.profile.uid) {
+      _photoIndex = 0;
+      return;
+    }
+    if (_photoIndex >= widget.profile.photoUrls.length) {
+      _photoIndex = 0;
+    }
+  }
+
+  void _showPreviousPhoto() {
+    if (profile.photoUrls.length <= 1 || _photoIndex == 0) return;
+    setState(() => _photoIndex--);
+  }
+
+  void _showNextPhoto() {
+    if (profile.photoUrls.length <= 1 ||
+        _photoIndex >= profile.photoUrls.length - 1) {
+      return;
+    }
+    setState(() => _photoIndex++);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +67,21 @@ class ProfileCardContent extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       child: Stack(
         fit: StackFit.expand,
-        children: [_buildPhoto(), _buildGradientOverlay(), _buildInfoPanel()],
+        children: [
+          _buildPhoto(),
+          _buildGradientOverlay(),
+          if (profile.photoUrls.length > 1) ...[
+            _PhotoTapZones(
+              onPrevious: _showPreviousPhoto,
+              onNext: _showNextPhoto,
+            ),
+            _PhotoSegmentIndicator(
+              count: profile.photoUrls.length,
+              activeIndex: _photoIndex,
+            ),
+          ],
+          _buildInfoPanel(),
+        ],
       ),
     );
   }
@@ -45,8 +97,11 @@ class ProfileCardContent extends StatelessWidget {
         ),
       );
     }
+    final safeIndex = _photoIndex
+        .clamp(0, profile.photoUrls.length - 1)
+        .toInt();
     return Image.network(
-      profile.photoUrls.first,
+      profile.photoUrls[safeIndex],
       fit: BoxFit.cover,
       errorBuilder: (_, _, _) => Container(
         color: AppColors.surface,
@@ -100,84 +155,88 @@ class ProfileCardContent extends StatelessWidget {
       bottom: 0,
       left: 0,
       right: 0,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 이름 + 나이 + MBTI
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    '${profile.displayName}, ${profile.age}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.2,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onProfileTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 이름 + 나이 + MBTI
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      '${profile.displayName}, ${profile.age}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.2,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                if (profile.mbti != null) ...[
-                  const SizedBox(width: 8),
-                  _MbtiChip(mbti: profile.mbti!),
+                  if (profile.mbti != null) ...[
+                    const SizedBox(width: 8),
+                    _MbtiChip(mbti: profile.mbti!),
+                  ],
+                  if (distanceLabel != null) ...[
+                    const SizedBox(width: 8),
+                    _DistanceChip(label: distanceLabel),
+                  ],
                 ],
-                if (distanceLabel != null) ...[
-                  const SizedBox(width: 8),
-                  _DistanceChip(label: distanceLabel),
-                ],
+              ),
+
+              if (compatibilityHint != null) ...[
+                const SizedBox(height: 7),
+                _CompatibilityChip(hint: compatibilityHint),
               ],
-            ),
-
-            if (compatibilityHint != null) ...[
-              const SizedBox(height: 7),
-              _CompatibilityChip(hint: compatibilityHint),
-            ],
-            if (profile.verifications.hasAny) ...[
-              const SizedBox(height: 7),
-              VerificationBadges(
-                verifications: profile.verifications,
-                brightness: Brightness.dark,
-              ),
-            ],
-
-            // 직업
-            if (profile.jobTitle != null || profile.jobCategory != null) ...[
-              const SizedBox(height: 4),
-              _jobLine(),
-            ],
-
-            // 소개글
-            if (profile.bio.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                profile.bio,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  height: 1.45,
+              if (profile.verifications.hasAny) ...[
+                const SizedBox(height: 7),
+                VerificationBadges(
+                  verifications: profile.verifications,
+                  brightness: Brightness.dark,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
 
-            // 관심사 칩
-            if (interestLabels.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: interestLabels
-                    .map((label) => _TagChip(label: label))
-                    .toList(),
-              ),
+              // 직업
+              if (profile.jobTitle != null || profile.jobCategory != null) ...[
+                const SizedBox(height: 4),
+                _jobLine(),
+              ],
+
+              // 소개글
+              if (profile.bio.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  profile.bio,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.45,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+
+              // 관심사 칩
+              if (interestLabels.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: interestLabels
+                      .map((label) => _TagChip(label: label))
+                      .toList(),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -210,6 +269,80 @@ class ProfileCardContent extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PhotoTapZones extends StatelessWidget {
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  const _PhotoTapZones({required this.onPrevious, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: onPrevious,
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: onNext,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoSegmentIndicator extends StatelessWidget {
+  final int count;
+  final int activeIndex;
+
+  const _PhotoSegmentIndicator({
+    required this.count,
+    required this.activeIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 10,
+      left: 12,
+      right: 12,
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: List.generate(count, (index) {
+            final active = index == activeIndex;
+            return Expanded(
+              child: Container(
+                height: 3,
+                margin: EdgeInsets.only(right: index == count - 1 ? 0 : 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: active ? 0.95 : 0.36),
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 3,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
     );
   }
 }

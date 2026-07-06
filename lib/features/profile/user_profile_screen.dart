@@ -253,13 +253,63 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 }
 
-class _PhotoGallery extends StatelessWidget {
+class _PhotoGallery extends StatefulWidget {
   final List<String> photoUrls;
 
   const _PhotoGallery({required this.photoUrls});
 
   @override
+  State<_PhotoGallery> createState() => _PhotoGalleryState();
+}
+
+class _PhotoGalleryState extends State<_PhotoGallery> {
+  late final PageController _controller;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = PageController();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoGallery oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.photoUrls != widget.photoUrls) {
+      _index = 0;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _showPrevious() {
+    if (widget.photoUrls.length <= 1 || _index == 0) return;
+    _controller.previousPage(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _showNext() {
+    if (widget.photoUrls.length <= 1 || _index >= widget.photoUrls.length - 1) {
+      return;
+    }
+    _controller.nextPage(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final photoUrls = widget.photoUrls;
     if (photoUrls.isEmpty) {
       return Container(
         height: 420,
@@ -273,19 +323,101 @@ class _PhotoGallery extends StatelessWidget {
     }
     return SizedBox(
       height: 420,
-      child: PageView(
-        children: photoUrls
-            .map(
-              (url) => Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const ColoredBox(
-                  color: AppColors.surface,
-                  child: Icon(Icons.person, color: AppColors.textSecondary),
-                ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: photoUrls.length,
+            onPageChanged: (value) => setState(() => _index = value),
+            itemBuilder: (_, index) => Image.network(
+              photoUrls[index],
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const ColoredBox(
+                color: AppColors.surface,
+                child: Icon(Icons.person, color: AppColors.textSecondary),
               ),
-            )
-            .toList(),
+            ),
+          ),
+          if (photoUrls.length > 1) ...[
+            _PhotoTapZones(onPrevious: _showPrevious, onNext: _showNext),
+            _PhotoSegmentIndicator(
+              count: photoUrls.length,
+              activeIndex: _index,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoTapZones extends StatelessWidget {
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  const _PhotoTapZones({required this.onPrevious, required this.onNext});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: onPrevious,
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: onNext,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoSegmentIndicator extends StatelessWidget {
+  final int count;
+  final int activeIndex;
+
+  const _PhotoSegmentIndicator({
+    required this.count,
+    required this.activeIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: 12,
+      left: 12,
+      right: 12,
+      child: Row(
+        children: List.generate(count, (index) {
+          final active = index == activeIndex;
+          return Expanded(
+            child: Container(
+              height: 3,
+              margin: EdgeInsets.only(right: index == count - 1 ? 0 : 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: active ? 0.95 : 0.34),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 3,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
