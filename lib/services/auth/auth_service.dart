@@ -191,47 +191,68 @@ class AuthService {
   }
 
   // ===========================================================================
-  // 전화번호 로그인 (뼈대)
+  // 전화번호 로그인
   // ===========================================================================
 
-  /// 전화번호로 로그인한다. (이번 마일스톤은 뼈대만 — 흐름 설명 위주)
+  /// 전화번호로 SMS 인증코드를 요청한다(1단계).
+  ///
+  /// [phoneNumber]는 반드시 E.164 형식(국가코드 포함, 예: '+821012345678')이어야
+  /// 한다. 화면(PhoneLoginScreen)이 Validators.phone으로 걸러진 국내 번호를
+  /// E.164로 변환해 넘긴다.
   ///
   /// 전화 인증은 2단계다:
-  ///   (1) verifyPhoneNumber로 SMS 인증코드 발송
-  ///   (2) 사용자가 입력한 코드로 credential을 만들어 로그인
+  ///   (1) verifyPhoneNumber로 SMS 인증코드 발송 — 이 메서드
+  ///   (2) 사용자가 입력한 코드로 credential을 만들어 로그인 — [confirmSmsCode]
   ///
-  /// 모바일에서는 콜백 기반이라 화면 상태와 얽히므로, 보통 아래처럼
-  /// 콜백들을 화면(혹은 컨트롤러)에서 받아 처리한다.
+  /// 콜백 기반인 이유: verifyPhoneNumber는 Future가 완료되는 시점과
+  /// 실제 발송 성공/실패/자동인증 시점이 서로 다르다(콜백이 나중에 온다).
+  /// 그래서 결과 처리는 이 메서드가 반환된 뒤가 아니라 아래 콜백 안에서 한다.
   ///
-  /// [onCodeSent] : SMS가 발송되면 verificationId를 돌려준다.
-  ///   → 화면은 이 id를 보관했다가 사용자가 입력한 6자리 코드와 합쳐 로그인한다.
-  /// [onVerified] : (안드로이드) 자동 인증이 되면 바로 로그인까지 끝난 경우.
-  /// [onFailed]   : 발송/검증 실패.
+  /// [onCodeSent] : SMS 발송 성공 → verificationId를 돌려준다.
+  ///   → 화면은 이 id를 보관했다가 사용자가 입력한 6자리 코드와 합쳐
+  ///     [confirmSmsCode]를 호출한다.
+  /// [onVerified] : (주로 안드로이드) SMS를 자동 감지해 별도 코드 입력 없이
+  ///   바로 로그인까지 끝난 경우. authStateChanges 스트림이 반응하므로
+  ///   화면은 별도 네비게이션 없이 로딩만 해제하면 된다.
+  /// [onFailed]   : 발송/자동 인증 실패(잘못된 번호, 쿼터 초과 등).
   Future<void> signInWithPhone({
     required String phoneNumber,
     required void Function(String verificationId) onCodeSent,
     required void Function(UserCredential credential) onVerified,
     required void Function(String message) onFailed,
   }) async {
-    // TODO(M2 구현): 실제 전화 인증 흐름.
-    // await _auth.verifyPhoneNumber(
-    //   phoneNumber: phoneNumber, // 예: '+8210...' (국가코드 포함)
-    //   verificationCompleted: (PhoneAuthCredential credential) async {
-    //     // 안드로이드 자동 인증: 곧바로 로그인 완료.
-    //     final userCredential = await _auth.signInWithCredential(credential);
-    //     onVerified(userCredential);
-    //   },
-    //   verificationFailed: (FirebaseAuthException e) {
-    //     onFailed(_firebaseAuthMessage(e));
-    //   },
-    //   codeSent: (String verificationId, int? resendToken) {
-    //     onCodeSent(verificationId);
-    //   },
-    //   codeAutoRetrievalTimeout: (String verificationId) {},
-    // );
-
-    // 2단계(코드 입력 후)는 별도 메서드 confirmSmsCode()로 처리하면 깔끔하다(아래).
-    throw const AuthFailure('전화번호 로그인은 다음 마일스톤에서 구현 예정입니다.');
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: const Duration(seconds: 60),
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          // 안드로이드 자동 인증: 코드 입력 화면 없이 바로 로그인까지 끝난다.
+          try {
+            final userCredential = await _auth.signInWithCredential(
+              credential,
+            );
+            onVerified(userCredential);
+          } on FirebaseAuthException catch (e) {
+            onFailed(_firebaseAuthMessage(e));
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          onFailed(_firebaseAuthMessage(e));
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          // 자동 감지 제한시간 종료 — verificationId는 이미 codeSent에서
+          // 전달됐으므로, 사용자가 직접 코드를 입력하면 confirmSmsCode()로
+          // 처리된다. 여기서 추가로 할 일은 없다.
+        },
+      );
+    } on FirebaseAuthException catch (e) {
+      onFailed(_firebaseAuthMessage(e));
+    } catch (_) {
+      onFailed('인증코드 발송 중 알 수 없는 오류가 발생했습니다.');
+    }
   }
 
   /// 전화 인증 2단계: 사용자가 입력한 SMS 코드로 최종 로그인.
@@ -316,6 +337,19 @@ class AuthService {
         return '인증 시간이 만료되었습니다. 다시 시도해주세요.';
       case 'network-request-failed':
         return '네트워크 연결을 확인해주세요.';
+      // ── 전화번호 인증 ────────────────────────────────────────────────────
+      case 'invalid-phone-number':
+        return '올바른 전화번호 형식이 아닙니다.';
+      case 'missing-phone-number':
+        return '전화번호를 입력해주세요.';
+      case 'quota-exceeded':
+        return 'SMS 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
+      case 'captcha-check-failed':
+        return '보안 확인에 실패했습니다. 다시 시도해주세요.';
+      case 'invalid-verification-id':
+        return '인증 세션이 유효하지 않습니다. 인증코드를 다시 받아주세요.';
+      case 'credential-already-in-use':
+        return '이미 다른 계정에 연결된 전화번호입니다.';
       default:
         return '인증에 실패했습니다. 잠시 후 다시 시도해주세요.';
     }

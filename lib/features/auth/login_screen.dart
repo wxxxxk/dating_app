@@ -7,6 +7,7 @@ import '../../services/auth/auth_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/primary_button.dart';
 import 'password_reset_screen.dart';
+import 'phone_login_screen.dart';
 
 /// 인증 시작 화면 (M2.6).
 ///
@@ -69,6 +70,18 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // ── 전화번호 로그인 ──────────────────────────────────────────────────────
+
+  void _openPhoneLogin() {
+    FocusScope.of(context).unfocus();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhoneLoginScreen(authService: widget.authService),
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -240,6 +253,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       outlined: true,
                       icon: const Icon(Icons.g_mobiledata, size: 26),
                       onPressed: _loading ? null : _handleGoogleSignIn,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── 전화번호 로그인 ───────────────────────────────────
+                    PrimaryButton(
+                      label: '전화번호로 계속하기',
+                      outlined: true,
+                      icon: const Icon(Icons.phone_outlined, size: 20),
+                      onPressed: _loading ? null : _openPhoneLogin,
                     ),
                     const SizedBox(height: 32),
 
