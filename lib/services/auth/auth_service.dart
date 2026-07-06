@@ -280,8 +280,10 @@ class AuthService {
   /// FirebaseAuthException 코드를 사용자용 한국어 메시지로 변환.
   String _firebaseAuthMessage(FirebaseAuthException e) {
     // 진단용 로그 — 실제 Firebase 에러 코드를 터미널에서 확인할 수 있다.
-    // TODO: 출시 전 제거하거나 로깅 레벨을 낮출 것.
-    debugPrint('[AuthService] FirebaseAuthException code="${e.code}" message="${e.message}"');
+    // kDebugMode로 감싸 release 빌드에서는 출력되지 않게 한다.
+    if (kDebugMode) {
+      debugPrint('[AuthService] FirebaseAuthException code="${e.code}" message="${e.message}"');
+    }
     switch (e.code) {
       // ── 이메일/비밀번호 ──────────────────────────────────────────────────
       case 'weak-password':

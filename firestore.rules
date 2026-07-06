@@ -13,8 +13,20 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
 
-      // 개발용 더미 유저 쓰기 — 출시 전 반드시 제거할 것
-      allow write: if request.auth != null && uid.matches('dummy_.*'); // TODO: 출시 전 제거
+      // ⚠️ RELEASE-BLOCKER — 프로덕션 배포 전 반드시 삭제할 것.
+      // Firestore 규칙은 클라이언트의 kDebugMode와 무관하게 항상 그대로 적용된다.
+      // 즉 이 줄이 배포되면 release 빌드에서도 인증된 "모든" 유저가 uid가
+      // dummy_*인 남의 문서에 자유롭게 쓸 수 있다(계정 데이터 오염/탈취 경로).
+      //
+      // 의존성 확인(lib/dev/dummy_data_service.dart):
+      // generateDummies()가 users/{dummy_uid} 프로필 10개를 생성할 때 이 규칙에
+      // 의존한다. createUserProfile() 호출(그 파일 35번 줄)은 try/catch로
+      // 감싸여 있지 않으므로, 이 줄을 지우면 "더미 생성" 버튼이 프로필 생성
+      // 단계에서 즉시 permission-denied로 실패한다(조용히 넘어가지 않음).
+      //
+      // 배포 직전 체크리스트: 이 저장소에서 "RELEASE-BLOCKER"를 검색해
+      // 해당 규칙을 모두 제거한 뒤 firebase deploy --only firestore:rules 재배포.
+      allow write: if request.auth != null && uid.matches('dummy_.*'); // RELEASE-BLOCKER: 출시 전 필수 제거
 
       // users/{uid}/swipes/{targetUid}:
       // - 본인의 스와이프 기록만 읽고 쓸 수 있다.
@@ -22,9 +34,20 @@ service cloud.firestore {
       match /swipes/{targetUid} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
 
-        // 개발용: DummyDataService가 dummy_* 유저의 역방향 스와이프를 쓸 수 있게 허용.
-        // dummy_001·003·006 → 현재 유저 like 삽입 시 필요.
-        allow write: if request.auth != null && uid.matches('dummy_.*'); // TODO: 출시 전 제거
+        // ⚠️ RELEASE-BLOCKER — 프로덕션 배포 전 반드시 삭제할 것.
+        // (users/{uid} 최상단의 dummy_* 예외와 같은 위험: release 빌드에서도
+        // 인증된 모든 유저가 uid가 dummy_*인 남의 swipes 문서에 쓸 수 있다.)
+        //
+        // 의존성 확인(lib/dev/dummy_data_service.dart):
+        // generateDummies()가 dummy_001·003·006 → 현재 유저 역방향
+        // like/superlike 스와이프를 생성할 때 이 규칙에 의존한다(그 파일
+        // 51~73번 줄). 이 쓰기는 try/catch로 감싸여 있으므로(69~72번 줄),
+        // 이 줄을 지워도 앱이 죽지는 않는다 — 다만 "즉시 매칭" 데모 효과만
+        // 조용히 사라지고 실패는 debugPrint 로그로만 남는다.
+        //
+        // 배포 직전 체크리스트: 이 저장소에서 "RELEASE-BLOCKER"를 검색해
+        // 해당 규칙을 모두 제거한 뒤 firebase deploy --only firestore:rules 재배포.
+        allow write: if request.auth != null && uid.matches('dummy_.*'); // RELEASE-BLOCKER: 출시 전 필수 제거
       }
 
       // users/{uid}/dailyFortune/{yyyy-MM-dd} (M6.5):
