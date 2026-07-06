@@ -858,6 +858,10 @@ const IDEAL_HAIR_BY_GENDER = {
   all: ['long_straight', 'bob', 'wavy', 'short', 'two_block', 'dandy', 'medium'],
 };
 
+// OpenAI 계정/조직 권한에 따라 사용 가능한 이미지 모델은 달라질 수 있다.
+// 배포 후 "model does not exist"가 계속되면 OpenAI 대시보드에서 접근 가능한 모델명을 확인한다.
+const IDEAL_IMAGE_MODEL = 'gpt-image-1';
+
 function optionValue(group, key, fallback) {
   const safeKey = typeof key === 'string' && IDEAL_IMAGE_OPTIONS[group]?.[key]
     ? key
@@ -966,6 +970,17 @@ async function uploadIdealImage({ uid, inputHash, imageBuffer }) {
 
 function imageGenerationErrorMessage(error) {
   const message = String(error?.message || '');
+  const lowerMessage = message.toLowerCase();
+  if (
+    lowerMessage.includes('model') &&
+    (
+      lowerMessage.includes('does not exist') ||
+      lowerMessage.includes('not found') ||
+      lowerMessage.includes('not available')
+    )
+  ) {
+    return '이미지 생성 모델을 사용할 수 없습니다. OpenAI 대시보드에서 사용 가능한 이미지 모델명을 확인해주세요.';
+  }
   if (
     message.includes('Unknown parameter') ||
     error?.code === 'invalid_request_error' ||
@@ -973,7 +988,12 @@ function imageGenerationErrorMessage(error) {
   ) {
     return '이미지 API 요청 파라미터가 올바르지 않습니다. 배포된 함수를 최신 코드로 다시 배포해주세요.';
   }
-  if (error?.code === 'moderation_blocked' || error?.status === 400) {
+  if (
+    error?.code === 'moderation_blocked' ||
+    lowerMessage.includes('policy') ||
+    lowerMessage.includes('safety') ||
+    lowerMessage.includes('moderation')
+  ) {
     return '이미지 생성이 정책상 거부되었거나 실패했습니다. 옵션을 더 일반적인 분위기/스타일로 바꿔주세요.';
   }
   return '이미지 생성 서버 요청에 실패했습니다. 잠시 후 다시 시도해주세요.';
@@ -1015,11 +1035,10 @@ exports.generateIdealTypeImage = onCall(
     let imageResponse;
     try {
       imageResponse = await client.images.generate({
-        model: 'dall-e-3',
+        model: IDEAL_IMAGE_MODEL,
         prompt,
         n: 1,
         size: '1024x1024',
-        quality: 'standard',
       });
     } catch (error) {
       console.error('[generateIdealTypeImage] OpenAI image error', {

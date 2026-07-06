@@ -1,3 +1,5 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
@@ -23,6 +25,7 @@ class IdealTypeScreen extends StatefulWidget {
 class _IdealTypeScreenState extends State<IdealTypeScreen> {
   late IdealTypeImageOptions _options;
   IdealTypeImageResult? _result;
+  String? _errorMessage;
   bool _loadingCache = true;
   bool _generating = false;
 
@@ -68,20 +71,46 @@ class _IdealTypeScreenState extends State<IdealTypeScreen> {
 
   Future<void> _generate() async {
     if (_generating) return;
-    setState(() => _generating = true);
+    setState(() {
+      _generating = true;
+      _errorMessage = null;
+    });
     try {
       final result = await widget.idealTypeService.generateImage(
         options: _options,
       );
       if (!mounted) return;
-      setState(() => _result = result);
+      setState(() {
+        _result = result;
+        _errorMessage = null;
+      });
       _showSnack('이상형 이미지가 준비됐어요.');
-    } catch (e) {
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('[IdealType] 이미지 생성 실패: $e');
+        debugPrint('$stackTrace');
+      }
       if (!mounted) return;
-      _showSnack('이미지 생성 실패: $e');
+      setState(() => _errorMessage = _friendlyErrorMessage(e));
     } finally {
       if (mounted) setState(() => _generating = false);
     }
+  }
+
+  String _friendlyErrorMessage(Object error) {
+    if (error is FirebaseFunctionsException) {
+      final serverMessage = error.message ?? '';
+      if (error.code == 'failed-precondition') {
+        if (serverMessage.contains('정책') || serverMessage.contains('거부')) {
+          return '이미지 생성이 정책상 거부되었어요. 분위기나 스타일을 더 일반적으로 바꿔 다시 시도해보세요.';
+        }
+        if (serverMessage.contains('모델') || serverMessage.contains('파라미터')) {
+          return '이미지 생성 설정을 확인해야 해요. 잠시 후 다시 시도해주세요.';
+        }
+        return '이미지 생성에 실패했어요. 다른 스타일이나 분위기로 다시 시도해보세요.';
+      }
+    }
+    return '이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.';
   }
 
   void _showSnack(String message) {
@@ -169,12 +198,84 @@ class _IdealTypeScreenState extends State<IdealTypeScreen> {
             ),
           ),
           const SizedBox(height: 18),
+          if (_errorMessage != null) ...[
+            _IdealImageErrorCard(
+              message: _errorMessage!,
+              onRetry: _generating ? null : _generate,
+            ),
+            const SizedBox(height: 18),
+          ],
           if (_loadingCache)
             const Center(child: CircularProgressIndicator())
           else if (_result != null)
             _IdealImagePreview(result: _result!)
           else
             const _EmptyPreview(),
+        ],
+      ),
+    );
+  }
+}
+
+class _IdealImageErrorCard extends StatelessWidget {
+  final String message;
+  final VoidCallback? onRetry;
+
+  const _IdealImageErrorCard({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                color: Colors.redAccent,
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                '이미지 생성에 실패했어요',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('다시 시도'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+              ),
+            ),
+          ),
         ],
       ),
     );
