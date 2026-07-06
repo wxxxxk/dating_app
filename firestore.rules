@@ -7,10 +7,28 @@ service cloud.firestore {
     // - 쓰기(생성/수정/삭제)는 본인만 가능하다.
     // - verifications는 프로토타입에서 클라이언트가 Auth 상태를 동기화한다.
     //   실서비스에서는 서버 검증(Cloud Functions/Admin SDK) 후 true를 써야 한다.
-    // - jelly/boostUntil/likesUnlocked는 목업 결제용 클라이언트 필드다.
-    //   실서비스: 충전/차감은 서버(Functions/IAP 영수증 검증) 경유 필수.
     match /users/{uid} {
       allow read: if request.auth != null;
+
+      // ⚠️ RELEASE-BLOCKER — 프로덕션 배포 전 반드시 점검할 것.
+      // 이 allow write는 users/{uid} 문서의 "모든" 필드를 본인이 자유롭게
+      // 쓸 수 있게 허용한다. 여기엔 jelly(젤리 잔액)·boostUntil·
+      // likesUnlocked도 포함된다 — 즉 클라이언트가 Firestore SDK를 직접
+      // 호출해 jelly 필드를 임의의 큰 값으로 덮어써도 이 규칙은 막지 못한다
+      // (JellyService.charge()/spend() 같은 정상 흐름을 거치지 않아도 통과됨).
+      // functions/index.js의 verifyJellyPurchase(서버 검증)가 아직 스켈레톤
+      // 이므로, 이 상태로 배포하면 무한 충전 취약점이 된다.
+      //
+      // 지금 이 규칙을 지우면 안 된다 — 프로필 편집(이름/사진/소개 등) 같은
+      // 정상적인 본인 필드 쓰기까지 전부 막히기 때문이다. 실제 고쳐야 할
+      // 것은 jelly/boostUntil/likesUnlocked를 이 블랭킷 쓰기에서 제외하고
+      // Cloud Functions(admin SDK, verifyJellyPurchase 등)로만 쓰게 만드는
+      // 더 정교한 규칙(예: matches/{matchId}의 affectedKeys() 패턴 참고)이다.
+      //
+      // 배포 직전 체크리스트: 이 저장소에서 "RELEASE-BLOCKER"를 검색해
+      // verifyJellyPurchase가 실제 App Store Server API / Google Play
+      // Developer API 검증으로 교체됐는지, 그리고 이 규칙이 jelly 관련
+      // 필드를 더 이상 클라이언트 쓰기로 열어두지 않는지 확인할 것.
       allow write: if request.auth != null && request.auth.uid == uid;
 
       // ⚠️ RELEASE-BLOCKER — 프로덕션 배포 전 반드시 삭제할 것.
@@ -74,8 +92,23 @@ service cloud.firestore {
       // users/{uid}/jellyTransactions/{txId}:
       // 목업 결제/소모 내역. 프로토타입에서는 클라이언트 트랜잭션으로 쓰지만,
       // 실서비스에서는 Functions에서 IAP 검증 후 Admin SDK로만 써야 한다.
+      //
+      // ⚠️ RELEASE-BLOCKER — 프로덕션 배포 전 반드시 점검할 것.
+      // 지금은 클라이언트가 이 서브컬렉션에 자유롭게 쓸 수 있다. 위
+      // users/{uid}의 jelly 필드 블랭킷 쓰기 허용과 합쳐지면, 클라이언트가
+      // 실제 결제 없이 jelly 잔액을 올리고 이 문서에 "charge" 내역을
+      // 위조해 남길 수 있다 — 실제 서버 검증(functions/index.js의
+      // verifyJellyPurchase, 현재 스켈레톤 상태) 없이 배포하면 무한 충전
+      // 취약점이 된다.
+      //
+      // 실서비스: 이 서브컬렉션 쓰기는 Cloud Functions(admin SDK)에서 IAP
+      // 영수증 검증 후에만 하도록 좁히고, 클라이언트는 read만 허용해야 한다.
+      //
+      // 배포 직전 체크리스트: 이 저장소에서 "RELEASE-BLOCKER"를 검색해
+      // verifyJellyPurchase가 실제 스토어 검증으로 교체됐는지 확인한 뒤에만
+      // 이 규칙의 client write를 제거할 것.
       match /jellyTransactions/{txId} {
-        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow read, write: if request.auth != null && request.auth.uid == uid; // RELEASE-BLOCKER: 실제 IAP 검증 전까지만 허용
       }
     }
 

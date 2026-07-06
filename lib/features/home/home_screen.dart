@@ -6,6 +6,7 @@ import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/charm/charm_service.dart';
 import '../../services/database/firestore_service.dart';
+import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
@@ -32,6 +33,7 @@ class HomeScreen extends StatefulWidget {
   final StorageService storageService;
   final CharmService charmService;
   final JellyService jellyService;
+  final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
 
   const HomeScreen({
@@ -41,6 +43,7 @@ class HomeScreen extends StatefulWidget {
     required this.storageService,
     required this.charmService,
     required this.jellyService,
+    required this.jellyPurchaseService,
     required this.safetyService,
   });
 
@@ -211,6 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
           JellyBalanceButton(
             currentUid: profile.uid,
             jellyService: widget.jellyService,
+            jellyPurchaseService: widget.jellyPurchaseService,
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined),

@@ -7,6 +7,7 @@ import '../services/charm/charm_service.dart';
 import '../services/database/firestore_service.dart';
 import '../services/discovery/discovery_service.dart';
 import '../services/fortune/fortune_service.dart';
+import '../services/jelly/jelly_purchase_service.dart';
 import '../services/jelly/jelly_service.dart';
 import '../services/likes/likes_service.dart';
 import '../services/matches/matches_service.dart';
@@ -38,6 +39,7 @@ class MainShell extends StatefulWidget {
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
+  final JellyPurchaseService jellyPurchaseService;
   final LikesService likesService;
   final SafetyService safetyService;
 
@@ -52,6 +54,7 @@ class MainShell extends StatefulWidget {
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
+    required this.jellyPurchaseService,
     required this.likesService,
     required this.safetyService,
   });
@@ -77,6 +80,7 @@ class _MainShellState extends State<MainShell> {
             chatService: widget.chatService,
             fortuneService: widget.fortuneService,
             jellyService: widget.jellyService,
+            jellyPurchaseService: widget.jellyPurchaseService,
             safetyService: widget.safetyService,
           ),
           MatchesScreen(
@@ -86,6 +90,7 @@ class _MainShellState extends State<MainShell> {
             firestoreService: widget.firestoreService,
             fortuneService: widget.fortuneService,
             jellyService: widget.jellyService,
+            jellyPurchaseService: widget.jellyPurchaseService,
             discoveryService: widget.discoveryService,
             likesService: widget.likesService,
             safetyService: widget.safetyService,
@@ -103,6 +108,7 @@ class _MainShellState extends State<MainShell> {
             storageService: widget.storageService,
             charmService: widget.charmService,
             jellyService: widget.jellyService,
+            jellyPurchaseService: widget.jellyPurchaseService,
             safetyService: widget.safetyService,
           ),
         ],

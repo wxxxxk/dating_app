@@ -13,6 +13,7 @@ import 'services/charm/charm_service.dart';
 import 'services/database/firestore_service.dart';
 import 'services/discovery/discovery_service.dart';
 import 'services/fortune/fortune_service.dart';
+import 'services/jelly/jelly_purchase_service.dart';
 import 'services/jelly/jelly_service.dart';
 import 'services/likes/likes_service.dart';
 import 'services/matches/matches_service.dart';
@@ -43,6 +44,7 @@ class _MyAppState extends State<MyApp> {
   late final CharmService _charmService;
   late final FortuneService _fortuneService;
   late final JellyService _jellyService;
+  late final JellyPurchaseService _jellyPurchaseService;
   late final LikesService _likesService;
   late final SafetyService _safetyService;
 
@@ -58,6 +60,7 @@ class _MyAppState extends State<MyApp> {
     _charmService = CharmService();
     _fortuneService = FortuneService();
     _jellyService = JellyService();
+    _jellyPurchaseService = JellyPurchaseService();
     _safetyService = SafetyService(firestoreService: _firestoreService);
     _matchesService = MatchesService(
       firestoreService: _firestoreService,
@@ -92,6 +95,7 @@ class _MyAppState extends State<MyApp> {
         charmService: _charmService,
         fortuneService: _fortuneService,
         jellyService: _jellyService,
+        jellyPurchaseService: _jellyPurchaseService,
         likesService: _likesService,
         safetyService: _safetyService,
       ),
@@ -116,6 +120,7 @@ class _MyAppState extends State<MyApp> {
                 charmService: _charmService,
                 fortuneService: _fortuneService,
                 jellyService: _jellyService,
+                jellyPurchaseService: _jellyPurchaseService,
                 likesService: _likesService,
                 safetyService: _safetyService,
               ),
@@ -155,6 +160,7 @@ class _AuthGate extends StatefulWidget {
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
+  final JellyPurchaseService jellyPurchaseService;
   final LikesService likesService;
   final SafetyService safetyService;
 
@@ -169,6 +175,7 @@ class _AuthGate extends StatefulWidget {
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
+    required this.jellyPurchaseService,
     required this.likesService,
     required this.safetyService,
   });
@@ -285,6 +292,7 @@ class _AuthGateState extends State<_AuthGate> {
       charmService: widget.charmService,
       fortuneService: widget.fortuneService,
       jellyService: widget.jellyService,
+      jellyPurchaseService: widget.jellyPurchaseService,
       likesService: widget.likesService,
       safetyService: widget.safetyService,
     );

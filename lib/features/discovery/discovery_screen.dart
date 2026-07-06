@@ -12,6 +12,7 @@ import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/discovery/discovery_service.dart';
 import '../../services/fortune/fortune_service.dart';
+import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
@@ -43,6 +44,7 @@ class DiscoveryScreen extends StatefulWidget {
   final ChatService chatService;
   final FortuneService fortuneService;
   final JellyService jellyService;
+  final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
 
   const DiscoveryScreen({
@@ -54,6 +56,7 @@ class DiscoveryScreen extends StatefulWidget {
     required this.chatService,
     required this.fortuneService,
     required this.jellyService,
+    required this.jellyPurchaseService,
     required this.safetyService,
   });
 
@@ -418,6 +421,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         context: context,
         currentUid: uid,
         jellyService: widget.jellyService,
+        jellyPurchaseService: widget.jellyPurchaseService,
       );
     }
   }
@@ -472,6 +476,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             JellyBalanceButton(
               currentUid: widget.authService.currentUser!.uid,
               jellyService: widget.jellyService,
+              jellyPurchaseService: widget.jellyPurchaseService,
             ),
           TextButton.icon(
             onPressed: _loading ? null : _activateBoost,

@@ -8,6 +8,7 @@ import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/discovery/discovery_service.dart';
 import '../../services/fortune/fortune_service.dart';
+import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/likes/likes_service.dart';
 import '../../services/matches/matches_service.dart';
@@ -35,6 +36,7 @@ class MatchesScreen extends StatefulWidget {
   final FirestoreService firestoreService;
   final FortuneService fortuneService;
   final JellyService jellyService;
+  final JellyPurchaseService jellyPurchaseService;
   final DiscoveryService discoveryService;
   final LikesService likesService;
   final SafetyService safetyService;
@@ -47,6 +49,7 @@ class MatchesScreen extends StatefulWidget {
     required this.firestoreService,
     required this.fortuneService,
     required this.jellyService,
+    required this.jellyPurchaseService,
     required this.discoveryService,
     required this.likesService,
     required this.safetyService,
@@ -147,6 +150,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           chatService: widget.chatService,
           fortuneService: widget.fortuneService,
           jellyService: widget.jellyService,
+          jellyPurchaseService: widget.jellyPurchaseService,
           safetyService: widget.safetyService,
         ),
       ),

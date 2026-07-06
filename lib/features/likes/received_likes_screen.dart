@@ -9,6 +9,7 @@ import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/discovery/discovery_service.dart';
 import '../../services/fortune/fortune_service.dart';
+import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/likes/likes_service.dart';
 import '../../services/location/location_service.dart';
@@ -33,6 +34,7 @@ class ReceivedLikesScreen extends StatefulWidget {
   final ChatService chatService;
   final FortuneService fortuneService;
   final JellyService jellyService;
+  final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
 
   const ReceivedLikesScreen({
@@ -46,6 +48,7 @@ class ReceivedLikesScreen extends StatefulWidget {
     required this.chatService,
     required this.fortuneService,
     required this.jellyService,
+    required this.jellyPurchaseService,
     required this.safetyService,
   });
 
@@ -167,6 +170,7 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
           JellyBalanceButton(
             currentUid: widget.currentUid,
             jellyService: widget.jellyService,
+            jellyPurchaseService: widget.jellyPurchaseService,
           ),
         ],
       ),
@@ -278,6 +282,7 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
         context: context,
         currentUid: widget.currentUid,
         jellyService: widget.jellyService,
+        jellyPurchaseService: widget.jellyPurchaseService,
       );
     }
   }

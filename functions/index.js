@@ -1086,3 +1086,127 @@ exports.generateIdealTypeImage = onCall(
     };
   },
 );
+
+// ============================================================================
+// M10: 젤리 인앱결제(IAP) 영수증 검증 — 스켈레톤
+//
+// 클라이언트가 in_app_purchase로 스토어 결제를 완료하면 영수증/토큰을 이
+// 함수로 보낸다. 함수는 (실제로는) App Store Server API / Google Play
+// Developer API로 영수증을 검증한 뒤, 유효하면 admin SDK로 직접 젤리 잔액을
+// 충전한다 — 클라이언트가 Firestore를 직접 쓰지 않게 해 위조를 막는 것이
+// 목적이다(다른 GPT 함수들이 캐시를 admin SDK로만 쓰는 것과 같은 원칙).
+//
+// ⚠️ 스토어 등록 전 상태 — RELEASE-BLOCKER와 같은 성격의 위험:
+// 지금은 스토어에 상품이 등록되지 않아 실제 검증 API를 호출할 자격증명
+// (Apple 공유 비밀키/App Store Connect API 키, Google 서비스 계정 키)이 없다.
+// verifyWithAppStore/verifyWithGooglePlay는 항상 성공을 반환하는
+// 자리표시자이므로, 이 상태로는 절대 프로덕션에 배포하면 안 된다
+// (누구나 결제 없이 젤리를 받을 수 있게 된다). 스토어 등록 후 두 함수 내부를
+// 실제 API 호출로 교체할 것.
+// ============================================================================
+
+// jelly_service.dart의 JellyPurchaseCatalog와 productId·amount가 반드시 같아야 한다.
+const JELLY_PRODUCTS = {
+  jelly_30: 30,
+  jelly_100: 100,
+  jelly_300: 300,
+};
+
+/**
+ * (스켈레톤) Apple App Store Server API로 영수증을 검증한다.
+ *
+ * 실제 구현 시: App Store Server API(JWT 서명, App Store Connect API 키)로
+ * transactionId 기준 거래 내역을 조회해 productId/유효성을 대조해야 한다.
+ * 참고: https://developer.apple.com/documentation/appstoreserverapi
+ */
+async function verifyWithAppStore({ productId, purchaseToken, transactionId }) {
+  // TODO: 스토어 등록 후 App Store Server API 실제 호출로 교체.
+  return { valid: true, productId };
+}
+
+/**
+ * (스켈레톤) Google Play Developer API로 구매 토큰을 검증한다.
+ *
+ * 실제 구현 시: Google Play Developer API
+ * (purchases.products.get, 서비스 계정 JSON 키 필요)로 purchaseToken을
+ * 조회해 purchaseState/consumptionState를 확인해야 한다.
+ * 참고: https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.products
+ */
+async function verifyWithGooglePlay({ productId, purchaseToken }) {
+  // TODO: 스토어 등록 후 Google Play Developer API 실제 호출로 교체.
+  return { valid: true, productId };
+}
+
+/**
+ * 젤리 IAP 영수증 검증 + 충전 (callable).
+ *
+ * 입력: { platform: 'ios' | 'android', productId, purchaseToken, transactionId }
+ * 캐싱/멱등: users/{uid}/jellyTransactions/{transactionId} 문서를 트랜잭션
+ * 안에서 확인해, 같은 거래가 재전송돼도 한 번만 충전한다.
+ */
+exports.verifyJellyPurchase = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+  }
+
+  const { platform, productId, purchaseToken, transactionId } =
+    request.data || {};
+  if (platform !== 'ios' && platform !== 'android') {
+    throw new HttpsError(
+      'invalid-argument',
+      'platform은 ios 또는 android여야 합니다.',
+    );
+  }
+  const amount = JELLY_PRODUCTS[productId];
+  if (!amount) {
+    throw new HttpsError('invalid-argument', '알 수 없는 상품 ID입니다.');
+  }
+  if (
+    typeof purchaseToken !== 'string' ||
+    !purchaseToken ||
+    typeof transactionId !== 'string' ||
+    !transactionId
+  ) {
+    throw new HttpsError('invalid-argument', '영수증 정보가 올바르지 않습니다.');
+  }
+
+  const verification =
+    platform === 'ios'
+      ? await verifyWithAppStore({ productId, purchaseToken, transactionId })
+      : await verifyWithGooglePlay({ productId, purchaseToken });
+
+  if (!verification.valid) {
+    throw new HttpsError('failed-precondition', '영수증 검증에 실패했습니다.');
+  }
+
+  const userRef = db.collection('users').doc(request.auth.uid);
+  // transactionId를 문서 ID로 써서 같은 영수증이 중복 제출돼도 한 번만
+  // 충전되게 한다(멱등 처리).
+  const txRef = userRef.collection('jellyTransactions').doc(transactionId);
+
+  const result = await db.runTransaction(async (t) => {
+    const [userSnap, txSnap] = await Promise.all([
+      t.get(userRef),
+      t.get(txRef),
+    ]);
+    if (txSnap.exists) {
+      // 이미 처리된 거래 — 중복 충전 방지.
+      return { balance: userSnap.data()?.jelly || 0, duplicate: true };
+    }
+    const current = userSnap.data()?.jelly || 0;
+    const next = current + amount;
+    t.update(userRef, { jelly: next });
+    t.set(txRef, {
+      type: 'charge',
+      amount,
+      reason: `iap_${platform}_${productId}`,
+      platform,
+      productId,
+      transactionId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { balance: next, duplicate: false };
+  });
+
+  return { amount, balance: result.balance, duplicate: result.duplicate };
+});
