@@ -17,6 +17,7 @@ import 'services/jelly/jelly_purchase_service.dart';
 import 'services/jelly/jelly_service.dart';
 import 'services/likes/likes_service.dart';
 import 'services/matches/matches_service.dart';
+import 'services/profile/profile_insight_service.dart';
 import 'services/safety/safety_service.dart';
 import 'services/storage/storage_service.dart';
 import 'shared/state/auth_state.dart';
@@ -47,6 +48,7 @@ class _MyAppState extends State<MyApp> {
   late final JellyPurchaseService _jellyPurchaseService;
   late final LikesService _likesService;
   late final SafetyService _safetyService;
+  late final ProfileInsightService _profileInsightService;
 
   @override
   void initState() {
@@ -62,6 +64,7 @@ class _MyAppState extends State<MyApp> {
     _jellyService = JellyService();
     _jellyPurchaseService = JellyPurchaseService();
     _safetyService = SafetyService(firestoreService: _firestoreService);
+    _profileInsightService = ProfileInsightService();
     _matchesService = MatchesService(
       firestoreService: _firestoreService,
       safetyService: _safetyService,
@@ -98,6 +101,7 @@ class _MyAppState extends State<MyApp> {
         jellyPurchaseService: _jellyPurchaseService,
         likesService: _likesService,
         safetyService: _safetyService,
+        profileInsightService: _profileInsightService,
       ),
       // 이름 기반 라우트는 화면 간 직접 이동이 필요할 때 사용.
       // onGenerateRoute를 쓰는 이유: 각 화면에 서비스를 주입하면서 만들어야 하기 때문.
@@ -123,6 +127,7 @@ class _MyAppState extends State<MyApp> {
                 jellyPurchaseService: _jellyPurchaseService,
                 likesService: _likesService,
                 safetyService: _safetyService,
+                profileInsightService: _profileInsightService,
               ),
               settings: settings,
             );
@@ -163,6 +168,7 @@ class _AuthGate extends StatefulWidget {
   final JellyPurchaseService jellyPurchaseService;
   final LikesService likesService;
   final SafetyService safetyService;
+  final ProfileInsightService profileInsightService;
 
   const _AuthGate({
     required this.authState,
@@ -178,6 +184,7 @@ class _AuthGate extends StatefulWidget {
     required this.jellyPurchaseService,
     required this.likesService,
     required this.safetyService,
+    required this.profileInsightService,
   });
 
   @override
@@ -295,6 +302,7 @@ class _AuthGateState extends State<_AuthGate> {
       jellyPurchaseService: widget.jellyPurchaseService,
       likesService: widget.likesService,
       safetyService: widget.safetyService,
+      profileInsightService: widget.profileInsightService,
     );
   }
 }

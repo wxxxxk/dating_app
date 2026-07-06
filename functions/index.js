@@ -93,6 +93,7 @@ function isPositiveSwipe(action) {
 // ============================================================================
 
 const FORTUNE_MODEL = 'gpt-4o-mini';
+const PROFILE_INSIGHT_MODEL = 'gpt-4o';
 
 /** 개인 사주 서사 생성용 시스템 프롬프트. */
 function fortuneSystemPrompt() {
@@ -805,6 +806,249 @@ exports.generateCharmReport = onCall(
       { merge: true },
     );
     return report;
+  },
+);
+
+// ============================================================================
+// M8.5: AI Profile Insight
+//
+// 상대 프로필 상세 화면에서 보여줄 비외모 기반 프로필 종합 분석.
+// 사진은 표정/분위기 보조 신호로만 사용하고, 외모 평가·점수·등급은 금지한다.
+// 결과는 users/{targetUid}.profileInsight에 inputHash와 함께 캐싱한다.
+// ============================================================================
+
+/** AI Profile Insight 생성용 시스템 프롬프트. */
+function profileInsightSystemPrompt() {
+  return [
+    '당신은 데이팅 앱 프로필을 보고 비외모적 첫인상과 대화 힌트를 분석하는 카피라이터입니다.',
+    '사진이 제공되면 표정, 자세에서 느껴지는 분위기, 사진 맥락 정도만 참고합니다.',
+    '',
+    '절대 금지:',
+    '1. 잘생김, 예쁨, 외모 점수, 등급, 순위, 신체 평가, 얼굴 특징 평가를 절대 쓰지 않는다.',
+    '2. 매력도를 숫자화하거나 "상위 n%" 같은 표현을 만들지 않는다.',
+    '3. 주어지지 않은 직업, 소득, 학벌, 성격을 단정하지 않는다.',
+    '',
+    '분석 기준:',
+    '- 자기소개, 관심사, 성향 태그, 관계 목표, MBTI, 사주/별자리 속성을 우선 근거로 쓴다.',
+    '- 사진은 외모가 아니라 표정/분위기/상황 맥락을 보조 근거로만 사용한다.',
+    '- 따뜻하지만 과장하지 않고, 상대 프로필을 보는 사람이 대화 시작에 참고할 수 있게 쓴다.',
+    '',
+    '반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
+    '{"firstImpression": string, "conversationStyle": string, "atmosphere": string, "goodMatchType": string}',
+    '- firstImpression: 신뢰감/편안함/활기 등 비외모적 첫인상. 1~2문장',
+    '- conversationStyle: 대화가 잘 풀릴 주제나 톤. 1~2문장',
+    '- atmosphere: 프로필 전체에서 느껴지는 분위기. 1~2문장',
+    '- goodMatchType: 잘 맞을 법한 사람 유형. 1~2문장',
+  ].join('\n');
+}
+
+function profileInsightHashInput(data) {
+  const parts = datePartsInSeoul(data.birthDate);
+  return {
+    photoUrl: Array.isArray(data.photoUrls) && data.photoUrls[0]
+      ? String(data.photoUrls[0])
+      : '',
+    bio: String(data.bio || '').slice(0, 500),
+    interests: Array.isArray(data.interests) ? data.interests.map(String) : [],
+    personalityTags: Array.isArray(data.personalityTags)
+      ? data.personalityTags.map(String)
+      : [],
+    idealTags: Array.isArray(data.idealTags) ? data.idealTags.map(String) : [],
+    relationshipGoal: data.relationshipGoal ? String(data.relationshipGoal) : '',
+    mbti: data.mbti ? String(data.mbti) : '',
+    birthDate: parts && parts.year && parts.month && parts.day
+      ? `${parts.year.toString().padStart(4, '0')}-${parts.month
+          .toString()
+          .padStart(2, '0')}-${parts.day.toString().padStart(2, '0')}`
+      : '',
+  };
+}
+
+function profileInsightHash(data) {
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(profileInsightHashInput(data)))
+    .digest('hex');
+}
+
+function profileInsightInputFromData(data) {
+  const parts = datePartsInSeoul(data.birthDate);
+  const attrs = parts && parts.year && parts.month && parts.day
+    ? {
+        zodiac: getZodiacAttrs(parts),
+        saju: getSajuAttrs(parts),
+      }
+    : null;
+
+  return {
+    대표사진있음: Array.isArray(data.photoUrls) && !!data.photoUrls[0],
+    한줄소개: String(data.bio || '').slice(0, 500),
+    관심사: tagLabels(data.interests),
+    성향: tagLabels(data.personalityTags),
+    이상형키워드: tagLabels(data.idealTags),
+    찾는관계: data.relationshipGoal ? tagLabels([data.relationshipGoal])[0] : null,
+    mbti: data.mbti || null,
+    사주정보: attrs,
+  };
+}
+
+function isValidProfileInsight(insight) {
+  return !!(
+    insight &&
+    typeof insight.firstImpression === 'string' &&
+    typeof insight.conversationStyle === 'string' &&
+    typeof insight.atmosphere === 'string' &&
+    typeof insight.goodMatchType === 'string'
+  );
+}
+
+function sanitizeProfileInsight(raw, inputHash) {
+  return {
+    inputHash,
+    firstImpression: String(raw?.firstImpression || '').trim(),
+    conversationStyle: String(raw?.conversationStyle || '').trim(),
+    atmosphere: String(raw?.atmosphere || '').trim(),
+    goodMatchType: String(raw?.goodMatchType || '').trim(),
+  };
+}
+
+async function callOpenAiForProfileInsight({ systemPrompt, userPayload, imageUrl }) {
+  const client = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
+  const content = [
+    {
+      type: 'text',
+      text: JSON.stringify(userPayload),
+    },
+  ];
+  if (imageUrl) {
+    content.push({
+      type: 'image_url',
+      image_url: {
+        url: imageUrl,
+        detail: 'low',
+      },
+    });
+  }
+
+  const completion = await client.chat.completions.create({
+    model: PROFILE_INSIGHT_MODEL,
+    response_format: { type: 'json_object' },
+    temperature: 0.6,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content },
+    ],
+  });
+
+  const raw = completion.choices?.[0]?.message?.content;
+  if (!raw) {
+    throw new HttpsError('internal', 'GPT 응답이 비어 있습니다.');
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new HttpsError('internal', 'GPT 응답을 JSON으로 해석하지 못했습니다.');
+  }
+}
+
+/**
+ * 상대 프로필 비외모 인사이트 생성 (callable).
+ *
+ * 입력: { targetUid: string, refresh?: boolean }
+ * 캐싱: users/{targetUid}.profileInsight.inputHash가 같으면 그대로 반환한다.
+ */
+exports.generateProfileInsight = onCall(
+  { secrets: [OPENAI_API_KEY] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+
+    const targetUid = String(request.data?.targetUid || '').trim();
+    if (!targetUid) {
+      throw new HttpsError('invalid-argument', '대상 유저 ID가 올바르지 않습니다.');
+    }
+
+    const refresh = request.data?.refresh === true;
+    const userRef = db.collection('users').doc(targetUid);
+    const snap = await userRef.get();
+    if (!snap.exists) {
+      throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
+    }
+
+    const data = snap.data() || {};
+    const inputHash = profileInsightHash(data);
+    const cached = data.profileInsight;
+    if (
+      !refresh &&
+      cached &&
+      cached.inputHash === inputHash &&
+      isValidProfileInsight(cached)
+    ) {
+      return {
+        inputHash: cached.inputHash,
+        firstImpression: cached.firstImpression,
+        conversationStyle: cached.conversationStyle,
+        atmosphere: cached.atmosphere,
+        goodMatchType: cached.goodMatchType,
+        model: cached.model || PROFILE_INSIGHT_MODEL,
+        updatedAt: null,
+      };
+    }
+
+    const profile = profileInsightInputFromData(data);
+    const hasProfileSignal =
+      !!profile.대표사진있음 ||
+      !!profile.한줄소개 ||
+      profile.관심사.length > 0 ||
+      profile.성향.length > 0 ||
+      !!profile.mbti;
+    if (!hasProfileSignal) {
+      throw new HttpsError(
+        'failed-precondition',
+        '프로필 인사이트 생성을 위해 소개나 태그를 먼저 채워주세요.',
+      );
+    }
+
+    const imageUrl = Array.isArray(data.photoUrls) && data.photoUrls[0]
+      ? String(data.photoUrls[0])
+      : null;
+    let raw;
+    try {
+      raw = await callOpenAiForProfileInsight({
+        systemPrompt: profileInsightSystemPrompt(),
+        userPayload: { 프로필: profile },
+        imageUrl,
+      });
+    } catch (error) {
+      console.error('[generateProfileInsight] OpenAI profile insight error', {
+        status: error?.status,
+        code: error?.code,
+        message: error?.message,
+      });
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError(
+        'internal',
+        '프로필 인사이트 생성에 실패했습니다.',
+      );
+    }
+
+    const insight = sanitizeProfileInsight(raw, inputHash);
+    if (!isValidProfileInsight(insight)) {
+      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+    }
+
+    const result = {
+      ...insight,
+      model: PROFILE_INSIGHT_MODEL,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await userRef.set({ profileInsight: result }, { merge: true });
+    return {
+      ...insight,
+      model: PROFILE_INSIGHT_MODEL,
+      updatedAt: null,
+    };
   },
 );
 

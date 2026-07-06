@@ -70,6 +70,7 @@
 
 - ✅ Match Narrative: `generateMatchNarrative`
 - ✅ Ice Breaker: `generateIcebreakers`
+- ✅ AI Profile Insight: `generateProfileInsight`, `users/{uid}.profileInsight` 캐시, 외모 평가 금지 프롬프트
 - ✅ Charm Report: `generateCharmReport`, `users/{uid}.charmReport` 캐시
 - ✅ Ideal Type Image: `generateIdealTypeImage`, `gpt-image-1`, Storage `users/{uid}/idealType/...png`, `users/{uid}.idealTypeImage` 캐시
 - ✅ Ideal Type 안전장치: 가상 인물 프롬프트, 안전 라벨, 실제 앱 사용자가 아님 명시, raw exception UI 노출 방지
@@ -95,7 +96,6 @@
 
 - ❌ 실제 Store 결제 검증: `verifyJellyPurchase`는 현재 항상 성공하는 스켈레톤
 - ❌ 젤리/부스트/likesUnlocked 서버 전용 쓰기 규칙
-- ❌ AI Profile Insight
 - ❌ AI Conversation Coach
 - ❌ Rewind
 - ❌ Push Notification
@@ -163,7 +163,7 @@ test/
 
 ## 5. Cloud Functions
 
-`functions/index.js` 기준 exports 8개.
+`functions/index.js` 기준 exports 9개.
 
 | Function | Trigger | GPT/Image 호출 | 캐시 | 역할 |
 |---|---|---:|---|---|
@@ -173,6 +173,7 @@ test/
 | `generateIcebreakers` | callable | GPT `gpt-4o-mini` | `matches/{matchId}.icebreakers` | 빈 채팅방 첫 대화 주제 3개 |
 | `generateDailyFortune` | callable | GPT `gpt-4o-mini` | `users/{uid}/dailyFortune/{date}` | 날짜별 오늘의 애정운 |
 | `generateCharmReport` | callable | GPT `gpt-4o-mini` | `users/{uid}.charmReport` | 프로필 기반 첫인상/매력 분석 |
+| `generateProfileInsight` | callable | GPT `gpt-4o` Vision | `users/{targetUid}.profileInsight.inputHash` | 상대 프로필 사진/소개/태그 기반 비외모 인사이트 |
 | `generateIdealTypeImage` | callable, `timeoutSeconds: 120`, `memory: 1GiB` | 이미지 `gpt-image-1` | `users/{uid}.idealTypeImage.inputHash` | 이상형 이미지 생성 후 Storage 저장 |
 | `verifyJellyPurchase` | callable | 아니오 | `users/{uid}/jellyTransactions/{transactionId}` 멱등 | IAP 영수증 검증 자리. 현재 검증 함수는 스켈레톤 |
 
@@ -189,7 +190,7 @@ test/
   - 인증: `verifications: { email, phone, photo }`
   - 위치: `location: { lat, lng, updatedAt, label? }`
   - 필터: `discoveryFilter: { ageMin, ageMax, maxDistanceKm, gender }`
-  - AI 캐시: `fortuneNarrative`, `charmReport`, `idealTypeImage`
+  - AI 캐시: `fortuneNarrative`, `charmReport`, `profileInsight`, `idealTypeImage`
   - 젤리/수익화: `jelly`, `boostUntil`, `likesUnlocked`
 - `users/{uid}/swipes/{targetUid}`
   - `action: 'like' | 'pass' | 'superlike'`, `targetUid`, `actorUid`, `timestamp`

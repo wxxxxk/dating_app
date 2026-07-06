@@ -12,6 +12,7 @@ import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/likes/likes_service.dart';
 import '../../services/matches/matches_service.dart';
+import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../chat/chat_screen.dart';
 import '../fortune/fortune_route_names.dart';
@@ -40,6 +41,7 @@ class MatchesScreen extends StatefulWidget {
   final DiscoveryService discoveryService;
   final LikesService likesService;
   final SafetyService safetyService;
+  final ProfileInsightService profileInsightService;
 
   const MatchesScreen({
     super.key,
@@ -53,6 +55,7 @@ class MatchesScreen extends StatefulWidget {
     required this.discoveryService,
     required this.likesService,
     required this.safetyService,
+    required this.profileInsightService,
   });
 
   @override
@@ -130,6 +133,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           currentLocation: _currentProfile?.location,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
+          profileInsightService: widget.profileInsightService,
         ),
       ),
     );
@@ -152,6 +156,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           jellyService: widget.jellyService,
           jellyPurchaseService: widget.jellyPurchaseService,
           safetyService: widget.safetyService,
+          profileInsightService: widget.profileInsightService,
         ),
       ),
     );

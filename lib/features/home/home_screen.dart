@@ -14,6 +14,7 @@ import '../../services/fortune/fortune_service.dart';
 import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/matches/matches_service.dart';
+import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
@@ -46,6 +47,7 @@ class HomeScreen extends StatefulWidget {
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
+  final ProfileInsightService profileInsightService;
   final VoidCallback? onOpenDiscovery;
 
   const HomeScreen({
@@ -60,6 +62,7 @@ class HomeScreen extends StatefulWidget {
     required this.jellyService,
     required this.jellyPurchaseService,
     required this.safetyService,
+    required this.profileInsightService,
     this.onOpenDiscovery,
   });
 
@@ -400,6 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
           currentLocation: current.location,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
+          profileInsightService: widget.profileInsightService,
         ),
       ),
     );

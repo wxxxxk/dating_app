@@ -11,6 +11,7 @@ import '../services/jelly/jelly_purchase_service.dart';
 import '../services/jelly/jelly_service.dart';
 import '../services/likes/likes_service.dart';
 import '../services/matches/matches_service.dart';
+import '../services/profile/profile_insight_service.dart';
 import '../services/safety/safety_service.dart';
 import '../services/storage/storage_service.dart';
 import 'discovery/discovery_screen.dart';
@@ -42,6 +43,7 @@ class MainShell extends StatefulWidget {
   final JellyPurchaseService jellyPurchaseService;
   final LikesService likesService;
   final SafetyService safetyService;
+  final ProfileInsightService profileInsightService;
 
   const MainShell({
     super.key,
@@ -57,6 +59,7 @@ class MainShell extends StatefulWidget {
     required this.jellyPurchaseService,
     required this.likesService,
     required this.safetyService,
+    required this.profileInsightService,
   });
 
   @override
@@ -82,6 +85,7 @@ class _MainShellState extends State<MainShell> {
             jellyService: widget.jellyService,
             jellyPurchaseService: widget.jellyPurchaseService,
             safetyService: widget.safetyService,
+            profileInsightService: widget.profileInsightService,
           ),
           MatchesScreen(
             authService: widget.authService,
@@ -94,6 +98,7 @@ class _MainShellState extends State<MainShell> {
             discoveryService: widget.discoveryService,
             likesService: widget.likesService,
             safetyService: widget.safetyService,
+            profileInsightService: widget.profileInsightService,
           ),
           FortuneHubScreen(
             authService: widget.authService,
@@ -113,6 +118,7 @@ class _MainShellState extends State<MainShell> {
             jellyService: widget.jellyService,
             jellyPurchaseService: widget.jellyPurchaseService,
             safetyService: widget.safetyService,
+            profileInsightService: widget.profileInsightService,
             onOpenDiscovery: () => setState(() => _selectedIndex = 0),
           ),
         ],

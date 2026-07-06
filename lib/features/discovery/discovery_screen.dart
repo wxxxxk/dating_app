@@ -16,6 +16,7 @@ import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
+import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../chat/chat_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
@@ -46,6 +47,7 @@ class DiscoveryScreen extends StatefulWidget {
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
+  final ProfileInsightService profileInsightService;
 
   const DiscoveryScreen({
     super.key,
@@ -58,6 +60,7 @@ class DiscoveryScreen extends StatefulWidget {
     required this.jellyService,
     required this.jellyPurchaseService,
     required this.safetyService,
+    required this.profileInsightService,
   });
 
   @override
@@ -341,6 +344,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           currentLocation: _currentUserLocation,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
+          profileInsightService: widget.profileInsightService,
         ),
       ),
     );

@@ -1,10 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/profile_insight_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/location/location_service.dart';
+import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../safety/report_sheet.dart';
 import 'widgets/verification_badge.dart';
@@ -18,6 +21,7 @@ class UserProfileScreen extends StatefulWidget {
   final UserLocation? currentLocation;
   final FirestoreService firestoreService;
   final SafetyService safetyService;
+  final ProfileInsightService profileInsightService;
 
   const UserProfileScreen({
     super.key,
@@ -26,6 +30,7 @@ class UserProfileScreen extends StatefulWidget {
     required this.currentLocation,
     required this.firestoreService,
     required this.safetyService,
+    required this.profileInsightService,
   });
 
   @override
@@ -36,10 +41,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   late UserProfile _profile = widget.initialProfile;
   bool _loading = false;
   bool _blocked = false;
+  Future<ProfileInsight>? _profileInsightFuture;
+  String? _profileInsightKey;
 
   @override
   void initState() {
     super.initState();
+    _loadProfileInsight(_profile);
     _refreshProfile();
   }
 
@@ -49,10 +57,28 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       final latest = await widget.firestoreService.getUserProfile(
         widget.initialProfile.uid,
       );
-      if (latest != null && mounted) setState(() => _profile = latest);
+      if (latest != null && mounted) {
+        setState(() => _profile = latest);
+        _loadProfileInsight(latest);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _loadProfileInsight(UserProfile profile, {bool refresh = false}) {
+    final inputHash = widget.profileInsightService.inputHashForProfile(profile);
+    final key = refresh
+        ? '${profile.uid}:$inputHash:${DateTime.now().microsecondsSinceEpoch}'
+        : '${profile.uid}:$inputHash';
+    if (!refresh && _profileInsightKey == key) return;
+    setState(() {
+      _profileInsightKey = key;
+      _profileInsightFuture = widget.profileInsightService.getProfileInsight(
+        profile: profile,
+        refresh: refresh,
+      );
+    });
   }
 
   Future<void> _reportUser() async {
@@ -75,7 +101,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       setState(() => _blocked = submission.blockUser || _blocked);
       _showSnack(submission.blockUser ? '신고가 접수되고 차단했어요.' : '신고가 접수되었어요.');
     } catch (e) {
-      if (mounted) _showSnack('신고에 실패했어요: $e');
+      _debugLog('[Safety] 프로필 신고 실패 uid=${_profile.uid} error=$e');
+      if (mounted) _showSnack('신고에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -109,7 +136,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       setState(() => _blocked = true);
       _showSnack('차단했어요.');
     } catch (e) {
-      if (mounted) _showSnack('차단에 실패했어요: $e');
+      _debugLog('[Safety] 프로필 차단 실패 uid=${_profile.uid} error=$e');
+      if (mounted) _showSnack('차단에 실패했어요. 잠시 후 다시 시도해주세요.');
+    }
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
     }
   }
 
@@ -243,12 +277,230 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ),
                       ),
                     ),
+                  _ProfileInsightSection(
+                    future: _profileInsightFuture,
+                    onRetry: () => _loadProfileInsight(_profile, refresh: true),
+                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ProfileInsightSection extends StatelessWidget {
+  final Future<ProfileInsight>? future;
+  final VoidCallback onRetry;
+
+  const _ProfileInsightSection({required this.future, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentFuture = future;
+    if (currentFuture == null) return const SizedBox.shrink();
+
+    return FutureBuilder<ProfileInsight>(
+      future: currentFuture,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const _ProfileInsightShell(child: _ProfileInsightLoading());
+        }
+        final insight = snap.data;
+        if (snap.hasError || insight == null || !insight.isComplete) {
+          return _ProfileInsightShell(
+            child: _ProfileInsightError(onRetry: onRetry),
+          );
+        }
+        return _ProfileInsightShell(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _InsightItem(
+                icon: '😊',
+                label: '첫인상',
+                text: insight.firstImpression,
+              ),
+              const SizedBox(height: 14),
+              _InsightItem(
+                icon: '💬',
+                label: '대화 스타일',
+                text: insight.conversationStyle,
+              ),
+              const SizedBox(height: 14),
+              _InsightItem(icon: '🌿', label: '분위기', text: insight.atmosphere),
+              const SizedBox(height: 14),
+              _InsightItem(
+                icon: '❤️',
+                label: '잘 맞는 사람',
+                text: insight.goodMatchType,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProfileInsightShell extends StatelessWidget {
+  final Widget child;
+
+  const _ProfileInsightShell({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _ProfileInsightHeader(),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileInsightHeader extends StatelessWidget {
+  const _ProfileInsightHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: const Text(
+            'AI PROFILE INSIGHT',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileInsightLoading extends StatelessWidget {
+  const _ProfileInsightLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            '프로필 분위기를 분석하고 있어요',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileInsightError extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _ProfileInsightError({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '지금은 분석을 불러올 수 없어요',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
+      ],
+    );
+  }
+}
+
+class _InsightItem extends StatelessWidget {
+  final String icon;
+  final String label;
+  final String text;
+
+  const _InsightItem({
+    required this.icon,
+    required this.label,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 24,
+          child: Text(
+            icon,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
