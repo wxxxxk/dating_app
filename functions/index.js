@@ -540,6 +540,45 @@ function sanitizeIcebreakers(result) {
   }));
 }
 
+/** 대화 재개 코치용 시스템 프롬프트. */
+function conversationTipsSystemPrompt() {
+  return [
+    '당신은 데이팅 앱 채팅에서 대화가 잠시 끊겼을 때',
+    '자연스럽게 다시 이어갈 수 있는 짧은 메시지를 제안하는 대화 코치입니다.',
+    '',
+    '반드시 지킬 규칙:',
+    '1. 사용자 메시지의 최근대화, 두 사람의 사주 속성, 프로필 태그, 공통 관심사만 근거로 한다.',
+    '2. 매칭 직후 첫 인사가 아니라, 이미 진행된 대화를 부드럽게 재개하는 문장을 제안한다.',
+    '3. 최근 메시지를 반복하지 말고, 마지막 흐름을 살짝 이어가거나 부담 없는 새 화제로 전환한다.',
+    '4. 어느 참가자가 보내도 어색하지 않은 중립적인 문장으로 쓴다.',
+    '5. 각각 실제 입력창에 바로 넣을 수 있는 한 문장으로 쓴다.',
+    '6. 외모 평가, 점수, 등급, 확정적 예언, 과한 친밀감 표현은 절대 쓰지 않는다.',
+    '7. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
+    '{"suggestions": [string, string, string]}',
+    '- suggestions: 2~3개의 짧은 대화 재개 문장',
+  ].join('\n');
+}
+
+/** GPT가 돌려준 대화 코치 문장 배열이 기대 스키마인지 검사. */
+function isValidConversationSuggestions(items) {
+  return !!(
+    Array.isArray(items) &&
+    items.length >= 2 &&
+    items.length <= 3 &&
+    items.every((item) => typeof item === 'string' && item.trim())
+  );
+}
+
+/** GPT 응답에서 캐시 가능한 대화 코치 문장 2~3개만 정리한다. */
+function sanitizeConversationSuggestions(result) {
+  const items = result?.suggestions;
+  if (!Array.isArray(items)) return [];
+  return items
+    .slice(0, 3)
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+}
+
 /** Firestore Timestamp를 앱 기준 날짜(Asia/Seoul)의 연/월/일로 변환한다. */
 function datePartsInSeoul(timestamp) {
   if (!timestamp || typeof timestamp.toDate !== 'function') return null;
@@ -712,6 +751,143 @@ exports.generateIcebreakers = onCall(
       count: icebreakers.length,
     });
     return { icebreakers };
+  },
+);
+
+/**
+ * 대화 도중 끊긴 흐름을 이어갈 추천 문장 생성 (callable).
+ *
+ * 입력: { matchId }
+ * 권한: 호출자가 해당 matchId의 participants에 포함돼야 한다.
+ * 맥락: matches/{matchId}/messages 최근 8개만 읽어 토큰 비용을 제한한다.
+ * 캐싱: matches/{matchId}.conversationTips.lastMessageId가 최신 메시지 ID와
+ * 같으면 GPT 호출 없이 suggestions를 반환한다.
+ */
+exports.generateConversationTips = onCall(
+  { secrets: [OPENAI_API_KEY] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    const { matchId } = request.data || {};
+    if (typeof matchId !== 'string' || !matchId.trim()) {
+      throw new HttpsError('invalid-argument', '매치 ID가 올바르지 않습니다.');
+    }
+    console.log('[generateConversationTips] start', {
+      matchId,
+      uid: request.auth.uid,
+    });
+
+    const matchRef = db.collection('matches').doc(matchId);
+    const matchSnap = await matchRef.get();
+    if (!matchSnap.exists) {
+      throw new HttpsError('not-found', '매치를 찾을 수 없습니다.');
+    }
+
+    const matchData = matchSnap.data() || {};
+    const participants = matchData.participants || [];
+    if (!participants.includes(request.auth.uid)) {
+      throw new HttpsError('permission-denied', '이 매치에 접근할 권한이 없습니다.');
+    }
+
+    const [uidA, uidB] = participants;
+    if (!uidA || !uidB) {
+      throw new HttpsError('failed-precondition', '상대 참가자를 찾을 수 없습니다.');
+    }
+
+    const messageSnap = await matchRef
+      .collection('messages')
+      .orderBy('createdAt', 'desc')
+      .limit(8)
+      .get();
+    if (messageSnap.empty) {
+      throw new HttpsError('failed-precondition', '대화 메시지가 필요합니다.');
+    }
+
+    const latestMessageId = messageSnap.docs[0].id;
+    const cached = matchData.conversationTips;
+    if (
+      cached?.lastMessageId === latestMessageId &&
+      isValidConversationSuggestions(cached?.suggestions)
+    ) {
+      console.log('[generateConversationTips] cache hit', {
+        matchId,
+        lastMessageId: latestMessageId,
+        count: cached.suggestions.length,
+      });
+      return { suggestions: cached.suggestions };
+    }
+    console.log('[generateConversationTips] cache miss', {
+      matchId,
+      lastMessageId: latestMessageId,
+    });
+
+    const [snapA, snapB] = await Promise.all([
+      db.collection('users').doc(uidA).get(),
+      db.collection('users').doc(uidB).get(),
+    ]);
+    if (!snapA.exists || !snapB.exists) {
+      console.warn('[generateConversationTips] profile missing', {
+        matchId,
+        uidAExists: snapA.exists,
+        uidBExists: snapB.exists,
+      });
+      throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
+    }
+
+    const userA = icebreakerProfileFromSnap(uidA, snapA);
+    const userB = icebreakerProfileFromSnap(uidB, snapB);
+    const userBInterestKeys = new Set(userB.rawInterestKeys);
+    const commonInterestKeys = userA.rawInterestKeys.filter((key) =>
+      userBInterestKeys.has(key),
+    );
+    const recentMessages = messageSnap.docs
+      .slice()
+      .reverse()
+      .map((doc) => {
+        const data = doc.data() || {};
+        return {
+          sender: data.senderId === uidA ? '사용자A' : '사용자B',
+          text: String(data.text || '').trim().slice(0, 300),
+        };
+      })
+      .filter((message) => message.text);
+
+    const result = await callOpenAiForNarrative({
+      systemPrompt: conversationTipsSystemPrompt(),
+      userPayload: {
+        사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
+        사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
+        공통관심사: tagLabels(commonInterestKeys),
+        최근대화: recentMessages,
+      },
+    });
+
+    const suggestions = sanitizeConversationSuggestions(result);
+    if (!isValidConversationSuggestions(suggestions)) {
+      console.warn('[generateConversationTips] invalid response', {
+        matchId,
+        count: suggestions.length,
+      });
+      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+    }
+
+    await matchRef.set(
+      {
+        conversationTips: {
+          lastMessageId: latestMessageId,
+          suggestions,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+      },
+      { merge: true },
+    );
+    console.log('[generateConversationTips] generated', {
+      matchId,
+      lastMessageId: latestMessageId,
+      count: suggestions.length,
+    });
+    return { suggestions };
   },
 );
 

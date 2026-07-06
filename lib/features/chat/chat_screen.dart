@@ -42,10 +42,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final _inputFocusNode = FocusNode();
   final _scrollController = ScrollController();
   Future<List<Icebreaker>>? _icebreakersFuture;
+  Future<List<ConversationTip>>? _conversationTipsFuture;
   bool _sending = false;
   bool _checkingBlock = true;
   bool _blocked = false;
+  bool _hasMessages = false;
+  bool _showConversationTips = false;
   String? _lastReadMarker;
+  String? _latestConversationTipMessageId;
   // 실제 typing 이벤트가 연결되면 이 값만 갱신하면 된다.
   final bool _isOtherTyping = false;
 
@@ -133,6 +137,47 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.text = message;
     _textController.selection = TextSelection.collapsed(offset: message.length);
     _inputFocusNode.requestFocus();
+  }
+
+  void _syncConversationCoachState({
+    required bool hasMessages,
+    String? latestMessageId,
+  }) {
+    if (_hasMessages == hasMessages &&
+        _latestConversationTipMessageId == latestMessageId) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          (_hasMessages == hasMessages &&
+              _latestConversationTipMessageId == latestMessageId)) {
+        return;
+      }
+      setState(() {
+        final messageChanged =
+            _latestConversationTipMessageId != null &&
+            _latestConversationTipMessageId != latestMessageId;
+        _hasMessages = hasMessages;
+        _latestConversationTipMessageId = latestMessageId;
+        if (!hasMessages || messageChanged) {
+          _showConversationTips = false;
+          _conversationTipsFuture = null;
+        }
+      });
+    });
+  }
+
+  void _requestConversationTips({bool forceRefresh = false}) {
+    if (_blocked || !_hasMessages) return;
+    setState(() {
+      _showConversationTips = true;
+      if (forceRefresh || _conversationTipsFuture == null) {
+        _debugLog('[ConversationTips] 요청 생성 matchId=${widget.matchId}');
+        _conversationTipsFuture = widget.fortuneService.getConversationTips(
+          widget.matchId,
+        );
+      }
+    });
   }
 
   Future<void> _checkBlocked() async {
@@ -323,6 +368,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Expanded(child: _buildMessageList()),
                   _TypingSlot(isTyping: _isOtherTyping),
+                  _buildConversationCoach(),
                   _buildInputBar(),
                 ],
               ),
@@ -353,6 +399,7 @@ class _ChatScreenState extends State<ChatScreen> {
           '[Chat] messages matchId=${widget.matchId} count=${messages.length}',
         );
         if (messages.isEmpty) {
+          _syncConversationCoachState(hasMessages: false);
           _debugLog('[Icebreakers] 빈 채팅방 표시 조건 충족 matchId=${widget.matchId}');
           return _EmptyState(
             icebreakersFuture: _ensureIcebreakers(),
@@ -360,6 +407,10 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
 
+        _syncConversationCoachState(
+          hasMessages: true,
+          latestMessageId: messages.last.id,
+        );
         _markLatestMessagesRead(messages);
         _scrollToBottom();
         return ListView.builder(
@@ -390,6 +441,17 @@ class _ChatScreenState extends State<ChatScreen> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildConversationCoach() {
+    if (!_hasMessages) return const SizedBox.shrink();
+    return _ConversationCoachPanel(
+      future: _conversationTipsFuture,
+      expanded: _showConversationTips,
+      onRequest: () => _requestConversationTips(),
+      onRetry: () => _requestConversationTips(forceRefresh: true),
+      onSelected: _fillInput,
     );
   }
 
@@ -553,6 +615,241 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 28),
           _IcebreakerSection(future: icebreakersFuture, onSelected: onSelected),
         ],
+      ),
+    );
+  }
+}
+
+class _ConversationCoachPanel extends StatelessWidget {
+  final Future<List<ConversationTip>>? future;
+  final bool expanded;
+  final VoidCallback onRequest;
+  final VoidCallback onRetry;
+  final ValueChanged<String> onSelected;
+
+  const _ConversationCoachPanel({
+    required this.future,
+    required this.expanded,
+    required this.onRequest,
+    required this.onRetry,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+      decoration: const BoxDecoration(
+        color: AppColors.background,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: expanded && future != null
+            ? _ConversationTipsFuture(
+                key: const ValueKey('conversation-tips'),
+                future: future!,
+                onRetry: onRetry,
+                onSelected: onSelected,
+              )
+            : Align(
+                key: const ValueKey('conversation-button'),
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onRequest,
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: const Text('대화 이어가기'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _ConversationTipsFuture extends StatelessWidget {
+  final Future<List<ConversationTip>> future;
+  final VoidCallback onRetry;
+  final ValueChanged<String> onSelected;
+
+  const _ConversationTipsFuture({
+    super.key,
+    required this.future,
+    required this.onRetry,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<ConversationTip>>(
+      future: future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          _debugLog('[ConversationTips] 렌더 상태 loading');
+          return const _ConversationTipsLoading();
+        }
+        if (snap.hasError) {
+          _debugLog('[ConversationTips] 렌더 상태 error');
+          return _ConversationTipsError(onRetry: onRetry);
+        }
+
+        final tips = snap.data ?? [];
+        _debugLog('[ConversationTips] 렌더 상태 done count=${tips.length}');
+        if (tips.isEmpty) {
+          return _ConversationTipsEmpty(onRetry: onRetry);
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 17,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    '대화 이어가기',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '다시 시도',
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  color: AppColors.textSecondary,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ...tips.map(
+              (tip) => _ConversationTipButton(
+                tip: tip,
+                onTap: () => onSelected(tip.message),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ConversationTipsLoading extends StatelessWidget {
+  const _ConversationTipsLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Row(
+      children: [
+        SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            '다음 화제를 추천하고 있어요',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConversationTipsError extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _ConversationTipsError({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(
+          child: Text(
+            '지금은 제안을 불러올 수 없어요.',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+        ),
+        TextButton(onPressed: onRetry, child: const Text('재시도')),
+      ],
+    );
+  }
+}
+
+class _ConversationTipsEmpty extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _ConversationTipsEmpty({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(
+          child: Text(
+            '지금은 추천할 화제가 부족해요.',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+        ),
+        TextButton(onPressed: onRetry, child: const Text('재시도')),
+      ],
+    );
+  }
+}
+
+class _ConversationTipButton extends StatelessWidget {
+  final ConversationTip tip;
+  final VoidCallback onTap;
+
+  const _ConversationTipButton({required this.tip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              tip.message,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.35,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

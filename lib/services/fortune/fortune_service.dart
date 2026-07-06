@@ -9,15 +9,15 @@ import 'fortune_calculator.dart';
 ///
 /// OpenAI API 키는 앱에 전혀 포함되지 않는다 — 이 서비스는 Cloud Functions
 /// callable(functions/index.js의 generateFortuneNarrative/generateMatchNarrative/
-/// generateDailyFortune/generateIcebreakers)만 호출하고, 실제 GPT 호출과 키
-/// 보관은 서버가 전담한다.
+/// generateDailyFortune/generateIcebreakers/generateConversationTips)만 호출하고,
+/// 실제 GPT 호출과 키 보관은 서버가 전담한다.
 ///
 /// 캐싱: 함수가 Firestore(users/{uid}.fortuneNarrative,
 /// matches/{matchId}.fortuneMatch, users/{uid}/dailyFortune/{yyyy-MM-dd},
-/// matches/{matchId}.icebreakers)에 결과를 저장해두므로, 여기서 먼저 그
-/// 문서를 직접 읽어 캐시가 있으면 함수 호출(콜드스타트 포함) 없이 즉시 보여준다.
-/// 캐시가 없을 때만 함수를 호출하고, 함수도 내부적으로 한 번 더 캐시를 확인해
-/// 같은 요청이 중복 과금되지 않게 한다.
+/// matches/{matchId}.icebreakers, matches/{matchId}.conversationTips)에 결과를
+/// 저장해두므로, 여기서 먼저 그 문서를 직접 읽어 캐시가 있으면 함수 호출
+/// (콜드스타트 포함) 없이 즉시 보여준다. 캐시가 없을 때만 함수를 호출하고,
+/// 함수도 내부적으로 한 번 더 캐시를 확인해 같은 요청이 중복 과금되지 않게 한다.
 class FortuneService {
   FortuneService({FirebaseFirestore? firestore, FirebaseFunctions? functions})
     : _db = firestore ?? FirebaseFirestore.instance,
@@ -167,7 +167,7 @@ class FortuneService {
   /// generateIcebreakers callable을 호출하며, 서버가 참가자 권한과 프로필 조회,
   /// GPT 호출을 모두 처리한다.
   Future<List<Icebreaker>> getIcebreakers(String matchId) async {
-    debugPrint('[Icebreakers] 캐시 확인 시작 matchId=$matchId');
+    _debugLog('[Icebreakers] 캐시 확인 시작 matchId=$matchId');
     try {
       final matchDoc = await _db.collection('matches').doc(matchId).get();
       final cached = matchDoc.data()?['icebreakers'] as List<dynamic>?;
@@ -179,11 +179,11 @@ class FortuneService {
             )
             .where((item) => item.topic.isNotEmpty && item.message.isNotEmpty)
             .toList();
-        debugPrint('[Icebreakers] 캐시 hit count=${items.length}');
+        _debugLog('[Icebreakers] 캐시 hit count=${items.length}');
         return items;
       }
 
-      debugPrint('[Icebreakers] 캐시 miss, callable 호출 matchId=$matchId');
+      _debugLog('[Icebreakers] 캐시 miss, callable 호출 matchId=$matchId');
       final callable = _functions.httpsCallable('generateIcebreakers');
       final result = await callable.call({'matchId': matchId});
       final data = Map<String, dynamic>.from(result.data as Map);
@@ -195,13 +195,69 @@ class FortuneService {
           )
           .where((item) => item.topic.isNotEmpty && item.message.isNotEmpty)
           .toList();
-      debugPrint('[Icebreakers] callable 성공 count=${items.length}');
+      _debugLog('[Icebreakers] callable 성공 count=${items.length}');
       return items;
     } catch (e, st) {
-      debugPrint('[Icebreakers] 실패 matchId=$matchId error=$e');
-      debugPrint('$st');
+      _debugLog('[Icebreakers] 실패 matchId=$matchId error=$e');
+      _debugLog('$st');
       rethrow;
     }
+  }
+
+  /// 진행 중인 채팅을 자연스럽게 이어갈 AI 코치 문장을 가져온다.
+  ///
+  /// 서버와 동일하게 최신 메시지 ID 기준 짧은 캐시를 먼저 확인한다.
+  /// 메시지가 없는 채팅방은 아이스브레이커 카드가 담당하므로 빈 리스트를 반환한다.
+  Future<List<ConversationTip>> getConversationTips(String matchId) async {
+    _debugLog('[ConversationTips] 캐시 확인 시작 matchId=$matchId');
+    try {
+      final matchRef = _db.collection('matches').doc(matchId);
+      final latestMessageSnap = await matchRef
+          .collection('messages')
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+      if (latestMessageSnap.docs.isEmpty) {
+        _debugLog('[ConversationTips] 메시지 없음 matchId=$matchId');
+        return const [];
+      }
+
+      final latestMessageId = latestMessageSnap.docs.first.id;
+      final matchDoc = await matchRef.get();
+      final cached = matchDoc.data()?['conversationTips'];
+      if (cached is Map) {
+        final cacheMap = Map<String, dynamic>.from(cached);
+        final tips = _conversationTipsFromList(
+          cacheMap['suggestions'] as List<dynamic>?,
+        );
+        if (cacheMap['lastMessageId'] == latestMessageId && tips.length >= 2) {
+          _debugLog('[ConversationTips] 캐시 hit count=${tips.length}');
+          return tips;
+        }
+      }
+
+      _debugLog('[ConversationTips] 캐시 miss, callable 호출 matchId=$matchId');
+      final callable = _functions.httpsCallable('generateConversationTips');
+      final result = await callable.call({'matchId': matchId});
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final tips = _conversationTipsFromList(
+        data['suggestions'] as List<dynamic>?,
+      );
+      _debugLog('[ConversationTips] callable 성공 count=${tips.length}');
+      return tips;
+    } catch (e, st) {
+      _debugLog('[ConversationTips] 실패 matchId=$matchId error=$e');
+      _debugLog('$st');
+      rethrow;
+    }
+  }
+
+  List<ConversationTip> _conversationTipsFromList(List<dynamic>? rawItems) {
+    return (rawItems ?? [])
+        .map(ConversationTip.fromValue)
+        .where((item) => item.message.trim().isNotEmpty)
+        .take(3)
+        .toList();
   }
 
   static String _dateKey(DateTime d) {
@@ -212,4 +268,10 @@ class FortuneService {
   }
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  static void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
+  }
 }

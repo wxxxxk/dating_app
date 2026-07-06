@@ -105,3 +105,14 @@ class Icebreaker {
     );
   }
 }
+
+/// 대화가 잠시 끊겼을 때 입력창에 채워볼 수 있는 AI 대화 코치 문장.
+class ConversationTip {
+  final String message;
+
+  const ConversationTip({required this.message});
+
+  factory ConversationTip.fromValue(Object? value) {
+    return ConversationTip(message: value?.toString() ?? '');
+  }
+}

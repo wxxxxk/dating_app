@@ -2,7 +2,7 @@
 
 이 문서는 다음 AI 세션(Codex / Claude Code)이 프로젝트 전체 맥락을 바로 이해하도록 만든 현재 상태 스냅샷이다. `CLAUDE.md`는 `AGENTS.md` 심볼릭 링크이므로 실제 원본은 이 파일 하나다. 코드가 바뀌면 이 문서도 같이 갱신한다.
 
-최종 코드 기준 확인일: 2026-07-06
+최종 코드 기준 확인일: 2026-07-07
 
 ## 1. 프로젝트 개요
 
@@ -52,6 +52,7 @@
 - ✅ 새 메시지 Fade + Slide 애니메이션
 - ✅ 빈 채팅방 아이스브레이커 카드
 - ✅ 매칭 목록 마지막 메시지 시간/안읽음 뱃지: `matches/{matchId}.lastMessage`, `lastReadAtByUid.{uid}` 기반
+- ✅ AI 대화 코치: 메시지가 1개 이상인 채팅방에서 입력창 위 `대화 이어가기` 버튼으로 최근 대화 기반 다음 화제 제안
 
 ### Fortune / AI 사주
 
@@ -70,6 +71,7 @@
 
 - ✅ Match Narrative: `generateMatchNarrative`
 - ✅ Ice Breaker: `generateIcebreakers`
+- ✅ Conversation Coach: `generateConversationTips`, `matches/{matchId}.conversationTips.lastMessageId` 짧은 캐시
 - ✅ AI Profile Insight: `generateProfileInsight`, `users/{uid}.profileInsight` 캐시, 외모 평가 금지 프롬프트
 - ✅ Charm Report: `generateCharmReport`, `users/{uid}.charmReport` 캐시
 - ✅ Ideal Type Image: `generateIdealTypeImage`, `gpt-image-1`, Storage `users/{uid}/idealType/...png`, `users/{uid}.idealTypeImage` 캐시
@@ -97,7 +99,6 @@
 
 - ❌ 실제 Store 결제 검증: `verifyJellyPurchase`는 현재 항상 성공하는 스켈레톤
 - ❌ 젤리/부스트/likesUnlocked 서버 전용 쓰기 규칙
-- ❌ AI Conversation Coach
 - ❌ Rewind
 - ❌ 사진 메시지
 - ❌ 메시지별 Read Receipt
@@ -164,7 +165,7 @@ test/
 
 ## 5. Cloud Functions
 
-`functions/index.js` 기준 exports 10개.
+`functions/index.js` 기준 exports 11개.
 
 | Function | Trigger | GPT/Image 호출 | 캐시 | 역할 |
 |---|---|---:|---|---|
@@ -173,6 +174,7 @@ test/
 | `generateFortuneNarrative` | callable | GPT `gpt-4o-mini` | `users/{uid}.fortuneNarrative` | 내 사주 캐릭터/서사 |
 | `generateMatchNarrative` | callable | GPT `gpt-4o-mini` | `matches/{matchId}.fortuneMatch` | 두 사람 궁합 서사. participants 권한 확인 |
 | `generateIcebreakers` | callable | GPT `gpt-4o-mini` | `matches/{matchId}.icebreakers` | 빈 채팅방 첫 대화 주제 3개 |
+| `generateConversationTips` | callable | GPT `gpt-4o-mini` | `matches/{matchId}.conversationTips.lastMessageId` | 최근 메시지 8개 기반 대화 재개 문장 2~3개 |
 | `generateDailyFortune` | callable | GPT `gpt-4o-mini` | `users/{uid}/dailyFortune/{date}` | 날짜별 오늘의 애정운 |
 | `generateCharmReport` | callable | GPT `gpt-4o-mini` | `users/{uid}.charmReport` | 프로필 기반 첫인상/매력 분석 |
 | `generateProfileInsight` | callable | GPT `gpt-4o` Vision | `users/{targetUid}.profileInsight.inputHash` | 상대 프로필 사진/소개/태그 기반 비외모 인사이트 |
@@ -209,7 +211,7 @@ test/
 - `matches/{matchId}`
   - `participants`, `uid1`, `uid2`, `matchedAt`, `lastMessage`
   - 읽음 상태: `lastReadAtByUid.{uid}`. 매칭 목록 안읽음 뱃지 판정에 사용
-  - AI 캐시: `fortuneMatch`, `icebreakers`
+  - AI 캐시: `fortuneMatch`, `icebreakers`, `conversationTips`
 - `matches/{matchId}/messages/{messageId}`
   - `senderId`, `text`, `createdAt`
   - update/delete는 아직 금지
@@ -293,11 +295,10 @@ test/
 
 ## 10. 다음 개발 우선순위
 
-1. Conversation Coach
-2. Read Receipt
-3. Photo Message
-4. Rewind
-5. Real Store Verification
+1. Read Receipt
+2. Photo Message
+3. Rewind
+4. Real Store Verification
 
 ## 11. 자주 실행하는 검증 명령
 
