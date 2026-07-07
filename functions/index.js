@@ -32,8 +32,9 @@ const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
  *
  * 처리 흐름:
  * 1. 최신 action이 like/superlike가 아니면 즉시 종료 (pass 스와이프는 무시)
- * 2. 상대방(targetUid)이 현재 유저(uid)를 이미 like/superlike했는지 확인
- * 3. 상호 관심이면 matches/{matchId} 문서를 멱등적으로 생성
+ * 2. 매칭 생성 직전 현재 swipe 문서가 아직 like/superlike인지 재확인
+ * 3. 상대방(targetUid)이 현재 유저(uid)를 이미 like/superlike했는지 확인
+ * 4. 상호 관심이면 matches/{matchId} 문서를 멱등적으로 생성
  *
  * matchId = [uid, targetUid].sort().join('_') — 항상 동일한 ID 보장
  */
@@ -49,33 +50,57 @@ exports.onSwipeCreated = onDocumentWritten(
     // pass 재노출 후 like/superlike로 바뀐 업데이트는 여기서 통과해 매칭을 만든다.
     if (isPositiveSwipe(previous?.action)) return null;
 
-    // 상대방의 역방향 스와이프 확인 (admin SDK → 보안 규칙 우회)
-    const reverseDoc = await db
-      .collection('users')
-      .doc(targetUid)
-      .collection('swipes')
-      .doc(uid)
-      .get();
-
-    if (!reverseDoc.exists || !isPositiveSwipe(reverseDoc.data()?.action)) {
-      return null;
-    }
-
     // matchId는 정렬된 순서로 — 두 유저 어느 쪽이 먼저 like해도 같은 ID
     const participants = [uid, targetUid].sort();
     const matchId = participants.join('_');
     const matchRef = db.collection('matches').doc(matchId);
+    const currentSwipeRef = db
+      .collection('users')
+      .doc(uid)
+      .collection('swipes')
+      .doc(targetUid);
+    const reverseSwipeRef = db
+      .collection('users')
+      .doc(targetUid)
+      .collection('swipes')
+      .doc(uid);
 
-    // 이미 매칭됐으면 다시 만들지 않는다 (멱등 처리)
-    const existing = await matchRef.get();
-    if (existing.exists) return null;
+    const created = await db.runTransaction(async (transaction) => {
+      const [existing, currentSwipe, reverseSwipe] = await Promise.all([
+        transaction.get(matchRef),
+        transaction.get(currentSwipeRef),
+        transaction.get(reverseSwipeRef),
+      ]);
 
-    await matchRef.set({
-      participants,
-      uid1: participants[0],
-      uid2: participants[1],
-      matchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      // 이미 매칭됐으면 다시 만들지 않는다 (멱등 처리).
+      if (existing.exists) return false;
+
+      // Rewind가 swipe 문서를 삭제했거나 action을 바꾼 뒤라면 이벤트의
+      // 과거 after 데이터만 믿고 매칭을 만들면 안 된다.
+      if (
+        !currentSwipe.exists ||
+        !isPositiveSwipe(currentSwipe.data()?.action)
+      ) {
+        return false;
+      }
+
+      if (
+        !reverseSwipe.exists ||
+        !isPositiveSwipe(reverseSwipe.data()?.action)
+      ) {
+        return false;
+      }
+
+      transaction.set(matchRef, {
+        participants,
+        uid1: participants[0],
+        uid2: participants[1],
+        matchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return true;
     });
+
+    if (!created) return null;
 
     await sendPushToUsers({
       uids: participants,

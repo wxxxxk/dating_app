@@ -78,6 +78,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   String _currentUserPhotoUrl = '';
   final _locationService = const LocationService();
   Timer? _boostTimer;
+  _RewindCandidate? _rewindCandidate;
+  bool _rewinding = false;
 
   // `GlobalKey<SwipeCardState>`로 현재 카드의 triggerSwipe()를 호출한다.
   final _swipeKey = GlobalKey<SwipeCardState>();
@@ -136,6 +138,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           _currentUserPhotoUrl = photoUrls.isNotEmpty ? photoUrls[0] : '';
           _profiles = profiles;
           _currentIndex = 0;
+          _rewindCandidate = null;
+          _rewinding = false;
         });
       }
     } catch (e) {
@@ -150,6 +154,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   Future<void> _onSwiped(String targetUid, String action) async {
     final currentUid = widget.authService.currentUser?.uid;
     if (currentUid == null) return;
+    if (_currentIndex >= _profiles.length) return;
+
+    final swipedIndex = _currentIndex;
+    final swipedProfile = _profiles[swipedIndex];
 
     if (action == 'superlike') {
       final spent = await widget.jellyService.spend(
@@ -165,7 +173,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     }
 
     // 과금/검증이 끝난 뒤 카드와 Firestore 기록을 진행한다.
-    setState(() => _currentIndex++);
+    setState(() {
+      _currentIndex++;
+      _rewindCandidate = (action == 'pass' || action == 'like')
+          ? _RewindCandidate(profile: swipedProfile, previousIndex: swipedIndex)
+          : null;
+    });
     _recordAndCheckMatch(
       currentUid: currentUid,
       targetUid: targetUid,
@@ -186,7 +199,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         action: action,
       );
     } catch (e) {
-      debugPrint('[Discovery] 스와이프 기록 실패: $e');
+      _debugLog('[Discovery] 스와이프 기록 실패: $e');
+      if (mounted && _rewindCandidate?.profile.uid == targetUid) {
+        setState(() => _rewindCandidate = null);
+      }
       return;
     }
 
@@ -197,7 +213,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     try {
       await _pollForMatch(currentUid: currentUid, targetUid: targetUid);
     } catch (e) {
-      debugPrint('[Discovery] 매치 확인 실패 (rules 미배포 가능성): $e');
+      _debugLog('[Discovery] 매치 확인 실패 (rules 미배포 가능성): $e');
     }
   }
 
@@ -220,6 +236,9 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         targetUid: targetUid,
       );
       if (result != null && mounted) {
+        if (_rewindCandidate?.profile.uid == targetUid) {
+          setState(() => _rewindCandidate = null);
+        }
         _showCelebration(result);
         return;
       }
@@ -285,7 +304,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       if (!mounted) return;
       _showSnack(submission.blockUser ? '신고가 접수되고 차단했어요.' : '신고가 접수되었어요.');
     } catch (e) {
-      if (mounted) _showSnack('신고에 실패했어요: $e');
+      _debugLog('[Safety] 신고 실패 reportedUid=${profile.uid} error=$e');
+      if (mounted) _showSnack('신고에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -320,7 +340,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       _hideCurrentProfile(profile.uid);
       if (mounted) _showSnack('차단했어요.');
     } catch (e) {
-      if (mounted) _showSnack('차단에 실패했어요: $e');
+      _debugLog('[Safety] 차단 실패 blockedUid=${profile.uid} error=$e');
+      if (mounted) _showSnack('차단에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
 
@@ -354,6 +375,54 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
 
   void _handleButtonSwipe(String action) {
     _swipeKey.currentState?.triggerSwipe(action);
+  }
+
+  Future<void> _handleRewind() async {
+    final uid = widget.authService.currentUser?.uid;
+    final candidate = _rewindCandidate;
+    if (uid == null || candidate == null || _rewinding) return;
+
+    setState(() => _rewinding = true);
+    try {
+      final result = await widget.jellyService.rewindSwipe(
+        uid: uid,
+        targetUid: candidate.profile.uid,
+      );
+      if (!mounted) return;
+
+      switch (result) {
+        case RewindSwipeResult.success:
+          setState(() {
+            final restoreIndex = candidate.previousIndex
+                .clamp(0, _profiles.length)
+                .toInt();
+            _profiles.removeWhere(
+              (profile) => profile.uid == candidate.profile.uid,
+            );
+            _profiles.insert(restoreIndex, candidate.profile);
+            _currentIndex = restoreIndex;
+            _rewindCandidate = null;
+          });
+          _showSnack('방금 넘긴 카드를 되돌렸어요.');
+          return;
+        case RewindSwipeResult.insufficientJelly:
+          await _showJellyShortage('되돌리기에는 젤리 ${JellyCosts.rewind}개가 필요해요.');
+          return;
+        case RewindSwipeResult.alreadyMatched:
+          setState(() => _rewindCandidate = null);
+          _showSnack('이미 매칭된 상대는 되돌릴 수 없어요.');
+          return;
+        case RewindSwipeResult.unavailable:
+          setState(() => _rewindCandidate = null);
+          _showSnack('되돌릴 수 있는 카드가 없어요.');
+          return;
+      }
+    } catch (e) {
+      _debugLog('[Discovery] 되돌리기 실패: $e');
+      if (mounted) _showSnack('되돌리기에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      if (mounted) setState(() => _rewinding = false);
+    }
   }
 
   Future<void> _openFilterSheet() async {
@@ -398,6 +467,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       ..showSnackBar(
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
+  }
+
+  void _debugLog(String message) {
+    if (kDebugMode) {
+      debugPrint(message);
+    }
   }
 
   Future<void> _showJellyShortage(String message) async {
@@ -629,11 +704,19 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   }
 
   Widget _buildActionButtons() {
+    final canRewind = _rewindCandidate != null && !_rewinding;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 34),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          // REWIND 버튼 — 세션 내 직전 pass/like 한 번만 되돌린다.
+          _ActionButton(
+            icon: Icons.undo_rounded,
+            color: AppColors.textSecondary,
+            size: 50,
+            onPressed: canRewind ? _handleRewind : null,
+          ),
           // PASS 버튼
           _ActionButton(
             icon: Icons.close_rounded,
@@ -754,7 +837,7 @@ class _ActionButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final double size;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _ActionButton({
     required this.icon,
@@ -765,6 +848,10 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final effectiveColor = enabled
+        ? color
+        : AppColors.textSecondary.withValues(alpha: 0.35);
     return GestureDetector(
       onTap: onPressed,
       child: Container(
@@ -780,12 +867,22 @@ class _ActionButton extends StatelessWidget {
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+          border: Border.all(
+            color: effectiveColor.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
         ),
-        child: Icon(icon, color: color, size: size * 0.5),
+        child: Icon(icon, color: effectiveColor, size: size * 0.5),
       ),
     );
   }
+}
+
+class _RewindCandidate {
+  final UserProfile profile;
+  final int previousIndex;
+
+  const _RewindCandidate({required this.profile, required this.previousIndex});
 }
 
 class _SafetyMenuButton extends StatelessWidget {

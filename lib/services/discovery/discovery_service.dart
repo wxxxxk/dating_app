@@ -114,7 +114,9 @@ class DiscoveryService {
     required String targetUid,
     required String action,
   }) async {
-    debugPrint('[Discovery] 스와이프 기록: $currentUid → $targetUid ($action)');
+    if (kDebugMode) {
+      debugPrint('[Discovery] 스와이프 기록: $currentUid → $targetUid ($action)');
+    }
     await _db
         .collection('users')
         .doc(currentUid)

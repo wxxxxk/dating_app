@@ -2,11 +2,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class JellyCosts {
   static const int superlike = 5;
+  static const int rewind = 3;
   static const int boost = 30;
   static const int unlockReceivedLikes = 20;
   static const Duration boostDuration = Duration(minutes: 30);
 
   JellyCosts._();
+}
+
+enum RewindSwipeResult {
+  success,
+  insufficientJelly,
+  alreadyMatched,
+  unavailable,
 }
 
 /// 실제 스토어 연결 없이 젤리 상점 UI를 테스트하기 위한 플래그.
@@ -67,8 +75,7 @@ class JellyPurchaseCatalog {
     ),
   ];
 
-  static Set<String> get productIds =>
-      products.map((p) => p.productId).toSet();
+  static Set<String> get productIds => products.map((p) => p.productId).toSet();
 
   static JellyProduct? byProductId(String productId) {
     for (final product in products) {
@@ -150,6 +157,50 @@ class JellyService {
         'createdAt': FieldValue.serverTimestamp(),
       });
       return true;
+    });
+  }
+
+  /// 직전 pass/like 스와이프를 되돌린다.
+  ///
+  /// 젤리 차감, 거래 내역 생성, users/{uid}/swipes/{targetUid} 삭제를 하나의
+  /// 트랜잭션으로 묶어 부분 실패를 막는다. 이미 매칭된 상대는 되돌릴 수 없다.
+  Future<RewindSwipeResult> rewindSwipe({
+    required String uid,
+    required String targetUid,
+  }) async {
+    final userRef = _userRef(uid);
+    final txRef = _txRef(uid).doc();
+    final swipeRef = userRef.collection('swipes').doc(targetUid);
+    final participants = [uid, targetUid]..sort();
+    final matchRef = _db.collection('matches').doc(participants.join('_'));
+
+    return _db.runTransaction((transaction) async {
+      final userSnap = await transaction.get(userRef);
+      final matchSnap = await transaction.get(matchRef);
+      final swipeSnap = await transaction.get(swipeRef);
+
+      if (matchSnap.exists) return RewindSwipeResult.alreadyMatched;
+      if (!swipeSnap.exists) return RewindSwipeResult.unavailable;
+
+      final action = swipeSnap.data()?['action'] as String?;
+      if (action != 'pass' && action != 'like') {
+        return RewindSwipeResult.unavailable;
+      }
+
+      final current = (userSnap.data()?['jelly'] as num?)?.toInt() ?? 0;
+      if (current < JellyCosts.rewind) {
+        return RewindSwipeResult.insufficientJelly;
+      }
+
+      transaction.update(userRef, {'jelly': current - JellyCosts.rewind});
+      transaction.set(txRef, {
+        'type': 'spend',
+        'amount': -JellyCosts.rewind,
+        'reason': 'rewind',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      transaction.delete(swipeRef);
+      return RewindSwipeResult.success;
     });
   }
 
