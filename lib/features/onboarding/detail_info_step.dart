@@ -30,7 +30,8 @@ class DetailInfoStep extends StatefulWidget {
     required String? jobTitle,
     required String? education,
     required String? mbti,
-  }) onNext;
+  })
+  onNext;
 
   const DetailInfoStep({
     super.key,
@@ -109,7 +110,9 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
       ),
       builder: (ctx) {
         return ConstrainedBox(
@@ -130,7 +133,7 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
                         height: 4,
                         decoration: BoxDecoration(
                           color: AppColors.border,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(AppSpacing.xs),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -164,8 +167,10 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
                           ),
                         ),
                         trailing: isSelected
-                            ? const Icon(Icons.check,
-                                color: AppColors.primary)
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: AppColors.primary,
+                              )
                             : null,
                         onTap: () {
                           Navigator.pop(ctx);
@@ -205,9 +210,11 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
     }
     final catLabel = _jobCategory != null
         ? ProfileOptions.keyToLabel(
-            ProfileOptions.jobCategoryOptions, _jobCategory!)
+            ProfileOptions.jobCategoryOptions,
+            _jobCategory!,
+          )
         : null;
-    // 카테고리 라벨에서 앞 이모지 제거 (예: '🎒 학생' → '학생')
+    // 카테고리 라벨에서 표시용 접두어가 들어오면 본문만 사용한다.
     String? catName;
     if (catLabel != null) {
       final spaceIdx = catLabel.indexOf(' ');
@@ -230,6 +237,7 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
           const Text(
             '상세 정보 입력',
             style: TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
@@ -271,7 +279,9 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
           _PickerField(
             label: '종교',
             value: ProfileOptions.keyToLabel(
-                ProfileOptions.religions, _religion ?? ''),
+              ProfileOptions.religions,
+              _religion ?? '',
+            ),
             onTap: () => _showPicker(
               title: '종교',
               options: ProfileOptions.religions,
@@ -282,7 +292,9 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
           _PickerField(
             label: '흡연',
             value: ProfileOptions.keyToLabel(
-                ProfileOptions.smokingOptions, _smoking ?? ''),
+              ProfileOptions.smokingOptions,
+              _smoking ?? '',
+            ),
             onTap: () => _showPicker(
               title: '흡연',
               options: ProfileOptions.smokingOptions,
@@ -293,7 +305,9 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
           _PickerField(
             label: '음주',
             value: ProfileOptions.keyToLabel(
-                ProfileOptions.drinkingOptions, _drinking ?? ''),
+              ProfileOptions.drinkingOptions,
+              _drinking ?? '',
+            ),
             onTap: () => _showPicker(
               title: '음주',
               options: ProfileOptions.drinkingOptions,
@@ -304,7 +318,9 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
           _PickerField(
             label: '최종학력',
             value: ProfileOptions.keyToLabel(
-                ProfileOptions.educationOptions, _education ?? ''),
+              ProfileOptions.educationOptions,
+              _education ?? '',
+            ),
             onTap: () => _showPicker(
               title: '최종학력',
               options: ProfileOptions.educationOptions,
@@ -348,7 +364,7 @@ class _PickerField extends StatelessWidget {
     final hasValue = value != null && value!.isNotEmpty;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.button),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
@@ -376,8 +392,11 @@ class _PickerField extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right,
-                size: 18, color: AppColors.textSecondary),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.textSecondary,
+            ),
           ],
         ),
       ),

@@ -158,7 +158,7 @@ class _InterestSummaryCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
@@ -214,32 +214,29 @@ class _FirstImpressionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF6B81), Color(0xFF7C5CFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.seal,
+        borderRadius: BorderRadius.circular(AppRadius.button),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '첫인상',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: Colors.white70,
+              color: AppColors.surface.withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(height: 10),
           Text(
             text,
             style: const TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 22,
               height: 1.35,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: AppColors.surface,
             ),
           ),
         ],
@@ -267,7 +264,7 @@ class _CharmPointTile extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.background,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.button),
           border: Border.all(color: AppColors.border),
         ),
         child: Row(
@@ -318,7 +315,7 @@ class _AppealTipCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
       ),
       child: Row(
@@ -358,7 +355,7 @@ class _CharmErrorState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.auto_awesome_outlined,
+              Icons.auto_awesome_rounded,
               size: 58,
               color: AppColors.textSecondary,
             ),

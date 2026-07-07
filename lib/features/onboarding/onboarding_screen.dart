@@ -257,13 +257,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             automaticallyImplyLeading: false,
             leading: _step > 0
                 ? IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 20,
+                    ),
                     onPressed: _isLoading ? null : _prevStep,
                   )
                 : null,
             title: _StepIndicator(current: _step + 1, total: _totalSteps),
             centerTitle: true,
-            backgroundColor: Colors.transparent,
+            backgroundColor: AppColors.background.withValues(alpha: 0),
             elevation: 0,
           ),
           body: SafeArea(child: _buildCurrentStep()),
@@ -289,13 +292,13 @@ class _StepIndicator extends StatelessWidget {
       children: List.generate(total, (i) {
         final active = i + 1 == current;
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: AppDurations.base,
           margin: const EdgeInsets.symmetric(horizontal: 3),
           width: active ? 20 : 6,
           height: 6,
           decoration: BoxDecoration(
             color: active ? AppColors.primary : AppColors.border,
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(AppSpacing.xs),
           ),
         );
       }),

@@ -104,7 +104,7 @@ class DummyDataService {
         displayName: '김서연',
         birthDate: bd(25),
         gender: 'female',
-        bio: '🍳 요리와 베이킹을 좋아해요. 조용하고 따뜻한 시간을 즐기는 편이에요.',
+        bio: '요리와 베이킹을 좋아해요. 조용하고 따뜻한 시간을 즐기는 편이에요.',
         photoUrls: [
           'https://i.pravatar.cc/400?img=1',
           'https://picsum.photos/seed/d001b/400/600',
@@ -131,7 +131,7 @@ class DummyDataService {
         displayName: '이지민',
         birthDate: bd(23),
         gender: 'female',
-        bio: '📸 사진 찍는 걸 좋아해요. 맛있는 거 먹으러 다니는 게 취미!',
+        bio: '사진 찍는 걸 좋아해요. 맛있는 거 먹으러 다니는 게 취미!',
         photoUrls: [
           'https://i.pravatar.cc/400?img=5',
           'https://picsum.photos/seed/d002b/400/600',
@@ -157,7 +157,7 @@ class DummyDataService {
         displayName: '박하은',
         birthDate: bd(27),
         gender: 'female',
-        bio: '💻 백엔드 개발자. 야근보다 운동을 더 좋아해요 🏃‍♀️',
+        bio: '백엔드 개발자. 야근보다 운동을 더 좋아해요 ',
         photoUrls: [
           'https://i.pravatar.cc/400?img=7',
           'https://picsum.photos/seed/d003b/400/600',
@@ -189,7 +189,7 @@ class DummyDataService {
         displayName: '최수아',
         birthDate: bd(26),
         gender: 'female',
-        bio: '🩺 간호사예요. 힘든 날에는 발레로 스트레스를 풀어요 🩰',
+        bio: '간호사예요. 힘든 날에는 발레로 스트레스를 풀어요 ',
         photoUrls: [
           'https://i.pravatar.cc/400?img=9',
           'https://picsum.photos/seed/d004b/400/600',
@@ -220,7 +220,7 @@ class DummyDataService {
         displayName: '정유진',
         birthDate: bd(24),
         gender: 'female',
-        bio: '🔬 연구소 연구원. 카페에서 논문 읽는 게 일상이에요.',
+        bio: '연구소 연구원. 카페에서 논문 읽는 게 일상이에요.',
         photoUrls: [
           'https://i.pravatar.cc/400?img=12',
           'https://picsum.photos/seed/d005b/400/600',
@@ -254,7 +254,7 @@ class DummyDataService {
         displayName: '이준호',
         birthDate: bd(28),
         gender: 'male',
-        bio: '🍎 iOS 개발자. 코드와 커피를 사랑해요. 주말엔 등산.',
+        bio: 'iOS 개발자. 코드와 커피를 사랑해요. 주말엔 등산.',
         photoUrls: [
           'https://i.pravatar.cc/400?img=14',
           'https://picsum.photos/seed/d006b/400/600',
@@ -286,7 +286,7 @@ class DummyDataService {
         displayName: '김민준',
         birthDate: bd(26),
         gender: 'male',
-        bio: '🚀 스타트업 창업자. 뭐든 즐겁게 하는 편이에요!',
+        bio: '스타트업 창업자. 뭐든 즐겁게 하는 편이에요!',
         photoUrls: [
           'https://i.pravatar.cc/400?img=17',
           'https://picsum.photos/seed/d007b/400/600',
@@ -312,7 +312,7 @@ class DummyDataService {
         displayName: '박도현',
         birthDate: bd(30),
         gender: 'male',
-        bio: '👨‍⚕️ 의사지만 집에서 요리하는 걸 더 좋아해요. 집밥 파트너 구해요 😄',
+        bio: '의사지만 집에서 요리하는 걸 더 좋아해요. 집밥 파트너 구해요 ',
         photoUrls: [
           'https://i.pravatar.cc/400?img=21',
           'https://picsum.photos/seed/d008b/400/600',
@@ -339,7 +339,7 @@ class DummyDataService {
         displayName: '최지훈',
         birthDate: bd(29),
         gender: 'male',
-        bio: '📈 금융권에서 일해요. 토론하는 거 좋아하고 새로운 아이디어를 환영해요.',
+        bio: '금융권에서 일해요. 토론하는 거 좋아하고 새로운 아이디어를 환영해요.',
         photoUrls: [
           'https://i.pravatar.cc/400?img=25',
           'https://picsum.photos/seed/d009b/400/600',
@@ -365,7 +365,7 @@ class DummyDataService {
         displayName: '윤서준',
         birthDate: bd(24),
         gender: 'male',
-        bio: '🎨 그래픽 디자이너. 예쁜 것들에 관심이 많아요. 미술관 자주 가요.',
+        bio: '그래픽 디자이너. 예쁜 것들에 관심이 많아요. 미술관 자주 가요.',
         photoUrls: [
           'https://i.pravatar.cc/400?img=31',
           'https://picsum.photos/seed/d010b/400/600',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
@@ -441,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
             jellyPurchaseService: widget.jellyPurchaseService,
           ),
           IconButton(
-            icon: const Icon(Icons.edit_outlined),
+            icon: const Icon(Icons.edit_rounded),
             tooltip: '프로필 편집',
             onPressed: _openEditScreen,
           ),
@@ -503,7 +504,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // ── 한줄 소개 ────────────────────────────────────────
                   if (profile.bio.isNotEmpty)
                     Text(
-                      profile.bio,
+                      stripEmoji(profile.bio),
                       style: const TextStyle(
                         fontSize: 15,
                         color: AppColors.textSecondary,
@@ -663,12 +664,8 @@ class _DailyPickHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFEEF3), Color(0xFFFFF7EA)],
-        ),
-        borderRadius: BorderRadius.circular(24),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
         boxShadow: [
           BoxShadow(
@@ -697,11 +694,12 @@ class _DailyPickHeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            '✨ 오늘의 인연',
+            '오늘의 인연',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
               color: AppColors.textPrimary,
+              fontFamily: AppFonts.display,
             ),
           ),
           const SizedBox(height: 8),
@@ -738,10 +736,10 @@ class _DailyPickHeroCard extends StatelessWidget {
               label: Text(activePick == null ? '둘러보기 시작' : '프로필 보기'),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                foregroundColor: AppColors.surface,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppRadius.button),
                 ),
               ),
             ),
@@ -761,7 +759,7 @@ class _AiBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: const Text(
         'AI DAILY PICK',
@@ -786,12 +784,12 @@ class _ScorePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.82),
-        borderRadius: BorderRadius.circular(999),
+        color: AppColors.surface.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
       ),
       child: Text(
-        '❤️ 궁합 $score%',
+        '궁합 $score%',
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w800,
@@ -890,11 +888,11 @@ class _DailyPickAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageUrl = profile.photoUrls.isEmpty ? null : profile.photoUrls.first;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(AppRadius.button),
       child: Container(
         width: 78,
         height: 98,
-        color: Colors.white.withValues(alpha: 0.68),
+        color: AppColors.surface.withValues(alpha: 0.68),
         child: imageUrl == null
             ? const Icon(
                 Icons.person_rounded,
@@ -937,7 +935,7 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
         height: height,
         color: AppColors.surface,
         child: const Icon(
-          Icons.person,
+          Icons.person_rounded,
           size: 80,
           color: AppColors.textSecondary,
         ),
@@ -957,7 +955,7 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
               errorBuilder: (_, _, _) => Container(
                 color: AppColors.surface,
                 child: const Icon(
-                  Icons.broken_image,
+                  Icons.broken_image_rounded,
                   size: 60,
                   color: AppColors.textSecondary,
                 ),
@@ -976,13 +974,15 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
               children: List.generate(urls.length, (i) {
                 final active = i == _currentPage;
                 return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
+                  duration: AppDurations.fast,
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   width: active ? 16 : 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: active ? Colors.white : Colors.white54,
-                    borderRadius: BorderRadius.circular(3),
+                    color: AppColors.surface.withValues(
+                      alpha: active ? 1 : 0.54,
+                    ),
+                    borderRadius: BorderRadius.circular(AppSpacing.xs),
                   ),
                 );
               }),
@@ -1015,7 +1015,7 @@ class _VerificationSection extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -1051,7 +1051,7 @@ class _VerificationSection extends StatelessWidget {
               children: [
                 FilledButton.icon(
                   onPressed: loading ? null : onSendEmail,
-                  icon: const Icon(Icons.mark_email_unread_outlined, size: 17),
+                  icon: const Icon(Icons.mark_email_unread_rounded, size: 17),
                   label: const Text('이메일 인증하기'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
@@ -1113,35 +1113,48 @@ class _DetailInfoRow extends StatelessWidget {
     final items = <_DetailItem>[];
 
     if (profile.height != null) {
-      items.add(_DetailItem(icon: '📏', label: '${profile.height}cm'));
+      items.add(
+        _DetailItem(
+          icon: Icons.straighten_rounded,
+          label: '${profile.height}cm',
+        ),
+      );
     }
     if (profile.religion != null) {
       final label = ProfileOptions.keyToLabel(
         ProfileOptions.religions,
         profile.religion!,
       );
-      if (label != null) items.add(_DetailItem(icon: '🙏', label: label));
+      if (label != null) {
+        items.add(_DetailItem(icon: Icons.spa_rounded, label: label));
+      }
     }
     if (profile.smoking != null) {
       final label = ProfileOptions.keyToLabel(
         ProfileOptions.smokingOptions,
         profile.smoking!,
       );
-      if (label != null) items.add(_DetailItem(icon: '🚬', label: label));
+      if (label != null) {
+        items.add(_DetailItem(icon: Icons.smoke_free_rounded, label: label));
+      }
     }
     if (profile.drinking != null) {
       final label = ProfileOptions.keyToLabel(
         ProfileOptions.drinkingOptions,
         profile.drinking!,
       );
-      if (label != null) items.add(_DetailItem(icon: '🍺', label: label));
+      if (label != null) {
+        items.add(_DetailItem(icon: Icons.local_bar_rounded, label: label));
+      }
     }
     if (profile.education != null) {
       final label = ProfileOptions.keyToLabel(
         ProfileOptions.educationOptions,
         profile.education!,
       );
-      if (label != null) items.add(_DetailItem(icon: '🎓', label: label));
+      if (label != null) {
+        items.add(_DetailItem(icon: Icons.school_rounded, label: label));
+      }
     }
     // 직업: "카테고리 · 세부직업명" 형태로 표시 (카테고리만 있어도 표시)
     final catLabel = profile.jobCategory != null
@@ -1161,7 +1174,9 @@ class _DetailInfoRow extends StatelessWidget {
         profile.jobTitle!,
     ];
     if (jobParts.isNotEmpty) {
-      items.add(_DetailItem(icon: '💼', label: jobParts.join(' · ')));
+      items.add(
+        _DetailItem(icon: Icons.work_rounded, label: jobParts.join(' · ')),
+      );
     }
 
     return Wrap(
@@ -1175,13 +1190,13 @@ class _DetailInfoRow extends StatelessWidget {
 }
 
 class _DetailItem {
-  final String icon;
+  final IconData icon;
   final String label;
   const _DetailItem({required this.icon, required this.label});
 }
 
 class _DetailChip extends StatelessWidget {
-  final String icon;
+  final IconData icon;
   final String label;
   const _DetailChip({required this.icon, required this.label});
 
@@ -1191,14 +1206,14 @@ class _DetailChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 5),
+          Icon(icon, size: 14, color: AppColors.textSecondary),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             label,
             style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
@@ -1228,7 +1243,7 @@ class _TagWrap extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
                 border: Border.all(color: AppColors.border),
               ),
               child: Text(
@@ -1275,7 +1290,7 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color ?? AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.button),
       ),
       child: Text(
         label,

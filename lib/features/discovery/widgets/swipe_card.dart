@@ -43,13 +43,9 @@ class SwipeCardState extends State<SwipeCard>
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(
-            vsync: this,
-            duration: const Duration(milliseconds: 320),
-          )
-          ..addListener(_onTick)
-          ..addStatusListener(_onStatus);
+    _controller = AnimationController(vsync: this, duration: AppDurations.base)
+      ..addListener(_onTick)
+      ..addStatusListener(_onStatus);
   }
 
   @override
@@ -176,10 +172,7 @@ class SwipeCardState extends State<SwipeCard>
                   left: 20,
                   child: Opacity(
                     opacity: likeOpacity,
-                    child: _SwipeLabel(
-                      label: 'LIKE',
-                      color: const Color(0xFF4CAF50),
-                    ),
+                    child: _SwipeLabel(label: 'LIKE', color: AppColors.wood),
                   ),
                 ),
               if (passOpacity > 0)
@@ -201,7 +194,7 @@ class SwipeCardState extends State<SwipeCard>
                       opacity: superlikeOpacity,
                       child: const _SwipeLabel(
                         label: 'STAR',
-                        color: Color(0xFF4F8CFF),
+                        color: AppColors.water,
                       ),
                     ),
                   ),
@@ -227,7 +220,7 @@ class _SwipeLabel extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: color, width: 3),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

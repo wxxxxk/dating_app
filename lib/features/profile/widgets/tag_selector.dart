@@ -68,7 +68,7 @@ class TagSelector extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('최대 $maxSelection개까지 선택할 수 있어요'),
-          duration: const Duration(milliseconds: 1200),
+          duration: AppDurations.emphasis,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -101,11 +101,11 @@ class _TagChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: AppDurations.fast,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.chip),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.border,
             width: 1.2,
@@ -115,7 +115,7 @@ class _TagChip extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: isSelected ? AppColors.white : AppColors.textPrimary,
+            color: isSelected ? AppColors.surface : AppColors.textPrimary,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
         ),

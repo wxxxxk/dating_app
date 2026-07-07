@@ -210,27 +210,27 @@ class FortuneCalculator {
     if (ohaengRelation.kind == _OhaengRelationKind.generating && total >= 4) {
       return const CompatibilityHint(
         level: '상생',
-        emoji: '🌱',
+        emoji: '',
         shortLabel: '상생 흐름',
       );
     }
     if (total >= 4) {
       return const CompatibilityHint(
         level: '조화',
-        emoji: '✨',
+        emoji: '',
         shortLabel: '편안한 조화',
       );
     }
     if (ohaengRelation.kind == _OhaengRelationKind.controlling || total <= 2) {
       return const CompatibilityHint(
         level: '보완',
-        emoji: '🧩',
+        emoji: '',
         shortLabel: '서로 보완',
       );
     }
     return const CompatibilityHint(
       level: '균형',
-      emoji: '🌿',
+      emoji: '',
       shortLabel: '균형 있는 흐름',
     );
   }

@@ -177,10 +177,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       appBar: AppBar(
         title: Text(widget.linkToCurrentUser ? '전화번호 인증' : '인증코드 확인'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _loading ? null : () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       body: Stack(
@@ -192,7 +192,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Icon(
-                    Icons.sms_outlined,
+                    Icons.sms_rounded,
                     size: 56,
                     color: AppColors.primary,
                   ),
@@ -200,6 +200,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                   const Text(
                     '인증코드를 입력해주세요',
                     style: TextStyle(
+                      fontFamily: AppFonts.display,
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,

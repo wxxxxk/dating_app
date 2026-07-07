@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/chat/chat_service.dart';
@@ -113,7 +114,7 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.transparent,
+      barrierColor: AppColors.background.withValues(alpha: 0),
       pageBuilder: (ctx, _, _) => MatchCelebrationOverlay(
         match: match,
         currentUserPhotoUrl: widget.currentProfile?.photoUrls.isNotEmpty == true
@@ -327,13 +328,15 @@ class _ReceivedLikeTile extends StatelessWidget {
 
     final content = Card(
       elevation: 0,
-      color: like.isSuperlike ? const Color(0xFFEFF5FF) : AppColors.surface,
+      color: like.isSuperlike
+          ? AppColors.water.withValues(alpha: 0.08)
+          : AppColors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(
           color: like.isSuperlike
-              ? const Color(0xFF4F8CFF)
-              : Colors.transparent,
+              ? AppColors.water
+              : AppColors.background.withValues(alpha: 0),
           width: like.isSuperlike ? 1.2 : 0,
         ),
       ),
@@ -342,7 +345,7 @@ class _ReceivedLikeTile extends StatelessWidget {
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.button),
               child: SizedBox(
                 width: 74,
                 height: 88,
@@ -350,7 +353,7 @@ class _ReceivedLikeTile extends StatelessWidget {
                     ? const ColoredBox(
                         color: AppColors.border,
                         child: Icon(
-                          Icons.person,
+                          Icons.person_rounded,
                           color: AppColors.textSecondary,
                         ),
                       )
@@ -395,7 +398,7 @@ class _ReceivedLikeTile extends StatelessWidget {
                   if (profile.bio.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Text(
-                      profile.bio,
+                      stripEmoji(profile.bio),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -441,7 +444,7 @@ class _ReceivedLikeTile extends StatelessWidget {
     if (!locked) {
       return InkWell(
         onTap: onProfileTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         child: content,
       );
     }
@@ -455,8 +458,8 @@ class _ReceivedLikeTile extends StatelessWidget {
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(16),
+              color: AppColors.surface.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(AppRadius.card),
             ),
             child: const _LockedLikeBadge(),
           ),
@@ -487,7 +490,7 @@ class _UnlockLikesCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
       ),
       child: Row(
@@ -530,17 +533,17 @@ class _LockedLikeBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.textPrimary.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.lock_rounded, size: 15, color: Colors.white),
+          Icon(Icons.lock_rounded, size: 15, color: AppColors.surface),
           SizedBox(width: 6),
           Text(
             '잠금',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.surface,
               fontWeight: FontWeight.w900,
               fontSize: 12,
             ),
@@ -559,18 +562,18 @@ class _SuperlikeBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF4F8CFF).withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        color: AppColors.water.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, size: 14, color: Color(0xFF4F8CFF)),
+          Icon(Icons.star_rounded, size: 14, color: AppColors.water),
           SizedBox(width: 4),
           Text(
             '슈퍼라이크!',
             style: TextStyle(
-              color: Color(0xFF2563EB),
+              color: AppColors.water,
               fontSize: 12,
               fontWeight: FontWeight.w800,
               height: 1,

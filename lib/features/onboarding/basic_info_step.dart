@@ -16,7 +16,8 @@ class BasicInfoStep extends StatefulWidget {
     required DateTime birthDate,
     required String gender,
     required String bio,
-  }) onNext;
+  })
+  onNext;
 
   const BasicInfoStep({super.key, required this.onNext});
 
@@ -65,15 +66,15 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
   void _handleNext() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_birthDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('생년월일을 선택해주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('생년월일을 선택해주세요.')));
       return;
     }
     if (_gender == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('성별을 선택해주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('성별을 선택해주세요.')));
       return;
     }
     widget.onNext(
@@ -96,6 +97,7 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
             const Text(
               '기본 정보 입력',
               style: TextStyle(
+                fontFamily: AppFonts.display,
                 fontSize: 26,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -122,13 +124,12 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
                 labelText: '생년월일',
                 hintText: '날짜를 선택하세요',
                 suffixIcon: Icon(
-                  Icons.calendar_today_outlined,
+                  Icons.calendar_today_rounded,
                   size: 18,
                   color: AppColors.textSecondary,
                 ),
               ),
-              validator: (_) =>
-                  _birthDate == null ? '생년월일을 선택해주세요.' : null,
+              validator: (_) => _birthDate == null ? '생년월일을 선택해주세요.' : null,
             ),
             const SizedBox(height: 24),
 
@@ -153,8 +154,7 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
                 counterText: '',
               ),
               maxLength: 100,
-              validator: (v) =>
-                  Validators.required(v, fieldName: '한줄 소개'),
+              validator: (v) => Validators.required(v, fieldName: '한줄 소개'),
             ),
             const SizedBox(height: 40),
 
@@ -174,11 +174,7 @@ class _GenderSelector extends StatelessWidget {
   const _GenderSelector({required this.selected, required this.onChanged});
 
   // (key, label) 쌍. gender key는 AI 매칭 필터에 직접 사용되므로 변경하지 않는다.
-  static const _options = [
-    ('male', '남성'),
-    ('female', '여성'),
-    ('other', '기타'),
-  ];
+  static const _options = [('male', '남성'), ('female', '여성'), ('other', '기타')];
 
   @override
   Widget build(BuildContext context) {
@@ -193,12 +189,12 @@ class _GenderSelector extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onChanged(value),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
+                duration: AppDurations.fast,
                 alignment: Alignment.center,
                 height: 48,
                 decoration: BoxDecoration(
                   color: isSelected ? AppColors.primary : AppColors.surface,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.button),
                   border: Border.all(
                     color: isSelected ? AppColors.primary : AppColors.border,
                   ),
@@ -206,10 +202,12 @@ class _GenderSelector extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color:
-                        isSelected ? AppColors.white : AppColors.textPrimary,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected
+                        ? AppColors.surface
+                        : AppColors.textPrimary,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     fontSize: 14,
                   ),
                 ),

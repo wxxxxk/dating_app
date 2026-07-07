@@ -51,7 +51,7 @@ class JellyPurchaseService {
   /// 구매 영수증/토큰을 서버(Cloud Functions)로 보내 검증하고, 유효하면
   /// 서버가 admin SDK로 직접 젤리를 충전한 뒤 최신 잔액을 반환한다.
   ///
-  /// ⚠️ 서버 함수(verifyJellyPurchase)는 현재 스켈레톤이다 — 실제 App Store
+  /// 주의: 서버 함수(verifyJellyPurchase)는 현재 스켈레톤이다 — 실제 App Store
   /// Server API / Google Play Developer API 검증 없이 항상 성공 처리한다
   /// (functions/index.js 주석 참고). 스토어 등록 전까지는 이 경로 자체가
   /// kJellyMockPurchases=false일 때만 실행된다.
@@ -63,7 +63,9 @@ class JellyPurchaseService {
       'productId': purchase.productID,
       'purchaseToken': purchase.verificationData.serverVerificationData,
       'transactionId':
-          purchase.purchaseID ?? purchase.transactionDate ?? DateTime.now().microsecondsSinceEpoch.toString(),
+          purchase.purchaseID ??
+          purchase.transactionDate ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
     });
     final data = Map<String, dynamic>.from(result.data as Map);
     return (data['balance'] as num).toInt();

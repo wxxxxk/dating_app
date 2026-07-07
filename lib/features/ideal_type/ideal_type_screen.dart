@@ -222,9 +222,9 @@ class _IdealImageErrorCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.22)),
+        color: AppColors.error.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +233,7 @@ class _IdealImageErrorCard extends StatelessWidget {
             children: [
               Icon(
                 Icons.error_outline_rounded,
-                color: Colors.redAccent,
+                color: AppColors.error,
                 size: 20,
               ),
               SizedBox(width: 8),
@@ -283,7 +283,7 @@ class _SafetyNotice extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border.all(color: AppColors.border),
       ),
       child: const Row(
@@ -377,7 +377,7 @@ class _IdealTagSummary extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
       ),
       child: Text(
         '프로필 이상형: ${labels.join(' · ')}',
@@ -402,7 +402,7 @@ class _IdealImagePreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.button),
           child: AspectRatio(
             aspectRatio: 1,
             child: Stack(
@@ -419,14 +419,14 @@ class _IdealImagePreview extends StatelessWidget {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.58),
-                      borderRadius: BorderRadius.circular(8),
+                      color: AppColors.ink.withValues(alpha: 0.58),
+                      borderRadius: BorderRadius.circular(AppRadius.button),
                     ),
                     child: Text(
                       result.safetyLabel,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.surface,
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
@@ -468,7 +468,7 @@ class _EmptyPreview extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border.all(color: AppColors.border),
       ),
       child: const Text(

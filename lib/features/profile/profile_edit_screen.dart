@@ -92,15 +92,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final name = _nameController.text.trim();
     final bio = _bioController.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('이름을 입력해주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('이름을 입력해주세요.')));
       return;
     }
     if (bio.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('한줄 소개를 입력해주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('한줄 소개를 입력해주세요.')));
       return;
     }
 
@@ -133,9 +133,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('저장 중 오류가 발생했습니다: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('저장 중 오류가 발생했습니다: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -158,7 +158,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
       ),
       builder: (ctx) {
         return ConstrainedBox(
@@ -178,7 +180,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         height: 4,
                         decoration: BoxDecoration(
                           color: AppColors.border,
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(AppSpacing.xs),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -210,7 +212,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           ),
                         ),
                         trailing: isSelected
-                            ? const Icon(Icons.check, color: AppColors.primary)
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: AppColors.primary,
+                              )
                             : null,
                         onTap: () {
                           Navigator.pop(ctx);
@@ -250,7 +255,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     }
     final catLabel = _jobCategory != null
         ? ProfileOptions.keyToLabel(
-            ProfileOptions.jobCategoryOptions, _jobCategory!)
+            ProfileOptions.jobCategoryOptions,
+            _jobCategory!,
+          )
         : null;
     String? catName;
     if (catLabel != null) {
@@ -281,10 +288,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           appBar: AppBar(
             title: Text(title),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.pop(ctx),
             ),
-            backgroundColor: Colors.transparent,
+            backgroundColor: AppColors.background.withValues(alpha: 0),
             elevation: 0,
           ),
           body: SafeArea(
@@ -315,10 +322,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       appBar: AppBar(
         title: const Text('프로필 편집'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _isLoading ? null : () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       body: Stack(
@@ -338,7 +345,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 // 성별
                 const Text(
                   '성별',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 _GenderSelector(
@@ -378,7 +388,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
                 _EditPickerField(
                   label: '종교',
-                  value: ProfileOptions.keyToLabel(ProfileOptions.religions, _religion ?? ''),
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.religions,
+                    _religion ?? '',
+                  ),
                   onTap: () => _showPicker(
                     title: '종교',
                     options: ProfileOptions.religions,
@@ -388,7 +401,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
                 _EditPickerField(
                   label: '흡연',
-                  value: ProfileOptions.keyToLabel(ProfileOptions.smokingOptions, _smoking ?? ''),
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.smokingOptions,
+                    _smoking ?? '',
+                  ),
                   onTap: () => _showPicker(
                     title: '흡연',
                     options: ProfileOptions.smokingOptions,
@@ -398,7 +414,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
                 _EditPickerField(
                   label: '음주',
-                  value: ProfileOptions.keyToLabel(ProfileOptions.drinkingOptions, _drinking ?? ''),
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.drinkingOptions,
+                    _drinking ?? '',
+                  ),
                   onTap: () => _showPicker(
                     title: '음주',
                     options: ProfileOptions.drinkingOptions,
@@ -408,7 +427,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
                 _EditPickerField(
                   label: '최종학력',
-                  value: ProfileOptions.keyToLabel(ProfileOptions.educationOptions, _education ?? ''),
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.educationOptions,
+                    _education ?? '',
+                  ),
                   onTap: () => _showPicker(
                     title: '최종학력',
                     options: ProfileOptions.educationOptions,
@@ -439,7 +461,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       current: _interests,
                       onSaved: (keys) => setState(() => _interests = keys),
                     ),
-                    child: const Text('편집', style: TextStyle(color: AppColors.primary)),
+                    child: const Text(
+                      '편집',
+                      style: TextStyle(color: AppColors.primary),
+                    ),
                   ),
                 ),
                 if (_interests.isEmpty)
@@ -460,9 +485,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       subtitle: '나의 성격·스타일을 잘 나타내는 키워드를 골라보세요',
                       options: ProfileOptions.personalities,
                       current: _personalityTags,
-                      onSaved: (keys) => setState(() => _personalityTags = keys),
+                      onSaved: (keys) =>
+                          setState(() => _personalityTags = keys),
                     ),
-                    child: const Text('편집', style: TextStyle(color: AppColors.primary)),
+                    child: const Text(
+                      '편집',
+                      style: TextStyle(color: AppColors.primary),
+                    ),
                   ),
                 ),
                 if (_personalityTags.isEmpty)
@@ -485,7 +514,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       current: _idealTags,
                       onSaved: (keys) => setState(() => _idealTags = keys),
                     ),
-                    child: const Text('편집', style: TextStyle(color: AppColors.primary)),
+                    child: const Text(
+                      '편집',
+                      style: TextStyle(color: AppColors.primary),
+                    ),
                   ),
                 ),
                 if (_idealTags.isEmpty)
@@ -502,7 +534,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 _EditPickerField(
                   label: '어떤 인연을 찾나요?',
                   value: ProfileOptions.keyToLabel(
-                      ProfileOptions.relationshipGoals, _relationshipGoal ?? ''),
+                    ProfileOptions.relationshipGoals,
+                    _relationshipGoal ?? '',
+                  ),
                   onTap: () => _showPicker(
                     title: '찾는 관계',
                     options: ProfileOptions.relationshipGoals,
@@ -572,25 +606,34 @@ class _EditPickerField extends StatelessWidget {
     final hasValue = value != null && value!.isNotEmpty;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.button),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(
           children: [
             Text(
               label,
-              style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 15,
+                color: AppColors.textPrimary,
+              ),
             ),
             const Spacer(),
             Text(
               hasValue ? value! : '선택',
               style: TextStyle(
                 fontSize: 15,
-                color: hasValue ? AppColors.textPrimary : AppColors.textSecondary,
+                color: hasValue
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: AppColors.textSecondary,
+            ),
           ],
         ),
       ),
@@ -617,7 +660,7 @@ class _TagChipDisplay extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
                 border: Border.all(
                   color: AppColors.primary.withValues(alpha: 0.3),
                 ),
@@ -656,11 +699,7 @@ class _GenderSelector extends StatelessWidget {
 
   const _GenderSelector({required this.selected, required this.onChanged});
 
-  static const _options = [
-    ('male', '남성'),
-    ('female', '여성'),
-    ('other', '기타'),
-  ];
+  static const _options = [('male', '남성'), ('female', '여성'), ('other', '기타')];
 
   @override
   Widget build(BuildContext context) {
@@ -675,12 +714,12 @@ class _GenderSelector extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onChanged(value),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
+                duration: AppDurations.fast,
                 alignment: Alignment.center,
                 height: 44,
                 decoration: BoxDecoration(
                   color: isSelected ? AppColors.primary : AppColors.surface,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.button),
                   border: Border.all(
                     color: isSelected ? AppColors.primary : AppColors.border,
                   ),
@@ -688,8 +727,12 @@ class _GenderSelector extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: isSelected ? AppColors.white : AppColors.textPrimary,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected
+                        ? AppColors.surface
+                        : AppColors.textPrimary,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                     fontSize: 14,
                   ),
                 ),

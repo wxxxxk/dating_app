@@ -58,7 +58,7 @@ class BlockedUsersScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.card),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Row(
@@ -71,7 +71,7 @@ class BlockedUsersScreen extends StatelessWidget {
                           : null,
                       child: photoUrl == null
                           ? const Icon(
-                              Icons.person,
+                              Icons.person_rounded,
                               color: AppColors.textSecondary,
                             )
                           : null,

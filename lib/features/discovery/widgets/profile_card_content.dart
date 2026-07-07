@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/profile_options.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/text_sanitizer.dart';
 import '../../../models/user_profile.dart';
 import '../../../services/fortune/fortune_calculator.dart';
 import '../../../services/location/location_service.dart';
@@ -64,7 +65,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -91,7 +92,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
       return Container(
         color: AppColors.surface,
         child: const Icon(
-          Icons.person,
+          Icons.person_rounded,
           size: 80,
           color: AppColors.textSecondary,
         ),
@@ -106,7 +107,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
       errorBuilder: (_, _, _) => Container(
         color: AppColors.surface,
         child: const Icon(
-          Icons.person,
+          Icons.person_rounded,
           size: 80,
           color: AppColors.textSecondary,
         ),
@@ -121,13 +122,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
       right: 0,
       height: 280,
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [Colors.black.withValues(alpha: 0.82), Colors.transparent],
-          ),
-        ),
+        decoration: BoxDecoration(color: AppColors.ink.withValues(alpha: 0.62)),
       ),
     );
   }
@@ -172,7 +167,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
                     child: Text(
                       '${profile.displayName}, ${profile.age}',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.surface,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 0.2,
@@ -213,9 +208,9 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
               if (profile.bio.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  profile.bio,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  stripEmoji(profile.bio),
+                  style: TextStyle(
+                    color: AppColors.surface.withValues(alpha: 0.7),
                     fontSize: 13,
                     height: 1.45,
                   ),
@@ -249,7 +244,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
             profile.jobCategory!,
           )
         : null;
-    // 이모지 접두어 제거 (예: '🌐 IT 업계' → 'IT 업계')
+    // 표시용 접두어가 들어오면 본문만 사용한다.
     final catName = catLabel != null && catLabel.contains(' ')
         ? catLabel.substring(catLabel.indexOf(' ') + 1)
         : catLabel;
@@ -259,12 +254,19 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
 
     return Row(
       children: [
-        const Icon(Icons.work_outline, size: 13, color: Colors.white60),
+        Icon(
+          Icons.work_rounded,
+          size: 13,
+          color: AppColors.surface.withValues(alpha: 0.6),
+        ),
         const SizedBox(width: 4),
         Flexible(
           child: Text(
             parts.join(' · '),
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(
+              color: AppColors.surface.withValues(alpha: 0.7),
+              fontSize: 13,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -327,12 +329,14 @@ class _PhotoSegmentIndicator extends StatelessWidget {
                 height: 3,
                 margin: EdgeInsets.only(right: index == count - 1 ? 0 : 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: active ? 0.95 : 0.36),
-                  borderRadius: BorderRadius.circular(999),
+                  color: AppColors.surface.withValues(
+                    alpha: active ? 0.95 : 0.36,
+                  ),
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
                   boxShadow: active
                       ? [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.22),
+                            color: AppColors.ink.withValues(alpha: 0.22),
                             blurRadius: 3,
                           ),
                         ]
@@ -356,14 +360,17 @@ class _DistanceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.26),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white30, width: 0.5),
+        color: AppColors.ink.withValues(alpha: 0.26),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(
+          color: AppColors.surface.withValues(alpha: 0.3),
+          width: 0.5,
+        ),
       ),
       child: Text(
-        '🔥 $label',
+        label,
         style: const TextStyle(
-          color: Colors.white,
+          color: AppColors.surface,
           fontSize: 12,
           fontWeight: FontWeight.w700,
           height: 1,
@@ -383,16 +390,16 @@ class _CompatibilityChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.26),
+          color: AppColors.surface.withValues(alpha: 0.26),
           width: 0.6,
         ),
       ),
       child: Text(
-        '${hint.emoji} ${hint.shortLabel}',
+        hint.shortLabel,
         style: const TextStyle(
-          color: Colors.white,
+          color: AppColors.surface,
           fontSize: 12,
           fontWeight: FontWeight.w700,
           height: 1,
@@ -411,14 +418,17 @@ class _MbtiChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.22),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white30, width: 0.5),
+        color: AppColors.surface.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        border: Border.all(
+          color: AppColors.surface.withValues(alpha: 0.3),
+          width: 0.5,
+        ),
       ),
       child: Text(
         mbti,
         style: const TextStyle(
-          color: Colors.white,
+          color: AppColors.surface,
           fontSize: 12,
           fontWeight: FontWeight.w600,
         ),
@@ -436,13 +446,20 @@ class _TagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white24, width: 0.5),
+        color: AppColors.surface.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(AppRadius.button),
+        border: Border.all(
+          color: AppColors.surface.withValues(alpha: 0.24),
+          width: 0.5,
+        ),
       ),
       child: Text(
         label,
-        style: const TextStyle(color: Colors.white, fontSize: 12, height: 1),
+        style: const TextStyle(
+          color: AppColors.surface,
+          fontSize: 12,
+          height: 1,
+        ),
       ),
     );
   }

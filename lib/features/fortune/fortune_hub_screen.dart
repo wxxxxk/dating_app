@@ -195,7 +195,7 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline,
+                Icons.error_outline_rounded,
                 size: 48,
                 color: AppColors.textSecondary,
               ),
@@ -268,12 +268,8 @@ class _DailyFortuneCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFF4E6A), Color(0xFFFF8E53)],
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.seal,
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,9 +279,9 @@ class _DailyFortuneCard extends StatelessWidget {
             children: [
               Text(
                 '$dateLabel의 애정운',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: Colors.white70,
+                  color: AppColors.surface.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -297,7 +293,7 @@ class _DailyFortuneCard extends StatelessWidget {
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
                     size: 16,
-                    color: Colors.white,
+                    color: AppColors.surface,
                   );
                 }),
               ),
@@ -307,17 +303,19 @@ class _DailyFortuneCard extends StatelessWidget {
           Text(
             daily.mood,
             style: const TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.surface,
             ),
           ),
           const SizedBox(height: 10),
           Text(
             daily.message,
             style: const TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 15,
-              color: Colors.white,
+              color: AppColors.surface,
               height: 1.6,
             ),
           ),
@@ -326,20 +324,24 @@ class _DailyFortuneCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.surface.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(AppRadius.button),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('💡', style: TextStyle(fontSize: 15)),
+                const Icon(
+                  Icons.tips_and_updates_rounded,
+                  size: 16,
+                  color: AppColors.surface,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     daily.advice,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Colors.white,
+                      color: AppColors.surface,
                       height: 1.4,
                     ),
                   ),
@@ -362,13 +364,13 @@ class _HistoryEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
         ),
         child: const Row(
@@ -415,13 +417,13 @@ class _IdealTypeEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
             color: AppColors.secondary.withValues(alpha: 0.14),
           ),
@@ -481,17 +483,21 @@ class _MyFortuneSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.card),
         ),
         child: Row(
           children: [
-            const Text('🔮', style: TextStyle(fontSize: 28)),
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 28,
+              color: AppColors.secondary,
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -575,7 +581,7 @@ class _MatchFortuneSection extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.card),
             ),
             child: const Text(
               '매칭된 상대와 궁합을 볼 수 있어요',
@@ -610,7 +616,9 @@ class _MatchFortuneTile extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.button),
+      ),
       elevation: 0,
       color: AppColors.surface,
       child: ListTile(
@@ -620,7 +628,7 @@ class _MatchFortuneTile extends StatelessWidget {
           backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
           backgroundColor: AppColors.border,
           child: photoUrl == null
-              ? const Icon(Icons.person, color: AppColors.textSecondary)
+              ? const Icon(Icons.person_rounded, color: AppColors.textSecondary)
               : null,
         ),
         title: Text(

@@ -45,6 +45,7 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
           const Text(
             '어떤 인연을 찾고 있나요?',
             style: TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 26,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
@@ -69,15 +70,16 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
               child: GestureDetector(
                 onTap: () => setState(() => _selected = opt.key),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
+                  duration: AppDurations.fast,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 18,
+                    horizontal: AppSpacing.xl,
+                    vertical: AppSpacing.lg,
                   ),
                   decoration: BoxDecoration(
-                    color:
-                        isSelected ? AppColors.primary.withValues(alpha: 0.08) : AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
+                    color: isSelected
+                        ? AppColors.primary.withValues(alpha: 0.08)
+                        : AppColors.surface,
+                    borderRadius: BorderRadius.circular(AppRadius.button),
                     border: Border.all(
                       color: isSelected ? AppColors.primary : AppColors.border,
                       width: isSelected ? 1.8 : 1,
@@ -100,8 +102,11 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
                         ),
                       ),
                       if (isSelected)
-                        const Icon(Icons.check_circle,
-                            color: AppColors.primary, size: 22),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
                     ],
                   ),
                 ),

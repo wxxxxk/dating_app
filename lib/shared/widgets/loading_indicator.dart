@@ -22,7 +22,7 @@ class LoadingIndicator extends StatelessWidget {
 
     // 처리 중 사용자가 버튼을 또 누르지 못하도록 화면을 덮는다.
     return Container(
-      color: Colors.black.withValues(alpha: 0.15),
+      color: AppColors.ink.withValues(alpha: 0.15),
       child: spinner,
     );
   }

@@ -234,12 +234,12 @@ class _ReceivedLikesEntry extends StatelessWidget {
         final count = snap.data?.length ?? 0;
         return InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.card),
               border: Border.all(
                 color: AppColors.primary.withValues(alpha: 0.14),
               ),
@@ -322,7 +322,7 @@ class _EmptyMatchesInline extends StatelessWidget {
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: const Text(
         '아직 매칭이 없어요\n둘러보기에서 마음에 드는 분께 Like를 보내보세요!',
@@ -360,7 +360,9 @@ class _MatchTile extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
       elevation: 0,
       color: AppColors.surface,
       child: ListTile(
@@ -518,7 +520,7 @@ class _UnreadBadge extends StatelessWidget {
       child: const Text(
         '1',
         style: TextStyle(
-          color: Colors.white,
+          color: AppColors.surface,
           fontSize: 11,
           fontWeight: FontWeight.w800,
           height: 1,
@@ -539,7 +541,7 @@ class _Avatar extends StatelessWidget {
       backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
       backgroundColor: AppColors.border,
       child: photoUrl == null
-          ? const Icon(Icons.person, color: AppColors.textSecondary)
+          ? const Icon(Icons.person_rounded, color: AppColors.textSecondary)
           : null,
     );
   }

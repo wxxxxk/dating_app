@@ -8,11 +8,11 @@ import '../../../services/fortune/fortune_calculator.dart';
 /// 오행 각 축의 전통 색상. 가독성을 위해 일부 조정했다
 /// (금=흰색 → 회색, 수=검정 → 남색 — 흰/검정은 밝은 배경에서 대비가 부족하다).
 const Map<String, Color> ohaengColors = {
-  '목': Color(0xFF2E7D32),
-  '화': Color(0xFFD32F2F),
-  '토': Color(0xFFB07D2A),
-  '금': Color(0xFF6E6E73),
-  '수': Color(0xFF283593),
+  '목': AppColors.wood,
+  '화': AppColors.fire,
+  '토': AppColors.earth,
+  '금': AppColors.metal,
+  '수': AppColors.water,
 };
 
 /// 오행 밸런스를 오각형(펜타곤) 레이더 차트로 그리는 위젯.
@@ -42,11 +42,11 @@ class _OhaengRadarChartState extends State<OhaengRadarChart>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: AppDurations.emphasis,
     );
     _animation = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: AppCurves.standard,
     );
     _controller.forward();
   }
@@ -193,14 +193,9 @@ class _OhaengRadarPainter extends CustomPainter {
 
     final path = Path()..addPolygon(points, true);
 
-    // 반투명 그라데이션 채우기.
     final fillPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          AppColors.primary.withValues(alpha: 0.35),
-          AppColors.secondary.withValues(alpha: 0.12),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: maxRadius));
+      ..color = AppColors.seal.withValues(alpha: 0.18)
+      ..style = PaintingStyle.fill;
     canvas.drawPath(path, fillPaint);
 
     // 은은한 글로우(흐린 외곽선).
@@ -231,7 +226,7 @@ class _OhaengRadarPainter extends CustomPainter {
         points[i],
         4.5,
         Paint()
-          ..color = Colors.white
+          ..color = AppColors.surface
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5,
       );

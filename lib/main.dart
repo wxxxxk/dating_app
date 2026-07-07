@@ -3,7 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'app.dart';
-// ⚠️ 연결 필요: 이 파일은 `flutterfire configure` 명령으로 생성된다.
+// 연결 필요: 이 파일은 `flutterfire configure` 명령으로 생성된다.
 //   - 지금 저장소에는 자리표시자(placeholder)만 들어 있어 실제 실행은 되지 않는다.
 //   - 본인이 직접 `flutterfire configure`를 실행하면 이 파일이 실제 값으로 덮어쓰인다.
 //   - 보안상 firebase_options.dart는 .gitignore에 추가하는 것을 권장한다(파일 내 주석 참고).

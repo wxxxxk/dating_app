@@ -225,10 +225,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     required String currentUid,
     required String targetUid,
   }) async {
-    for (final delay in [
-      const Duration(milliseconds: 1500),
-      const Duration(seconds: 2),
-    ]) {
+    for (final delay in [AppDurations.emphasis, const Duration(seconds: 2)]) {
       await Future.delayed(delay);
       if (!mounted) return;
       final result = await widget.matchesService.checkForMatch(
@@ -249,7 +246,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.transparent,
+      barrierColor: AppColors.ink.withValues(alpha: 0),
       pageBuilder: (ctx, _, _) => MatchCelebrationOverlay(
         match: match,
         currentUserPhotoUrl: _currentUserPhotoUrl,
@@ -580,8 +577,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           IconButton(
             icon: Icon(
               _filter.hasActiveFilters
-                  ? Icons.filter_alt
-                  : Icons.filter_alt_outlined,
+                  ? Icons.filter_alt_rounded
+                  : Icons.filter_alt_rounded,
             ),
             tooltip: '필터',
             onPressed: _loading ? null : _openFilterSheet,
@@ -594,7 +591,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                 value: 'refresh',
                 child: Row(
                   children: [
-                    Icon(Icons.refresh_outlined, size: 20),
+                    Icon(Icons.refresh_rounded, size: 20),
                     SizedBox(width: 10),
                     Text('새로고침'),
                   ],
@@ -606,7 +603,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                   value: 'dummies',
                   child: Row(
                     children: [
-                      Icon(Icons.person_add_outlined, size: 20),
+                      Icon(Icons.person_add_rounded, size: 20),
                       SizedBox(width: 10),
                       Text('더미 유저 생성'),
                     ],
@@ -728,14 +725,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           // 추후 결제/일일제한 연동: 지금은 발표용으로 무제한 허용한다.
           _ActionButton(
             icon: Icons.star_rounded,
-            color: const Color(0xFF4F8CFF),
+            color: AppColors.water,
             size: 60,
             onPressed: () => _handleButtonSwipe('superlike'),
           ),
           // LIKE 버튼
           _ActionButton(
             icon: Icons.favorite_rounded,
-            color: const Color(0xFF4CAF50),
+            color: AppColors.wood,
             size: 64,
             onPressed: () => _handleButtonSwipe('like'),
           ),
@@ -752,7 +749,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.search_off_outlined,
+              Icons.search_off_rounded,
               size: 72,
               color: AppColors.textSecondary,
             ),
@@ -788,7 +785,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             ],
             FilledButton.icon(
               onPressed: _loadDiscovery,
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh_rounded),
               label: const Text('새로고침'),
               style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
             ),
@@ -806,7 +803,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.wifi_off_outlined,
+              Icons.wifi_off_rounded,
               size: 56,
               color: AppColors.textSecondary,
             ),
@@ -862,7 +859,7 @@ class _ActionButton extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
+              color: AppColors.ink.withValues(alpha: 0.1),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -894,10 +891,10 @@ class _SafetyMenuButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.28),
+      color: AppColors.ink.withValues(alpha: 0.28),
       shape: const CircleBorder(),
       child: PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+        icon: const Icon(Icons.more_vert_rounded, color: AppColors.surface),
         tooltip: '안전 메뉴',
         color: AppColors.background,
         onSelected: (value) {

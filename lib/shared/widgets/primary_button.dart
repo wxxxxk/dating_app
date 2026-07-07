@@ -30,10 +30,7 @@ class PrimaryButton extends StatelessWidget {
     final content = Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (icon != null) ...[
-          icon!,
-          const SizedBox(width: 8),
-        ],
+        if (icon != null) ...[icon!, const SizedBox(width: 8)],
         Text(
           label,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -52,7 +49,7 @@ class PrimaryButton extends StatelessWidget {
                 foregroundColor: AppColors.textPrimary,
                 side: const BorderSide(color: AppColors.border),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.button),
                 ),
               ),
               child: content,
@@ -61,10 +58,10 @@ class PrimaryButton extends StatelessWidget {
               onPressed: onPressed,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.white,
+                foregroundColor: AppColors.surface,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppRadius.button),
                 ),
               ),
               child: content,

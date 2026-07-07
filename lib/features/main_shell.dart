@@ -171,8 +171,8 @@ class _MainShellState extends State<MainShell> {
         unselectedLabelStyle: const TextStyle(fontSize: 11),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
-            activeIcon: Icon(Icons.explore),
+            icon: Icon(Icons.explore_rounded),
+            activeIcon: Icon(Icons.explore_rounded),
             label: '둘러보기',
           ),
           BottomNavigationBarItem(
@@ -181,13 +181,13 @@ class _MainShellState extends State<MainShell> {
             label: '매칭',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.auto_awesome_outlined),
+            icon: Icon(Icons.auto_awesome_rounded),
             activeIcon: Icon(Icons.auto_awesome_rounded),
             label: '사주',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
+            icon: Icon(Icons.person_rounded),
+            activeIcon: Icon(Icons.person_rounded),
             label: '내 프로필',
           ),
         ],

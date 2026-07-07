@@ -99,16 +99,16 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
                 const SizedBox(height: 8),
                 const Text(
                   '나를 잘 표현하는 사진을 선택해주세요',
-                  style: TextStyle(fontSize: 15, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: AppColors.textSecondary,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
 
                 // ── 메인 사진 (대형 슬롯) ──────────────────────────────────
-                _MainPhotoSlot(
-                  image: widget.mainImage,
-                  onTap: _pickMainImage,
-                ),
+                _MainPhotoSlot(image: widget.mainImage, onTap: _pickMainImage),
                 const SizedBox(height: 20),
 
                 // ── 일상 사진 (소형 슬롯 3개) ─────────────────────────────
@@ -183,21 +183,21 @@ class _MainPhotoSlot extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(color: AppColors.border),
             image: image != null
-                ? DecorationImage(
-                    image: FileImage(image!),
-                    fit: BoxFit.cover,
-                  )
+                ? DecorationImage(image: FileImage(image!), fit: BoxFit.cover)
                 : null,
           ),
           child: image == null
               ? const Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.add_a_photo_outlined,
-                        size: 44, color: AppColors.textSecondary),
+                    Icon(
+                      Icons.add_a_photo_rounded,
+                      size: 44,
+                      color: AppColors.textSecondary,
+                    ),
                     SizedBox(height: 10),
                     Text(
                       '메인 사진 선택 (필수)',
@@ -245,7 +245,7 @@ class _SubPhotoSlot extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.button),
                 border: Border.all(
                   color: image != null ? AppColors.primary : AppColors.border,
                   width: image != null ? 1.5 : 1,
@@ -258,7 +258,11 @@ class _SubPhotoSlot extends StatelessWidget {
                     : null,
               ),
               child: image == null
-                  ? const Icon(Icons.add, size: 28, color: AppColors.textSecondary)
+                  ? const Icon(
+                      Icons.add_rounded,
+                      size: 28,
+                      color: AppColors.textSecondary,
+                    )
                   : null,
             ),
             // 삭제 버튼 (오른쪽 상단)
@@ -271,11 +275,15 @@ class _SubPhotoSlot extends StatelessWidget {
                   child: Container(
                     width: 22,
                     height: 22,
-                    decoration: const BoxDecoration(
-                      color: Colors.black54,
+                    decoration: BoxDecoration(
+                      color: AppColors.ink.withValues(alpha: 0.54),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close, size: 14, color: Colors.white),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 14,
+                      color: AppColors.surface,
+                    ),
                   ),
                 ),
               ),
@@ -298,15 +306,18 @@ class _EditBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(12),
+          color: AppColors.ink.withValues(alpha: 0.54),
+          borderRadius: BorderRadius.circular(AppRadius.button),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.edit, size: 13, color: Colors.white),
+            Icon(Icons.edit_rounded, size: 13, color: AppColors.surface),
             SizedBox(width: 4),
-            Text('변경', style: TextStyle(fontSize: 12, color: Colors.white)),
+            Text(
+              '변경',
+              style: TextStyle(fontSize: 12, color: AppColors.surface),
+            ),
           ],
         ),
       ),

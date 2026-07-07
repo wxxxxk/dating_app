@@ -71,10 +71,7 @@ class _SignupScreenState extends State<SignupScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -84,10 +81,10 @@ class _SignupScreenState extends State<SignupScreen> {
       appBar: AppBar(
         title: const Text('회원가입'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _loading ? null : () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       body: Stack(
@@ -103,6 +100,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     const Text(
                       '새 계정을 만들어보세요',
                       style: TextStyle(
+                        fontFamily: AppFonts.display,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -127,7 +125,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       decoration: const InputDecoration(
                         labelText: '이메일',
                         hintText: 'example@email.com',
-                        prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: Icon(Icons.email_rounded),
                       ),
                       validator: Validators.email,
                     ),
@@ -141,15 +139,16 @@ class _SignupScreenState extends State<SignupScreen> {
                       decoration: InputDecoration(
                         labelText: '비밀번호',
                         hintText: '6자 이상 입력해주세요',
-                        prefixIcon: const Icon(Icons.lock_outline),
+                        prefixIcon: const Icon(Icons.lock_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
                           ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       validator: Validators.password,
@@ -164,15 +163,16 @@ class _SignupScreenState extends State<SignupScreen> {
                       onFieldSubmitted: (_) => _handleSignUp(),
                       decoration: InputDecoration(
                         labelText: '비밀번호 확인',
-                        prefixIcon: const Icon(Icons.lock_outline),
+                        prefixIcon: const Icon(Icons.lock_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscureConfirm
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
                           ),
                           onPressed: () => setState(
-                              () => _obscureConfirm = !_obscureConfirm),
+                            () => _obscureConfirm = !_obscureConfirm,
+                          ),
                         ),
                       ),
                       validator: (v) {

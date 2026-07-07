@@ -62,10 +62,10 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
       appBar: AppBar(
         title: const Text('비밀번호 재설정'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       body: Stack(
@@ -93,6 +93,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
           const Text(
             '비밀번호를 잊으셨나요?',
             style: TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
@@ -117,7 +118,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
             decoration: const InputDecoration(
               labelText: '이메일',
               hintText: 'example@email.com',
-              prefixIcon: Icon(Icons.email_outlined),
+              prefixIcon: Icon(Icons.email_rounded),
             ),
             validator: Validators.email,
           ),
@@ -138,13 +139,17 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Spacer(flex: 2),
-        const Icon(Icons.check_circle_outline,
-            size: 72, color: AppColors.primary),
+        const Icon(
+          Icons.check_circle_outline_rounded,
+          size: 72,
+          color: AppColors.primary,
+        ),
         const SizedBox(height: 24),
         const Text(
           '재설정 메일을 보냈어요',
           textAlign: TextAlign.center,
           style: TextStyle(
+            fontFamily: AppFonts.display,
             fontSize: 22,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,

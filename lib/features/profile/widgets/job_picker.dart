@@ -38,10 +38,10 @@ class _JobCategoryPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('직업'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       body: Column(
@@ -63,7 +63,10 @@ class _JobCategoryPage extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   '카테고리를 선택하면 세부 직업명을 입력할 수 있어요',
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -82,34 +85,36 @@ class _JobCategoryPage extends StatelessWidget {
                       color: isSelected
                           ? AppColors.primary
                           : AppColors.textPrimary,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                     ),
                   ),
                   trailing: isSelected
-                      ? const Icon(Icons.check, color: AppColors.primary)
-                      : const Icon(Icons.chevron_right,
-                          color: AppColors.textSecondary, size: 20),
+                      ? const Icon(
+                          Icons.check_rounded,
+                          color: AppColors.primary,
+                        )
+                      : const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.textSecondary,
+                          size: 20,
+                        ),
                   onTap: () async {
-                    final title =
-                        await Navigator.push<String>(
+                    final title = await Navigator.push<String>(
                       ctx,
                       MaterialPageRoute(
                         builder: (_) => _JobTitlePage(
                           categoryKey: opt.key,
                           categoryLabel: opt.label,
                           // 카테고리가 바뀌면 기존 직업명 초기화
-                          initialTitle:
-                              isSelected ? initialTitle : null,
+                          initialTitle: isSelected ? initialTitle : null,
                         ),
                       ),
                     );
                     if (title != null && ctx.mounted) {
                       // 선택 완료: 카테고리+직업명을 들고 카테고리 페이지도 닫는다
-                      Navigator.pop(
-                        ctx,
-                        (categoryKey: opt.key, title: title),
-                      );
+                      Navigator.pop(ctx, (categoryKey: opt.key, title: title));
                     }
                   },
                 );
@@ -162,7 +167,7 @@ class _JobTitlePageState extends State<_JobTitlePage> {
 
   @override
   Widget build(BuildContext context) {
-    // 카테고리 라벨에서 앞의 이모지+공백 제거 (예: '🎒 학생' → '학생')
+    // 카테고리 라벨에서 앞의 장식 문자열과 공백을 제거한다.
     final label = widget.categoryLabel;
     final spaceIdx = label.indexOf(' ');
     final categoryName = spaceIdx != -1 ? label.substring(spaceIdx + 1) : label;
@@ -172,10 +177,10 @@ class _JobTitlePageState extends State<_JobTitlePage> {
       appBar: AppBar(
         title: const Text('직업명'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       // SingleChildScrollView로 감싸서 키보드가 올라올 때 콘텐츠가 밀리지 않게
@@ -186,11 +191,10 @@ class _JobTitlePageState extends State<_JobTitlePage> {
           children: [
             // 선택된 카테고리 뱃지
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
               ),
               child: Text(
                 categoryName,
@@ -213,10 +217,7 @@ class _JobTitlePageState extends State<_JobTitlePage> {
             const SizedBox(height: 4),
             const Text(
               '구체적인 직업명을 입력해주세요',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-              ),
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 28),
             TextField(

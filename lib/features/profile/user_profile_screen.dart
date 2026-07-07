@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/text_sanitizer.dart';
 import '../../models/profile_insight_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
@@ -231,7 +232,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   if (_profile.bio.isNotEmpty) ...[
                     const SizedBox(height: 18),
                     Text(
-                      _profile.bio,
+                      stripEmoji(_profile.bio),
                       style: const TextStyle(
                         fontSize: 15,
                         height: 1.55,
@@ -319,21 +320,25 @@ class _ProfileInsightSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _InsightItem(
-                icon: '😊',
+                icon: Icons.auto_awesome_rounded,
                 label: '첫인상',
                 text: insight.firstImpression,
               ),
               const SizedBox(height: 14),
               _InsightItem(
-                icon: '💬',
+                icon: Icons.chat_bubble_rounded,
                 label: '대화 스타일',
                 text: insight.conversationStyle,
               ),
               const SizedBox(height: 14),
-              _InsightItem(icon: '🌿', label: '분위기', text: insight.atmosphere),
+              _InsightItem(
+                icon: Icons.spa_rounded,
+                label: '분위기',
+                text: insight.atmosphere,
+              ),
               const SizedBox(height: 14),
               _InsightItem(
-                icon: '❤️',
+                icon: Icons.favorite_rounded,
                 label: '잘 맞는 사람',
                 text: insight.goodMatchType,
               ),
@@ -359,7 +364,7 @@ class _ProfileInsightShell extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: AppColors.border),
         ),
         child: Column(
@@ -386,7 +391,7 @@ class _ProfileInsightHeader extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: AppColors.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(AppRadius.chip),
           ),
           child: const Text(
             'AI PROFILE INSIGHT',
@@ -452,7 +457,7 @@ class _ProfileInsightError extends StatelessWidget {
 }
 
 class _InsightItem extends StatelessWidget {
-  final String icon;
+  final IconData icon;
   final String label;
   final String text;
 
@@ -469,11 +474,7 @@ class _InsightItem extends StatelessWidget {
       children: [
         SizedBox(
           width: 24,
-          child: Text(
-            icon,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16),
-          ),
+          child: Icon(icon, size: 17, color: AppColors.primary),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -544,8 +545,8 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
   void _showPrevious() {
     if (widget.photoUrls.length <= 1 || _index == 0) return;
     _controller.previousPage(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
+      duration: AppDurations.base,
+      curve: AppCurves.standard,
     );
   }
 
@@ -554,8 +555,8 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
       return;
     }
     _controller.nextPage(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
+      duration: AppDurations.base,
+      curve: AppCurves.standard,
     );
   }
 
@@ -567,7 +568,7 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
         height: 420,
         color: AppColors.surface,
         child: const Icon(
-          Icons.person,
+          Icons.person_rounded,
           size: 90,
           color: AppColors.textSecondary,
         ),
@@ -587,7 +588,10 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const ColoredBox(
                 color: AppColors.surface,
-                child: Icon(Icons.person, color: AppColors.textSecondary),
+                child: Icon(
+                  Icons.person_rounded,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
           ),
@@ -656,12 +660,14 @@ class _PhotoSegmentIndicator extends StatelessWidget {
               height: 3,
               margin: EdgeInsets.only(right: index == count - 1 ? 0 : 4),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: active ? 0.95 : 0.34),
-                borderRadius: BorderRadius.circular(999),
+                color: AppColors.surface.withValues(
+                  alpha: active ? 0.95 : 0.34,
+                ),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
+                          color: AppColors.ink.withValues(alpha: 0.2),
                           blurRadius: 3,
                         ),
                       ]
@@ -813,7 +819,7 @@ class _InfoPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
       ),
       child: Text(
         '$label · $value',
@@ -834,7 +840,7 @@ class _TagChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Text(
         label,
@@ -861,7 +867,7 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Text(
         label,

@@ -22,7 +22,7 @@ class VerificationBadges extends StatelessWidget {
   Widget build(BuildContext context) {
     final badges = [
       _VerificationBadgeData(
-        icon: Icons.mark_email_read_outlined,
+        icon: Icons.mark_email_read_rounded,
         label: '이메일',
         verified: verifications.email,
       ),
@@ -32,7 +32,7 @@ class VerificationBadges extends StatelessWidget {
         verified: verifications.phone,
       ),
       _VerificationBadgeData(
-        icon: Icons.photo_camera_front_outlined,
+        icon: Icons.photo_camera_front_rounded,
         label: '사진',
         verified: verifications.photo,
       ),
@@ -64,18 +64,18 @@ class _VerificationBadge extends StatelessWidget {
     final dark = brightness == Brightness.dark;
     final bgColor = verified
         ? (dark
-              ? Colors.white.withValues(alpha: 0.2)
+              ? AppColors.surface.withValues(alpha: 0.2)
               : AppColors.primary.withValues(alpha: 0.1))
         : AppColors.surface;
     final fgColor = verified
-        ? (dark ? Colors.white : AppColors.primary)
+        ? (dark ? AppColors.surface : AppColors.primary)
         : AppColors.textSecondary;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(
           color: verified ? fgColor.withValues(alpha: 0.24) : AppColors.border,
           width: 0.7,

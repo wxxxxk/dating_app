@@ -1,4 +1,6 @@
-/// GPT가 생성한 서사 속 개별 근거 항목 (이모지 + 한 줄 설명).
+import '../core/utils/text_sanitizer.dart';
+
+/// GPT가 생성한 서사 속 개별 근거 항목.
 class FortuneReason {
   final String icon;
   final String text;
@@ -6,8 +8,8 @@ class FortuneReason {
 
   factory FortuneReason.fromMap(Map<String, dynamic> map) {
     return FortuneReason(
-      icon: map['icon'] as String? ?? '✨',
-      text: map['text'] as String? ?? '',
+      icon: _stripDecorativeSymbols(map['icon'] as String? ?? ''),
+      text: _stripDecorativeSymbols(map['text'] as String? ?? ''),
     );
   }
 }
@@ -32,17 +34,23 @@ class FortuneNarrative {
   factory FortuneNarrative.fromMap(Map<String, dynamic> map) {
     final rawReasons = map['reasons'] as List<dynamic>? ?? [];
     return FortuneNarrative(
-      characterType: map['characterType'] as String? ?? '',
-      summary: map['summary'] as String? ?? '',
+      characterType: _stripDecorativeSymbols(
+        map['characterType'] as String? ?? '',
+      ),
+      summary: _stripDecorativeSymbols(map['summary'] as String? ?? ''),
       reasons: rawReasons
           .map(
             (r) => FortuneReason.fromMap(Map<String, dynamic>.from(r as Map)),
           )
           .toList(),
-      relationshipStory: map['relationshipStory'] as String?,
+      relationshipStory: (map['relationshipStory'] as String?) == null
+          ? null
+          : _stripDecorativeSymbols(map['relationshipStory'] as String),
     );
   }
 }
+
+String _stripDecorativeSymbols(String value) => stripEmoji(value);
 
 /// Cloud Function(generateDailyFortune)이 반환하는 "오늘의 운세"(애정 중심).
 ///

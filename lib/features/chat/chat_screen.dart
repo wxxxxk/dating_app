@@ -102,7 +102,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
+        duration: AppDurations.base,
         curve: Curves.easeOut,
       );
     });
@@ -321,7 +321,7 @@ class _ChatScreenState extends State<ChatScreen> {
               backgroundColor: AppColors.border,
               child: photoUrl == null
                   ? const Icon(
-                      Icons.person,
+                      Icons.person_rounded,
                       size: 18,
                       color: AppColors.textSecondary,
                     )
@@ -539,7 +539,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   vertical: 10,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(AppRadius.button),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -645,7 +645,7 @@ class _ConversationCoachPanel extends StatelessWidget {
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 180),
+        duration: AppDurations.fast,
         child: expanded && future != null
             ? _ConversationTipsFuture(
                 key: const ValueKey('conversation-tips'),
@@ -829,15 +829,15 @@ class _ConversationTipButton extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.button),
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.button),
               border: Border.all(color: AppColors.border),
             ),
             child: Text(
@@ -919,7 +919,7 @@ class _IcebreakerLoadingCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border.all(color: AppColors.border),
       ),
       child: const Row(
@@ -954,15 +954,15 @@ class _IcebreakerCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.button),
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.button),
               border: Border.all(color: AppColors.border),
             ),
             child: Column(
@@ -1011,7 +1011,7 @@ class _DateDivider extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(AppRadius.chip),
               border: Border.all(color: AppColors.border),
             ),
             child: Text(
@@ -1051,7 +1051,7 @@ class _AnimatedMessageRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 180),
+      duration: AppDurations.fast,
       curve: Curves.easeOutCubic,
       builder: (context, value, child) {
         return Opacity(
@@ -1104,7 +1104,7 @@ class _MessageBubble extends StatelessWidget {
                 message.text,
                 style: TextStyle(
                   fontSize: 15,
-                  color: isMine ? Colors.white : AppColors.textPrimary,
+                  color: isMine ? AppColors.surface : AppColors.textPrimary,
                   height: 1.4,
                 ),
               ),
@@ -1129,8 +1129,8 @@ class _MessageBubble extends StatelessWidget {
   }
 
   BorderRadius get _radius {
-    const large = Radius.circular(18);
-    const small = Radius.circular(6);
+    const large = Radius.circular(AppRadius.card);
+    const small = Radius.circular(AppRadius.button);
     if (isMine) {
       switch (position) {
         case _BubblePosition.single:
@@ -1234,7 +1234,7 @@ class _ChatStatusBar extends StatelessWidget {
             width: 6,
             height: 6,
             decoration: const BoxDecoration(
-              color: Color(0xFF34C759),
+              color: AppColors.wood,
               shape: BoxShape.circle,
             ),
           ),
@@ -1263,7 +1263,7 @@ class _TypingSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 160),
+      duration: AppDurations.fast,
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
       child: isTyping
@@ -1296,7 +1296,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: AppDurations.emphasis,
     )..repeat();
   }
 
@@ -1312,7 +1312,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.border),
       ),
       child: Row(

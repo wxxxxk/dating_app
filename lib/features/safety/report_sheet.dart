@@ -59,7 +59,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
                 ),
               ),
             ),
@@ -79,8 +79,8 @@ class _ReportSheetState extends State<_ReportSheet> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
                   selected
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
                   color: selected ? AppColors.primary : AppColors.textSecondary,
                 ),
                 title: Text(entry.value),

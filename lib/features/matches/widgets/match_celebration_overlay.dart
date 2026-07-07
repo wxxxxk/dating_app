@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_colors.dart';
 import '../../../models/match_model.dart';
 
 /// "It's a Match!" 전체화면 축하 오버레이.
@@ -24,19 +25,12 @@ class MatchCelebrationOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final other = match.otherProfile;
-    final otherPhoto =
-        other.photoUrls.isNotEmpty ? other.photoUrls[0] : null;
+    final otherPhoto = other.photoUrls.isNotEmpty ? other.photoUrls[0] : null;
 
     return Material(
-      color: Colors.transparent,
+      color: AppColors.ink.withValues(alpha: 0),
       child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFF4E6A), Color(0xFFFF8E53)],
-          ),
-        ),
+        color: AppColors.seal,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -45,15 +39,18 @@ class MatchCelebrationOverlay extends StatelessWidget {
                 const Spacer(flex: 2),
 
                 // 아이콘 + 타이틀
-                const Icon(Icons.favorite_rounded,
-                    color: Colors.white, size: 52),
+                const Icon(
+                  Icons.favorite_rounded,
+                  color: AppColors.surface,
+                  size: 52,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   "It's a Match!",
                   style: TextStyle(
                     fontSize: 38,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.surface,
                     letterSpacing: 1.0,
                   ),
                 ),
@@ -63,7 +60,7 @@ class MatchCelebrationOverlay extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 16,
-                    color: Colors.white70,
+                    color: AppColors.surface,
                     height: 1.5,
                   ),
                 ),
@@ -80,8 +77,11 @@ class MatchCelebrationOverlay extends StatelessWidget {
                           : null,
                     ),
                     const SizedBox(width: 16),
-                    const Icon(Icons.favorite_rounded,
-                        color: Colors.white, size: 36),
+                    const Icon(
+                      Icons.favorite_rounded,
+                      color: AppColors.surface,
+                      size: 36,
+                    ),
                     const SizedBox(width: 16),
                     _PhotoCircle(photoUrl: otherPhoto),
                   ],
@@ -95,11 +95,11 @@ class MatchCelebrationOverlay extends StatelessWidget {
                   child: FilledButton(
                     onPressed: onChat,
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFFFF4E6A),
+                      backgroundColor: AppColors.surface,
+                      foregroundColor: AppColors.seal,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                        borderRadius: BorderRadius.circular(AppRadius.button),
                       ),
                     ),
                     child: const Text(
@@ -119,10 +119,10 @@ class MatchCelebrationOverlay extends StatelessWidget {
                   child: const Text(
                     '계속 둘러보기',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.surface,
                       fontSize: 15,
                       decoration: TextDecoration.underline,
-                      decorationColor: Colors.white,
+                      decorationColor: AppColors.surface,
                     ),
                   ),
                 ),
@@ -147,17 +147,14 @@ class _PhotoCircle extends StatelessWidget {
       height: 110,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        color: Colors.white24,
+        border: Border.all(color: AppColors.surface, width: 3),
+        color: AppColors.surface.withValues(alpha: 0.24),
         image: photoUrl != null
-            ? DecorationImage(
-                image: NetworkImage(photoUrl!),
-                fit: BoxFit.cover,
-              )
+            ? DecorationImage(image: NetworkImage(photoUrl!), fit: BoxFit.cover)
             : null,
       ),
       child: photoUrl == null
-          ? const Icon(Icons.person, size: 52, color: Colors.white)
+          ? const Icon(Icons.person_rounded, size: 52, color: AppColors.surface)
           : null,
     );
   }

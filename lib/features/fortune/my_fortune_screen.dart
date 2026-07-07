@@ -128,7 +128,7 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline,
+                Icons.error_outline_rounded,
                 size: 48,
                 color: AppColors.textSecondary,
               ),
@@ -189,9 +189,11 @@ class _ShareButton extends StatelessWidget {
       label: Text(label),
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: AppColors.surface,
         padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.button),
+        ),
       ),
     );
   }
@@ -204,13 +206,13 @@ class _ShareLoadingOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: ColoredBox(
-        color: Colors.black26,
+        color: AppColors.ink.withValues(alpha: 0.26),
         child: Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.background,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.button),
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
@@ -277,7 +279,7 @@ class _AttributeBadge extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,12 +324,8 @@ class _CharacterCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFF4E6A), Color(0xFFFF8E53)],
-        ),
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.seal,
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,17 +333,19 @@ class _CharacterCard extends StatelessWidget {
           Text(
             narrative.characterType,
             style: const TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.surface,
             ),
           ),
           const SizedBox(height: 10),
           Text(
             narrative.summary,
             style: const TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: 15,
-              color: Colors.white,
+              color: AppColors.surface,
               height: 1.6,
             ),
           ),
@@ -387,7 +387,7 @@ class _OhaengSection extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.card),
           ),
           child: Column(
             children: [
@@ -435,7 +435,7 @@ class _OhaengSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: AppColors.secondary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppRadius.button),
             border: Border.all(
               color: AppColors.secondary.withValues(alpha: 0.2),
             ),
@@ -443,7 +443,11 @@ class _OhaengSection extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('🧩', style: TextStyle(fontSize: 18)),
+              const Icon(
+                Icons.auto_awesome_rounded,
+                size: 18,
+                color: AppColors.secondary,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -498,7 +502,7 @@ class _OhaengRatioChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(color: color.withValues(alpha: 0.18)),
       ),
       child: Text(
@@ -525,7 +529,7 @@ class _DayMasterNote extends StatelessWidget {
         color: (ohaengColors[saju.element] ?? AppColors.primary).withValues(
           alpha: 0.1,
         ),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(
           color: (ohaengColors[saju.element] ?? AppColors.primary).withValues(
             alpha: 0.25,
@@ -569,12 +573,16 @@ class _ReasonList extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: AppColors.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.button),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(r.icon, style: const TextStyle(fontSize: 18)),
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 18,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

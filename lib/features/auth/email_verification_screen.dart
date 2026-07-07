@@ -106,10 +106,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -128,8 +125,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
               const Spacer(flex: 2),
 
               // ── 아이콘 + 안내 문구 ────────────────────────────────────
-              const Icon(Icons.mark_email_unread_outlined,
-                  size: 72, color: AppColors.primary),
+              const Icon(
+                Icons.mark_email_unread_rounded,
+                size: 72,
+                color: AppColors.primary,
+              ),
               const SizedBox(height: 24),
               const Text(
                 '인증 메일을 보냈어요',
@@ -158,7 +158,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       ),
                     ),
                     const TextSpan(
-                        text: '\n으로 인증 메일을 보냈어요.\n메일의 링크를 눌러 인증해주세요.'),
+                      text: '\n으로 인증 메일을 보냈어요.\n메일의 링크를 눌러 인증해주세요.',
+                    ),
                   ],
                 ),
               ),
@@ -187,7 +188,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 const Text(
                   '메일 인증을 건너뛰고 바로 시작할 수도 있어요.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
             ],
           ),

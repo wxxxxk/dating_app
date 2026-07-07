@@ -127,7 +127,7 @@ class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline,
+                Icons.error_outline_rounded,
                 size: 48,
                 color: AppColors.textSecondary,
               ),
@@ -193,7 +193,7 @@ class _LoveTrendSection extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,11 +241,11 @@ class _LoveScoreChartState extends State<_LoveScoreChart>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 850),
+      duration: AppDurations.emphasis,
     );
     _animation = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: AppCurves.standard,
     );
     _controller.forward();
   }
@@ -380,15 +380,7 @@ class _LoveScoreChartPainter extends CustomPainter {
 
     final areaPaint = Paint()
       ..style = PaintingStyle.fill
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          AppColors.primary.withValues(alpha: 0.28),
-          AppColors.secondary.withValues(alpha: 0.08),
-          AppColors.secondary.withValues(alpha: 0.0),
-        ],
-      ).createShader(Rect.fromLTRB(0, chartTop, 0, chartBottom));
+      ..color = AppColors.seal.withValues(alpha: 0.12);
     canvas.drawPath(areaPath, areaPaint);
 
     final glowPaint = Paint()
@@ -401,9 +393,7 @@ class _LoveScoreChartPainter extends CustomPainter {
     canvas.drawPath(linePath, glowPaint);
 
     final linePaint = Paint()
-      ..shader = LinearGradient(
-        colors: [AppColors.secondary, AppColors.primary],
-      ).createShader(Rect.fromLTRB(chartLeft, 0, chartRight, 0))
+      ..color = AppColors.seal
       ..strokeWidth = 3.2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -420,7 +410,7 @@ class _LoveScoreChartPainter extends CustomPainter {
             ? AppColors.primary.withValues(alpha: 0.2)
             : AppColors.border.withValues(alpha: 0.45);
       final fillPaint = Paint()
-        ..color = isActual ? Colors.white : AppColors.surface;
+        ..color = isActual ? AppColors.surface : AppColors.surface;
       final strokePaint = Paint()
         ..color = isActual ? AppColors.primary : AppColors.textSecondary
         ..style = PaintingStyle.stroke
@@ -585,13 +575,13 @@ class _HistoryTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: InkWell(
         onTap: fortune == null ? null : onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(
               color: fortune == null
                   ? AppColors.border
@@ -689,7 +679,7 @@ class _DateBadge extends StatelessWidget {
       height: 58,
       decoration: BoxDecoration(
         color: AppColors.background,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.button),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -798,10 +788,10 @@ class _FortuneDetailSheet extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.button),
               ),
               child: Text(
-                '💡 ${fortune.advice}',
+                ' ${fortune.advice}',
                 style: const TextStyle(
                   fontSize: 14,
                   height: 1.45,

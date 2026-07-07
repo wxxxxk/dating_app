@@ -127,10 +127,10 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
       appBar: AppBar(
         title: Text(widget.linkToCurrentUser ? '전화번호 인증' : '전화번호로 로그인'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _loading ? null : () => Navigator.pop(context),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background.withValues(alpha: 0),
         elevation: 0,
       ),
       body: Stack(
@@ -146,6 +146,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                     const Text(
                       '전화번호를 입력해주세요',
                       style: TextStyle(
+                        fontFamily: AppFonts.display,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -170,7 +171,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                       decoration: const InputDecoration(
                         labelText: '전화번호',
                         hintText: '010-1234-5678',
-                        prefixIcon: Icon(Icons.phone_outlined),
+                        prefixIcon: Icon(Icons.phone_rounded),
                       ),
                       validator: Validators.phone,
                     ),

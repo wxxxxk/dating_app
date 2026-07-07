@@ -78,9 +78,7 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
 
   // ── 실제 스토어 구매 상태 처리 ────────────────────────────────────────────
 
-  Future<void> _handlePurchaseUpdates(
-    List<PurchaseDetails> purchases,
-  ) async {
+  Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
       switch (purchase.status) {
         case PurchaseStatus.pending:
@@ -236,9 +234,7 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
                     priceLabel:
                         _storeDetails[product.productId]?.price ??
                         product.mockPriceLabel,
-                    onTap: _processing
-                        ? null
-                        : () => _onProductTap(product),
+                    onTap: _processing ? null : () => _onProductTap(product),
                   ),
                 ),
               ),
@@ -319,7 +315,7 @@ class _BalanceHeader extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
       ),
       child: StreamBuilder<int>(
@@ -374,14 +370,14 @@ class _ProductTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(color: AppColors.border),
           ),
           child: Row(
@@ -436,7 +432,7 @@ class _ProductBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: AppColors.secondary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Text(
         label,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../models/fortune_model.dart';
 import '../../../models/user_profile.dart';
 import '../../../services/fortune/fortune_calculator.dart';
@@ -42,8 +43,8 @@ class FortuneShareCard extends StatelessWidget {
             narrative.characterType,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.surface,
               fontSize: 34,
               fontWeight: FontWeight.w900,
               height: 1.05,
@@ -105,14 +106,14 @@ class MatchShareCard extends StatelessWidget {
           const Spacer(),
           _CoupleNames(myProfile: myProfile, otherProfile: otherProfile),
           const SizedBox(height: 16),
-          _HeartLine(label: '${hint.emoji} ${hint.shortLabel}'),
+          _HeartLine(label: hint.shortLabel),
           const SizedBox(height: 18),
           Text(
             narrative.characterType,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.surface,
               fontSize: 28,
               fontWeight: FontWeight.w900,
               height: 1.08,
@@ -150,24 +151,24 @@ class _ShareCardFrame extends StatelessWidget {
       width: fortuneShareCardSize.width,
       height: fortuneShareCardSize.height,
       child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFF4E6A), Color(0xFFFF8E53), Color(0xFF7C5CFF)],
-          ),
-        ),
+        decoration: const BoxDecoration(color: AppColors.seal),
         child: Stack(
           children: [
             Positioned(
               top: -54,
               right: -48,
-              child: _GlowCircle(size: 170, color: Colors.white24),
+              child: _GlowCircle(
+                size: 170,
+                color: AppColors.surface.withValues(alpha: 0.24),
+              ),
             ),
             Positioned(
               bottom: -70,
               left: -55,
-              child: _GlowCircle(size: 190, color: Colors.white12),
+              child: _GlowCircle(
+                size: 190,
+                color: AppColors.surface.withValues(alpha: 0.12),
+              ),
             ),
             Padding(padding: const EdgeInsets.all(28), child: child),
           ],
@@ -190,12 +191,12 @@ class _ShareHeader extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(10),
+            color: AppColors.surface.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(AppRadius.button),
           ),
           child: const Icon(
             Icons.favorite_rounded,
-            color: Colors.white,
+            color: AppColors.surface,
             size: 18,
           ),
         ),
@@ -203,7 +204,7 @@ class _ShareHeader extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
-            color: Colors.white,
+            color: AppColors.surface,
             fontSize: 13,
             fontWeight: FontWeight.w800,
           ),
@@ -228,14 +229,16 @@ class _AttributePills extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: Colors.white24),
+              color: AppColors.surface.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+              border: Border.all(
+                color: AppColors.surface.withValues(alpha: 0.24),
+              ),
             ),
             child: Text(
               value,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.surface,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -257,16 +260,16 @@ class _QuoteText extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        color: AppColors.ink.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.surface.withValues(alpha: 0.16)),
       ),
       child: Text(
         text,
         maxLines: 4,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-          color: Colors.white,
+          color: AppColors.surface,
           fontSize: 14,
           height: 1.5,
           fontWeight: FontWeight.w600,
@@ -309,16 +312,16 @@ class _MiniMetric extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surface.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: AppColors.surface.withValues(alpha: 0.7),
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -326,8 +329,8 @@ class _MiniMetric extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppColors.surface,
               fontSize: 24,
               fontWeight: FontWeight.w900,
             ),
@@ -351,7 +354,11 @@ class _CoupleNames extends StatelessWidget {
         Expanded(child: _NameBlock(name: myProfile.displayName)),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Icon(Icons.favorite_rounded, color: Colors.white, size: 28),
+          child: Icon(
+            Icons.favorite_rounded,
+            color: AppColors.surface,
+            size: 28,
+          ),
         ),
         Expanded(child: _NameBlock(name: otherProfile.displayName)),
       ],
@@ -372,7 +379,7 @@ class _NameBlock extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
       style: const TextStyle(
-        color: Colors.white,
+        color: AppColors.surface,
         fontSize: 20,
         fontWeight: FontWeight.w900,
       ),
@@ -391,14 +398,14 @@ class _HeartLine extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: Colors.white24),
+          color: AppColors.surface.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+          border: Border.all(color: AppColors.surface.withValues(alpha: 0.24)),
         ),
         child: Text(
           label,
           style: const TextStyle(
-            color: Colors.white,
+            color: AppColors.surface,
             fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
@@ -422,8 +429,8 @@ class _Watermark extends StatelessWidget {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
+            style: TextStyle(
+              color: AppColors.surface.withValues(alpha: 0.7),
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -433,7 +440,7 @@ class _Watermark extends StatelessWidget {
         const Text(
           AppConstants.appName,
           style: TextStyle(
-            color: Colors.white,
+            color: AppColors.surface,
             fontSize: 13,
             fontWeight: FontWeight.w900,
             letterSpacing: 0.2,

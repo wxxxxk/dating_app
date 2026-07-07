@@ -88,10 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
   }
 
@@ -111,13 +108,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 56),
 
                     // ── 로고 ─────────────────────────────────────────────
-                    const Icon(Icons.favorite,
-                        color: AppColors.primary, size: 56),
+                    const Icon(
+                      Icons.favorite_rounded,
+                      color: AppColors.primary,
+                      size: 56,
+                    ),
                     const SizedBox(height: 12),
                     const Text(
                       '오늘의 인연',
                       textAlign: TextAlign.center,
                       style: TextStyle(
+                        fontFamily: AppFonts.display,
                         fontSize: 26,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -134,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: const InputDecoration(
                         labelText: '이메일',
                         hintText: 'example@email.com',
-                        prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: Icon(Icons.email_rounded),
                       ),
                       validator: Validators.email,
                     ),
@@ -148,15 +149,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       onFieldSubmitted: (_) => _handleEmailSignIn(),
                       decoration: InputDecoration(
                         labelText: '비밀번호',
-                        prefixIcon: const Icon(Icons.lock_outline),
+                        prefixIcon: const Icon(Icons.lock_rounded),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
+                                ? Icons.visibility_off_rounded
+                                : Icons.visibility_rounded,
                           ),
                           onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       validator: (v) =>
@@ -171,12 +173,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: _loading
                             ? null
                             : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => PasswordResetScreen(
-                                        authService: widget.authService),
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PasswordResetScreen(
+                                    authService: widget.authService,
                                   ),
                                 ),
+                              ),
                         child: const Text(
                           '비밀번호를 잊으셨나요?',
                           style: TextStyle(
@@ -210,7 +213,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: _loading
                               ? null
                               : () => Navigator.pushNamed(
-                                  context, AppRoutes.signup),
+                                  context,
+                                  AppRoutes.signup,
+                                ),
                           child: const Text(
                             '회원가입',
                             style: TextStyle(
@@ -227,9 +232,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     // ── 구분선 "또는" ─────────────────────────────────────
                     Row(
                       children: [
-                        const Expanded(
-                          child: Divider(color: AppColors.border),
-                        ),
+                        const Expanded(child: Divider(color: AppColors.border)),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Text(
@@ -240,9 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                        const Expanded(
-                          child: Divider(color: AppColors.border),
-                        ),
+                        const Expanded(child: Divider(color: AppColors.border)),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -251,7 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     PrimaryButton(
                       label: 'Google로 계속하기',
                       outlined: true,
-                      icon: const Icon(Icons.g_mobiledata, size: 26),
+                      icon: const Icon(Icons.g_mobiledata_rounded, size: 26),
                       onPressed: _loading ? null : _handleGoogleSignIn,
                     ),
                     const SizedBox(height: 12),
@@ -260,7 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     PrimaryButton(
                       label: '전화번호로 계속하기',
                       outlined: true,
-                      icon: const Icon(Icons.phone_outlined, size: 20),
+                      icon: const Icon(Icons.phone_rounded, size: 20),
                       onPressed: _loading ? null : _openPhoneLogin,
                     ),
                     const SizedBox(height: 32),

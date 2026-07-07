@@ -22,34 +22,34 @@ class ProfileOptions {
   // ===== 관심사 (interests) =====
   // 최대 8개 선택. 취미·라이프스타일 표현용.
   static const List<TagOption> interests = [
-    TagOption(key: 'movie', label: '🍿 영화'),
-    TagOption(key: 'netflix', label: '🎬 넷플릭스'),
-    TagOption(key: 'drama_binge', label: '📺 드라마 정주행'),
-    TagOption(key: 'tv_variety', label: '📺 TV 예능'),
-    TagOption(key: 'home_cafe', label: '☕ 홈카페'),
-    TagOption(key: 'chatting', label: '🗣️ 수다'),
-    TagOption(key: 'dancing', label: '🕺 댄스'),
-    TagOption(key: 'spacing_out', label: '😶 멍 때리기'),
-    TagOption(key: 'cooking', label: '👨‍🍳 요리'),
-    TagOption(key: 'baking', label: '🥖 베이킹'),
-    TagOption(key: 'drawing', label: '🎨 그림 그리기'),
-    TagOption(key: 'plants', label: '🪴 반려식물'),
-    TagOption(key: 'knitting', label: '🧶 뜨개질'),
-    TagOption(key: 'music_instrument', label: '🎹 악기 연주'),
-    TagOption(key: 'photography', label: '📸 사진 찍기'),
-    TagOption(key: 'webtoon', label: '💥 웹툰'),
-    TagOption(key: 'saju_tarot', label: '🔮 사주/타로'),
-    TagOption(key: 'makeup', label: '💄 메이크업'),
-    TagOption(key: 'nail_art', label: '💅 네일아트'),
-    TagOption(key: 'interior', label: '🛋️ 인테리어'),
-    TagOption(key: 'ballet', label: '🩰 발레'),
-    TagOption(key: 'cleaning', label: '🧹 청소'),
-    TagOption(key: 'scuba_diving', label: '🤿 스쿠버다이빙'),
-    TagOption(key: 'skateboard', label: '🛹 스케이트보드'),
-    TagOption(key: 'sneaker_collect', label: '👟 신발 수집'),
-    TagOption(key: 'stocks', label: '📈 주식'),
-    TagOption(key: 'bitcoin', label: '🪙 비트코인'),
-    TagOption(key: 'anime', label: '🎌 애니메이션'),
+    TagOption(key: 'movie', label: '영화'),
+    TagOption(key: 'netflix', label: '넷플릭스'),
+    TagOption(key: 'drama_binge', label: '드라마 정주행'),
+    TagOption(key: 'tv_variety', label: 'TV 예능'),
+    TagOption(key: 'home_cafe', label: '홈카페'),
+    TagOption(key: 'chatting', label: '수다'),
+    TagOption(key: 'dancing', label: '댄스'),
+    TagOption(key: 'spacing_out', label: '멍 때리기'),
+    TagOption(key: 'cooking', label: '요리'),
+    TagOption(key: 'baking', label: '베이킹'),
+    TagOption(key: 'drawing', label: '그림 그리기'),
+    TagOption(key: 'plants', label: '반려식물'),
+    TagOption(key: 'knitting', label: '뜨개질'),
+    TagOption(key: 'music_instrument', label: '악기 연주'),
+    TagOption(key: 'photography', label: '사진 찍기'),
+    TagOption(key: 'webtoon', label: '웹툰'),
+    TagOption(key: 'saju_tarot', label: '사주/타로'),
+    TagOption(key: 'makeup', label: '메이크업'),
+    TagOption(key: 'nail_art', label: '네일아트'),
+    TagOption(key: 'interior', label: '인테리어'),
+    TagOption(key: 'ballet', label: '발레'),
+    TagOption(key: 'cleaning', label: '청소'),
+    TagOption(key: 'scuba_diving', label: '스쿠버다이빙'),
+    TagOption(key: 'skateboard', label: '스케이트보드'),
+    TagOption(key: 'sneaker_collect', label: '신발 수집'),
+    TagOption(key: 'stocks', label: '주식'),
+    TagOption(key: 'bitcoin', label: '비트코인'),
+    TagOption(key: 'anime', label: '애니메이션'),
   ];
 
   // ===== 나를 표현하는 키워드 (성향 태그) =====
@@ -169,24 +169,24 @@ class ProfileOptions {
   // ===== 직업 카테고리 =====
   // jobCategory로 정규화된 key 저장. 세부 직업명(jobTitle)은 자유 입력으로 별도 저장.
   static const List<TagOption> jobCategoryOptions = [
-    TagOption(key: 'student', label: '🎒 학생'),
-    TagOption(key: 'soldier', label: '🪖 군인'),
-    TagOption(key: 'education', label: '📚 교육직'),
-    TagOption(key: 'finance', label: '🏛️ 금융직'),
-    TagOption(key: 'medical', label: '🩺 의료직'),
-    TagOption(key: 'business_owner', label: '🚀 사업가'),
-    TagOption(key: 'public_corp', label: '🏢 공기업'),
-    TagOption(key: 'public_servant', label: '💼 공무원'),
-    TagOption(key: 'professional', label: '🏅 전문직'),
-    TagOption(key: 'food_service', label: '☕ 요식업/외식업'),
-    TagOption(key: 'service', label: '👥 서비스업'),
-    TagOption(key: 'self_employed', label: '🏠 자영업'),
-    TagOption(key: 'freelancer', label: '💻 프리랜서'),
-    TagOption(key: 'it', label: '🌐 IT 업계'),
-    TagOption(key: 'research', label: '🔬 연구/기술직'),
-    TagOption(key: 'construction', label: '📐 건축/건설직'),
-    TagOption(key: 'unemployed', label: '⛱️ 무직'),
-    TagOption(key: 'etc', label: '💬 기타'),
+    TagOption(key: 'student', label: '학생'),
+    TagOption(key: 'soldier', label: '군인'),
+    TagOption(key: 'education', label: '교육직'),
+    TagOption(key: 'finance', label: '금융직'),
+    TagOption(key: 'medical', label: '의료직'),
+    TagOption(key: 'business_owner', label: '사업가'),
+    TagOption(key: 'public_corp', label: '공기업'),
+    TagOption(key: 'public_servant', label: '공무원'),
+    TagOption(key: 'professional', label: '전문직'),
+    TagOption(key: 'food_service', label: '요식업/외식업'),
+    TagOption(key: 'service', label: '서비스업'),
+    TagOption(key: 'self_employed', label: '자영업'),
+    TagOption(key: 'freelancer', label: '프리랜서'),
+    TagOption(key: 'it', label: 'IT 업계'),
+    TagOption(key: 'research', label: '연구/기술직'),
+    TagOption(key: 'construction', label: '건축/건설직'),
+    TagOption(key: 'unemployed', label: '무직'),
+    TagOption(key: 'etc', label: '기타'),
   ];
 
   // ===== 최종학력 =====
@@ -229,9 +229,6 @@ class ProfileOptions {
 
   /// 여러 key → label 목록 변환. 없는 key는 건너뛴다.
   static List<String> keysToLabels(List<TagOption> options, List<String> keys) {
-    return keys
-        .map((k) => keyToLabel(options, k))
-        .whereType<String>()
-        .toList();
+    return keys.map((k) => keyToLabel(options, k)).whereType<String>().toList();
   }
 }
