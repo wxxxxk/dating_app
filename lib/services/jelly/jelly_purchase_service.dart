@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
+import '../../core/constants/app_constants.dart';
+
 /// 실제 스토어 결제(IAP) 흐름을 담당한다.
 ///
 /// [kJellyMockPurchases]가 true(기본값, 스토어 미등록 상태)면 화면이 이
@@ -20,7 +22,9 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 class JellyPurchaseService {
   JellyPurchaseService({FirebaseFunctions? functions})
     : _iap = InAppPurchase.instance,
-      _functions = functions ?? FirebaseFunctions.instance;
+      _functions =
+          functions ??
+          FirebaseFunctions.instanceFor(region: AppConstants.functionsRegion);
 
   final InAppPurchase _iap;
   final FirebaseFunctions _functions;

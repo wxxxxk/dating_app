@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../models/fortune_model.dart';
 import 'fortune_calculator.dart';
 
@@ -21,7 +22,9 @@ import 'fortune_calculator.dart';
 class FortuneService {
   FortuneService({FirebaseFirestore? firestore, FirebaseFunctions? functions})
     : _db = firestore ?? FirebaseFirestore.instance,
-      _functions = functions ?? FirebaseFunctions.instance;
+      _functions =
+          functions ??
+          FirebaseFunctions.instanceFor(region: AppConstants.functionsRegion);
 
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;
@@ -245,9 +248,17 @@ class FortuneService {
       );
       _debugLog('[ConversationTips] callable 성공 count=${tips.length}');
       return tips;
-    } catch (e, st) {
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'not-found') {
+        _debugLog('[ConversationTips] 대상 없음 matchId=$matchId');
+        return const [];
+      }
+      _debugLog(
+        '[ConversationTips] callable 실패 matchId=$matchId code=${e.code}',
+      );
+      rethrow;
+    } catch (e) {
       _debugLog('[ConversationTips] 실패 matchId=$matchId error=$e');
-      _debugLog('$st');
       rethrow;
     }
   }

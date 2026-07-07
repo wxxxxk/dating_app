@@ -21,4 +21,7 @@ class AppConstants {
 
   // ===== 앱 메타 =====
   static const String appName = 'Dating App';
+
+  // ===== Firebase =====
+  static const String functionsRegion = 'asia-northeast3';
 }

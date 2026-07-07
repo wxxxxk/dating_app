@@ -1,12 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../models/ideal_type_model.dart';
 
 class IdealTypeService {
   IdealTypeService({FirebaseFirestore? firestore, FirebaseFunctions? functions})
     : _db = firestore ?? FirebaseFirestore.instance,
-      _functions = functions ?? FirebaseFunctions.instance;
+      _functions =
+          functions ??
+          FirebaseFunctions.instanceFor(region: AppConstants.functionsRegion);
 
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;

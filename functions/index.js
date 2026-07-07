@@ -8,11 +8,14 @@ const {
   onDocumentCreated,
   onDocumentWritten,
 } = require('firebase-functions/v2/firestore');
+const { setGlobalOptions } = require('firebase-functions/v2');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 const OpenAI = require('openai');
+
+setGlobalOptions({ region: 'asia-northeast3' });
 
 admin.initializeApp();
 const db = admin.firestore();

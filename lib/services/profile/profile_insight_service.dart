@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:crypto/crypto.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../models/profile_insight_model.dart';
 import '../../models/user_profile.dart';
 
@@ -12,7 +13,9 @@ class ProfileInsightService {
     FirebaseFirestore? firestore,
     FirebaseFunctions? functions,
   }) : _db = firestore ?? FirebaseFirestore.instance,
-       _functions = functions ?? FirebaseFunctions.instance;
+       _functions =
+           functions ??
+           FirebaseFunctions.instanceFor(region: AppConstants.functionsRegion);
 
   final FirebaseFirestore _db;
   final FirebaseFunctions _functions;

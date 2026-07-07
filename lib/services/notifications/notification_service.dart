@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -73,24 +74,47 @@ class NotificationService {
 
   Future<void> registerForUser(String uid) async {
     _registeredUid = uid;
-    await _requestPermission();
+    try {
+      await _requestPermission();
 
-    final token = await _messaging.getToken();
-    if (token != null && token.isNotEmpty) {
-      await _saveToken(uid, token);
+      if (Platform.isIOS) {
+        final apnsToken = await _messaging.getAPNSToken();
+        if (apnsToken == null || apnsToken.isEmpty) {
+          _debugLog('[FCM] APNs 토큰 없음, 이번 FCM 토큰 등록 skip uid=$uid');
+        } else {
+          await _registerCurrentFcmToken(uid);
+        }
+      } else {
+        await _registerCurrentFcmToken(uid);
+      }
+
+      await _tokenRefreshSub?.cancel();
+      _tokenRefreshSub = _messaging.onTokenRefresh.listen(
+        (newToken) {
+          final currentUid = _registeredUid;
+          if (currentUid == null || newToken.isEmpty) return;
+          unawaited(_saveToken(currentUid, newToken));
+        },
+        onError: (Object e) {
+          _debugLog('[FCM] 토큰 갱신 수신 실패: $e');
+        },
+      );
+    } catch (e, st) {
+      _debugLog('[FCM] 토큰 등록 흐름 실패 uid=$uid error=$e');
+      _debugLog('$st');
     }
-
-    await _tokenRefreshSub?.cancel();
-    _tokenRefreshSub = _messaging.onTokenRefresh.listen((newToken) {
-      final currentUid = _registeredUid;
-      if (currentUid == null || newToken.isEmpty) return;
-      unawaited(_saveToken(currentUid, newToken));
-    });
 
     final pending = _pendingTapMessage;
     if (pending != null) {
       _pendingTapMessage = null;
       unawaited(_handleNotificationTap(pending));
+    }
+  }
+
+  Future<void> _registerCurrentFcmToken(String uid) async {
+    final token = await _messaging.getToken();
+    if (token != null && token.isNotEmpty) {
+      await _saveToken(uid, token);
     }
   }
 
