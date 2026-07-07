@@ -101,3 +101,20 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  fonts:
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/Pretendard/Pretendard-Regular.otf
+          weight: 400
+        - asset: assets/fonts/Pretendard/Pretendard-SemiBold.otf
+          weight: 600
+        - asset: assets/fonts/Pretendard/Pretendard-Bold.otf
+          weight: 700
+    - family: MaruBuri
+      fonts:
+        - asset: assets/fonts/MaruBuri/MaruBuri-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/MaruBuri/MaruBuri-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/MaruBuri/MaruBuri-Bold.ttf
+          weight: 700
