@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
@@ -7,9 +10,14 @@ import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../onboarding/tag_selection_step.dart';
 import 'widgets/job_picker.dart';
+
+/// 최대 사진 수 — 메인 1장 + 일상 3장. 온보딩(photo_upload_step.dart)과 동일한
+/// 제약을 여기서도 지킨다.
+const int kMaxProfilePhotos = 4;
 
 /// 프로필 편집 화면.
 ///
@@ -17,8 +25,6 @@ import 'widgets/job_picker.dart';
 /// "저장" 버튼 한 번으로 Firestore에 반영한다.
 /// 저장 완료 후 `Navigator.pop(context, updatedProfile)`으로
 /// HomeScreen에 최신 프로필을 전달해 재조회 없이 화면을 갱신한다.
-///
-/// [storageService]는 현재 사용하지 않지만, 사진 교체 기능 확장 시 필요하다.
 class ProfileEditScreen extends StatefulWidget {
   final UserProfile profile;
   final FirestoreService firestoreService;
@@ -52,13 +58,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late List<String> _interests;
   late List<String> _personalityTags;
   late List<String> _idealTags;
+  late List<String> _photoUrls;
 
   bool _isLoading = false;
+  // null이면 사진 작업 중이 아님. 값이 있으면 해당 인덱스 슬롯이 업로드/삭제 중.
+  int? _busyPhotoIndex;
+  final _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     final p = widget.profile;
+    _photoUrls = List<String>.from(p.photoUrls);
     _nameController = TextEditingController(text: p.displayName);
     _bioController = TextEditingController(text: p.bio);
     _heightController = TextEditingController(
@@ -103,6 +114,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       ).showSnackBar(const SnackBar(content: Text('한줄 소개를 입력해주세요.')));
       return;
     }
+    if (_photoUrls.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('사진을 최소 1장 등록해주세요.')));
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -111,6 +128,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         displayName: name,
         bio: bio,
         gender: _gender,
+        photoUrls: _photoUrls,
         height: heightText.isNotEmpty ? int.tryParse(heightText) : null,
         religion: _religion,
         smoking: _smoking,
@@ -139,6 +157,164 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ── 사진 관리 ────────────────────────────────────────────────────────────
+  //
+  // photoUrls[0]은 항상 대표 사진으로 취급한다(UserProfile 문서 규칙).
+  // 리스트에서 빼거나(removeAt) 앞으로 옮기면(swap) 자동으로 대표 사진이
+  // 바뀌므로, 별도의 "대표 사진" 필드 없이 순서만으로 표현한다.
+
+  /// 빈 슬롯 탭 → 바로 갤러리에서 골라 업로드. 기존 사진 탭 → 옵션 시트.
+  Future<void> _handlePhotoSlotTap(int index) async {
+    if (_busyPhotoIndex != null) return;
+    if (index < _photoUrls.length) {
+      await _showPhotoOptions(index);
+    } else {
+      await _pickAndUploadPhoto(index);
+    }
+  }
+
+  Future<void> _showPhotoOptions(int index) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(AppSpacing.xs),
+              ),
+            ),
+            if (index != 0)
+              ListTile(
+                leading: const Icon(
+                  Icons.star_rounded,
+                  color: AppColors.primary,
+                ),
+                title: const Text('대표 사진으로 설정'),
+                onTap: () => Navigator.pop(ctx, 'main'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('다른 사진으로 변경'),
+              onTap: () => Navigator.pop(ctx, 'replace'),
+            ),
+            if (_photoUrls.length > 1)
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.error,
+                ),
+                title: const Text(
+                  '삭제',
+                  style: TextStyle(color: AppColors.error),
+                ),
+                onTap: () => Navigator.pop(ctx, 'delete'),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'main':
+        setState(() {
+          final photo = _photoUrls.removeAt(index);
+          _photoUrls.insert(0, photo);
+        });
+      case 'replace':
+        await _pickAndUploadPhoto(index);
+      case 'delete':
+        await _deletePhoto(index);
+    }
+  }
+
+  Future<void> _pickAndUploadPhoto(int index) async {
+    final XFile? picked = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _busyPhotoIndex = index);
+    try {
+      final url = await widget.storageService.uploadProfilePhoto(
+        uid: widget.profile.uid,
+        fileName:
+            '${index == 0 ? 'main' : 'sub'}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        file: File(picked.path),
+      );
+      if (!mounted) return;
+      setState(() {
+        if (index < _photoUrls.length) {
+          _photoUrls[index] = url;
+        } else {
+          _photoUrls.add(url);
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('사진 업로드에 실패했어요: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busyPhotoIndex = null);
+    }
+  }
+
+  Future<void> _deletePhoto(int index) async {
+    if (_photoUrls.length <= 1) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('사진 삭제'),
+        content: const Text('이 사진을 삭제할까요?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('삭제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busyPhotoIndex = index);
+    final url = _photoUrls[index];
+    try {
+      // Storage 삭제는 최선의 노력만 한다 — 실패해도(예: 이미 삭제된 파일)
+      // Firestore 목록에서는 항상 제거해 화면 상태가 꼬이지 않게 한다.
+      await widget.storageService.deleteByUrl(url);
+    } catch (_) {
+      // 무시 — 아래에서 목록 갱신은 계속 진행한다.
+    }
+    if (mounted) {
+      setState(() {
+        _photoUrls.remove(url);
+        _busyPhotoIndex = null;
+      });
     }
   }
 
@@ -331,220 +507,241 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       body: Stack(
         children: [
           SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              16,
+              20,
+              // 하단 잘림 방지: 저장 버튼이 시스템 내비게이션 바에 가깝게
+              // 붙지 않도록 인셋을 더한다(ideal_type_screen.dart와 같은 패턴).
+              32 + MediaQuery.of(context).padding.bottom,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // ── 사진 ─────────────────────────────────────────────────
+                PremiumSectionCard(
+                  title: '사진',
+                  subtitle: '첫 번째 사진이 대표 사진으로 노출돼요',
+                  child: _PhotoManagementGrid(
+                    photoUrls: _photoUrls,
+                    busyIndex: _busyPhotoIndex,
+                    onSlotTap: _handlePhotoSlotTap,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
                 // ── 기본 정보 ────────────────────────────────────────────
-                _SectionHeader(title: '기본 정보'),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(labelText: '이름'),
-                ),
-                const SizedBox(height: 16),
-                // 성별
-                const Text(
-                  '성별',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+                PremiumSectionCard(
+                  title: '기본 정보',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(labelText: '이름'),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        '성별',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _GenderSelector(
+                        selected: _gender,
+                        onChanged: (g) => setState(() => _gender = g),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _bioController,
+                        decoration: const InputDecoration(
+                          labelText: '한줄 소개',
+                          counterText: '',
+                        ),
+                        maxLength: 100,
+                        maxLines: 2,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                _GenderSelector(
-                  selected: _gender,
-                  onChanged: (g) => setState(() => _gender = g),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _bioController,
-                  decoration: const InputDecoration(
-                    labelText: '한줄 소개',
-                    counterText: '',
-                  ),
-                  maxLength: 100,
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
                 // ── 상세 정보 ────────────────────────────────────────────
-                _SectionHeader(title: '상세 정보'),
-                TextField(
-                  controller: _heightController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: '키 (cm)',
-                    suffixText: 'cm',
+                PremiumSectionCard(
+                  title: '상세 정보',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: _heightController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(3),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: '키 (cm)',
+                          suffixText: 'cm',
+                        ),
+                      ),
+                      _EditPickerField(
+                        label: '직업',
+                        value: _jobDisplayText(),
+                        onTap: _openJobPicker,
+                      ),
+                      _EditPickerField(
+                        label: '종교',
+                        value: ProfileOptions.keyToLabel(
+                          ProfileOptions.religions,
+                          _religion ?? '',
+                        ),
+                        onTap: () => _showPicker(
+                          title: '종교',
+                          options: ProfileOptions.religions,
+                          currentKey: _religion,
+                          onSelected: (k) => setState(() => _religion = k),
+                        ),
+                      ),
+                      _EditPickerField(
+                        label: '흡연',
+                        value: ProfileOptions.keyToLabel(
+                          ProfileOptions.smokingOptions,
+                          _smoking ?? '',
+                        ),
+                        onTap: () => _showPicker(
+                          title: '흡연',
+                          options: ProfileOptions.smokingOptions,
+                          currentKey: _smoking,
+                          onSelected: (k) => setState(() => _smoking = k),
+                        ),
+                      ),
+                      _EditPickerField(
+                        label: '음주',
+                        value: ProfileOptions.keyToLabel(
+                          ProfileOptions.drinkingOptions,
+                          _drinking ?? '',
+                        ),
+                        onTap: () => _showPicker(
+                          title: '음주',
+                          options: ProfileOptions.drinkingOptions,
+                          currentKey: _drinking,
+                          onSelected: (k) => setState(() => _drinking = k),
+                        ),
+                      ),
+                      _EditPickerField(
+                        label: '최종학력',
+                        value: ProfileOptions.keyToLabel(
+                          ProfileOptions.educationOptions,
+                          _education ?? '',
+                        ),
+                        onTap: () => _showPicker(
+                          title: '최종학력',
+                          options: ProfileOptions.educationOptions,
+                          currentKey: _education,
+                          onSelected: (k) => setState(() => _education = k),
+                        ),
+                      ),
+                      _EditPickerField(
+                        label: 'MBTI',
+                        value: _mbti,
+                        onTap: () => _showPicker(
+                          title: 'MBTI',
+                          options: ProfileOptions.mbtiOptions,
+                          currentKey: _mbti,
+                          onSelected: (k) => setState(() => _mbti = k),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                _EditPickerField(
-                  label: '직업',
-                  value: _jobDisplayText(),
-                  onTap: _openJobPicker,
-                ),
-                _EditPickerField(
-                  label: '종교',
-                  value: ProfileOptions.keyToLabel(
-                    ProfileOptions.religions,
-                    _religion ?? '',
-                  ),
-                  onTap: () => _showPicker(
-                    title: '종교',
-                    options: ProfileOptions.religions,
-                    currentKey: _religion,
-                    onSelected: (k) => setState(() => _religion = k),
-                  ),
-                ),
-                _EditPickerField(
-                  label: '흡연',
-                  value: ProfileOptions.keyToLabel(
-                    ProfileOptions.smokingOptions,
-                    _smoking ?? '',
-                  ),
-                  onTap: () => _showPicker(
-                    title: '흡연',
-                    options: ProfileOptions.smokingOptions,
-                    currentKey: _smoking,
-                    onSelected: (k) => setState(() => _smoking = k),
-                  ),
-                ),
-                _EditPickerField(
-                  label: '음주',
-                  value: ProfileOptions.keyToLabel(
-                    ProfileOptions.drinkingOptions,
-                    _drinking ?? '',
-                  ),
-                  onTap: () => _showPicker(
-                    title: '음주',
-                    options: ProfileOptions.drinkingOptions,
-                    currentKey: _drinking,
-                    onSelected: (k) => setState(() => _drinking = k),
-                  ),
-                ),
-                _EditPickerField(
-                  label: '최종학력',
-                  value: ProfileOptions.keyToLabel(
-                    ProfileOptions.educationOptions,
-                    _education ?? '',
-                  ),
-                  onTap: () => _showPicker(
-                    title: '최종학력',
-                    options: ProfileOptions.educationOptions,
-                    currentKey: _education,
-                    onSelected: (k) => setState(() => _education = k),
-                  ),
-                ),
-                _EditPickerField(
-                  label: 'MBTI',
-                  value: _mbti,
-                  onTap: () => _showPicker(
-                    title: 'MBTI',
-                    options: ProfileOptions.mbtiOptions,
-                    currentKey: _mbti,
-                    onSelected: (k) => setState(() => _mbti = k),
-                  ),
-                ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
-                // ── 관심사 ────────────────────────────────────────────────
-                _SectionHeader(
-                  title: '관심사',
-                  trailing: TextButton(
-                    onPressed: () => _openTagPage(
-                      title: '관심사',
-                      subtitle: '나의 취미·라이프스타일을 보여주세요',
-                      options: ProfileOptions.interests,
-                      current: _interests,
-                      onSaved: (keys) => setState(() => _interests = keys),
-                    ),
-                    child: const Text(
-                      '편집',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
+                // ── 태그 (관심사·성향·이상형) ────────────────────────────
+                PremiumSectionCard(
+                  title: '태그',
+                  subtitle: '나를 소개하고 원하는 상대를 알려주는 키워드예요',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _TagSectionHeader(
+                        title: '관심사',
+                        onEdit: () => _openTagPage(
+                          title: '관심사',
+                          subtitle: '나의 취미·라이프스타일을 보여주세요',
+                          options: ProfileOptions.interests,
+                          current: _interests,
+                          onSaved: (keys) => setState(() => _interests = keys),
+                        ),
+                      ),
+                      if (_interests.isEmpty)
+                        const _EmptyTagHint(text: '관심사를 추가해보세요')
+                      else
+                        _TagChipDisplay(
+                          keys: _interests,
+                          options: ProfileOptions.interests,
+                        ),
+                      const SizedBox(height: 20),
+                      _TagSectionHeader(
+                        title: '나를 표현하는 키워드',
+                        onEdit: () => _openTagPage(
+                          title: '성향 키워드',
+                          subtitle: '나의 성격·스타일을 잘 나타내는 키워드를 골라보세요',
+                          options: ProfileOptions.personalities,
+                          current: _personalityTags,
+                          onSaved: (keys) =>
+                              setState(() => _personalityTags = keys),
+                        ),
+                      ),
+                      if (_personalityTags.isEmpty)
+                        const _EmptyTagHint(text: '나를 표현하는 키워드를 추가해보세요')
+                      else
+                        _TagChipDisplay(
+                          keys: _personalityTags,
+                          options: ProfileOptions.personalities,
+                        ),
+                      const SizedBox(height: 20),
+                      _TagSectionHeader(
+                        title: '이런 친구를 원해요',
+                        onEdit: () => _openTagPage(
+                          title: '이상형 키워드',
+                          subtitle: '내가 선호하는 상대의 키워드를 선택해주세요',
+                          options: ProfileOptions.ideals,
+                          current: _idealTags,
+                          onSaved: (keys) => setState(() => _idealTags = keys),
+                        ),
+                      ),
+                      if (_idealTags.isEmpty)
+                        const _EmptyTagHint(text: '원하는 친구 키워드를 추가해보세요')
+                      else
+                        _TagChipDisplay(
+                          keys: _idealTags,
+                          options: ProfileOptions.ideals,
+                        ),
+                    ],
                   ),
                 ),
-                if (_interests.isEmpty)
-                  const _EmptyTagHint(text: '관심사를 추가해보세요')
-                else
-                  _TagChipDisplay(
-                    keys: _interests,
-                    options: ProfileOptions.interests,
-                  ),
-                const SizedBox(height: 32),
-
-                // ── 나를 표현하는 키워드 ─────────────────────────────────
-                _SectionHeader(
-                  title: '나를 표현하는 키워드',
-                  trailing: TextButton(
-                    onPressed: () => _openTagPage(
-                      title: '성향 키워드',
-                      subtitle: '나의 성격·스타일을 잘 나타내는 키워드를 골라보세요',
-                      options: ProfileOptions.personalities,
-                      current: _personalityTags,
-                      onSaved: (keys) =>
-                          setState(() => _personalityTags = keys),
-                    ),
-                    child: const Text(
-                      '편집',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
-                  ),
-                ),
-                if (_personalityTags.isEmpty)
-                  const _EmptyTagHint(text: '나를 표현하는 키워드를 추가해보세요')
-                else
-                  _TagChipDisplay(
-                    keys: _personalityTags,
-                    options: ProfileOptions.personalities,
-                  ),
-                const SizedBox(height: 32),
-
-                // ── 이상형 ────────────────────────────────────────────────
-                _SectionHeader(
-                  title: '이런 친구를 원해요',
-                  trailing: TextButton(
-                    onPressed: () => _openTagPage(
-                      title: '이상형 키워드',
-                      subtitle: '내가 선호하는 상대의 키워드를 선택해주세요',
-                      options: ProfileOptions.ideals,
-                      current: _idealTags,
-                      onSaved: (keys) => setState(() => _idealTags = keys),
-                    ),
-                    child: const Text(
-                      '편집',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
-                  ),
-                ),
-                if (_idealTags.isEmpty)
-                  const _EmptyTagHint(text: '원하는 친구 키워드를 추가해보세요')
-                else
-                  _TagChipDisplay(
-                    keys: _idealTags,
-                    options: ProfileOptions.ideals,
-                  ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
 
                 // ── 찾는 관계 ─────────────────────────────────────────────
-                _SectionHeader(title: '찾는 관계'),
-                _EditPickerField(
-                  label: '어떤 인연을 찾나요?',
-                  value: ProfileOptions.keyToLabel(
-                    ProfileOptions.relationshipGoals,
-                    _relationshipGoal ?? '',
-                  ),
-                  onTap: () => _showPicker(
-                    title: '찾는 관계',
-                    options: ProfileOptions.relationshipGoals,
-                    currentKey: _relationshipGoal,
-                    onSelected: (k) => setState(() => _relationshipGoal = k),
+                PremiumSectionCard(
+                  title: '찾는 관계',
+                  child: _EditPickerField(
+                    label: '어떤 인연을 찾나요?',
+                    value: ProfileOptions.keyToLabel(
+                      ProfileOptions.relationshipGoals,
+                      _relationshipGoal ?? '',
+                    ),
+                    onTap: () => _showPicker(
+                      title: '찾는 관계',
+                      options: ProfileOptions.relationshipGoals,
+                      currentKey: _relationshipGoal,
+                      onSelected: (k) => setState(() => _relationshipGoal = k),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 32),
 
                 PrimaryButton(
                   label: '저장',
@@ -562,28 +759,37 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
 // ── 내부 헬퍼 위젯들 ──────────────────────────────────────────────────────────
 
-class _SectionHeader extends StatelessWidget {
+/// 카드 안에서 쓰는 작은 소제목 + "편집" 버튼 행(관심사/성향/이상형 태그
+/// 서브섹션용). PremiumSectionCard의 title/trailing과 달리 카드 자체를
+/// 만들지 않고, 카드 내부 한 줄만 차지한다.
+class _TagSectionHeader extends StatelessWidget {
   final String title;
-  final Widget? trailing;
+  final VoidCallback onEdit;
 
-  const _SectionHeader({required this.title, this.trailing});
+  const _TagSectionHeader({required this.title, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
-          const Spacer(),
-          ?trailing,
+          TextButton(
+            onPressed: onEdit,
+            child: const Text('편집', style: TextStyle(color: AppColors.primary)),
+          ),
         ],
       ),
     );
@@ -619,13 +825,18 @@ class _EditPickerField extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            Text(
-              hasValue ? value! : '선택',
-              style: TextStyle(
-                fontSize: 15,
-                color: hasValue
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
+            Flexible(
+              child: Text(
+                hasValue ? value! : '선택',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: hasValue
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -718,17 +929,18 @@ class _GenderSelector extends StatelessWidget {
                 alignment: Alignment.center,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary : AppColors.surface,
+                  // 선택 상태 문법: 민트 fill + 다크 잉크 텍스트
+                  color: isSelected ? AppColors.mint : AppColors.surface,
                   borderRadius: BorderRadius.circular(AppRadius.button),
                   border: Border.all(
-                    color: isSelected ? AppColors.primary : AppColors.border,
+                    color: isSelected ? AppColors.mint : AppColors.border,
                   ),
                 ),
                 child: Text(
                   label,
                   style: TextStyle(
                     color: isSelected
-                        ? AppColors.surface
+                        ? AppColors.onMint
                         : AppColors.textPrimary,
                     fontWeight: isSelected
                         ? FontWeight.w600
@@ -741,6 +953,130 @@ class _GenderSelector extends StatelessWidget {
           ),
         );
       }).toList(),
+    );
+  }
+}
+
+/// 사진 4슬롯(대표 1 + 일상 3) 2x2 그리드.
+class _PhotoManagementGrid extends StatelessWidget {
+  final List<String> photoUrls;
+  final int? busyIndex;
+  final ValueChanged<int> onSlotTap;
+
+  const _PhotoManagementGrid({
+    required this.photoUrls,
+    required this.busyIndex,
+    required this.onSlotTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: kMaxProfilePhotos,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1,
+      ),
+      itemBuilder: (context, index) {
+        final url = index < photoUrls.length ? photoUrls[index] : null;
+        return _PhotoSlot(
+          url: url,
+          isMain: index == 0,
+          busy: busyIndex == index,
+          onTap: () => onSlotTap(index),
+        );
+      },
+    );
+  }
+}
+
+class _PhotoSlot extends StatelessWidget {
+  final String? url;
+  final bool isMain;
+  final bool busy;
+  final VoidCallback onTap;
+
+  const _PhotoSlot({
+    required this.url,
+    required this.isMain,
+    required this.busy,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: busy ? null : onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (url != null)
+                Image.network(
+                  url!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.broken_image_rounded,
+                    color: AppColors.textSecondary,
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.add_photo_alternate_outlined,
+                  color: AppColors.textSecondary,
+                  size: 28,
+                ),
+              if (isMain && url != null)
+                Positioned(
+                  left: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.ink.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                    ),
+                    child: const Text(
+                      '대표',
+                      style: TextStyle(
+                        color: AppColors.surface,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              if (busy)
+                Container(
+                  color: AppColors.ink.withValues(alpha: 0.35),
+                  alignment: Alignment.center,
+                  child: const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.surface,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

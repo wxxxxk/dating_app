@@ -221,7 +221,12 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        40 + MediaQuery.of(context).padding.bottom,
+      ),
       children: [
         _DailyFortuneCard(daily: daily),
         const SizedBox(height: 12),
@@ -242,9 +247,27 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
           onTapMatch: _openMatchFortune,
         ),
         const SizedBox(height: 28),
-        OutlinedButton(
-          onPressed: widget.onExploreTap,
-          child: const Text('새로운 인연을 만나보세요'),
+        // 둘러보기(Discovery)로 보내는 매칭 CTA라 fortuneAccent가 아니라
+        // matchPrimary(mintDeep)로 스타일한다. 앱 공통 secondary CTA(white/cream
+        // + mintDeep border + text)와 같은 높이/radius로 맞춘다.
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton(
+            onPressed: widget.onExploreTap,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.matchPrimary,
+              side: const BorderSide(color: AppColors.matchPrimary),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.button),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            child: const Text('새로운 인연을 만나보세요'),
+          ),
         ),
       ],
     );
@@ -268,8 +291,9 @@ class _DailyFortuneCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.seal,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.seal.withValues(alpha: 0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -279,9 +303,9 @@ class _DailyFortuneCard extends StatelessWidget {
             children: [
               Text(
                 '$dateLabel의 애정운',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.surface.withValues(alpha: 0.7),
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -292,31 +316,30 @@ class _DailyFortuneCard extends StatelessWidget {
                     filled
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    size: 16,
-                    color: AppColors.surface,
+                    size: 15,
+                    color: filled ? AppColors.seal : AppColors.border,
                   );
                 }),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Text(
             daily.mood,
             style: const TextStyle(
               fontFamily: AppFonts.display,
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: AppColors.surface,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 10),
           Text(
             daily.message,
             style: const TextStyle(
-              fontFamily: AppFonts.display,
-              fontSize: 15,
-              color: AppColors.surface,
-              height: 1.6,
+              fontSize: 14,
+              color: AppColors.textPrimary,
+              height: 1.7,
             ),
           ),
           const SizedBox(height: 14),
@@ -324,7 +347,7 @@ class _DailyFortuneCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.18),
+              color: AppColors.seal.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(AppRadius.button),
             ),
             child: Row(
@@ -333,7 +356,7 @@ class _DailyFortuneCard extends StatelessWidget {
                 const Icon(
                   Icons.tips_and_updates_rounded,
                   size: 16,
-                  color: AppColors.surface,
+                  color: AppColors.seal,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -341,7 +364,7 @@ class _DailyFortuneCard extends StatelessWidget {
                     daily.advice,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: AppColors.surface,
+                      color: AppColors.textPrimary,
                       height: 1.4,
                     ),
                   ),
@@ -371,11 +394,17 @@ class _HistoryEntryCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+          border: Border.all(
+            color: AppColors.fortuneAccent.withValues(alpha: 0.12),
+          ),
         ),
         child: const Row(
           children: [
-            Icon(Icons.timeline_rounded, color: AppColors.primary, size: 26),
+            Icon(
+              Icons.timeline_rounded,
+              color: AppColors.fortuneAccent,
+              size: 26,
+            ),
             SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -415,6 +444,8 @@ class _IdealTypeEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 사주/궁합 카드는 절제된 회색 accent를 쓰지만, AI 이상형은 이 허브의
+    // 대표 프리미엄 기능이라 premium accent로 눈에 띄게 구분한다.
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.card),
@@ -422,21 +453,19 @@ class _IdealTypeEntryCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.premiumSoft,
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-            color: AppColors.secondary.withValues(alpha: 0.14),
-          ),
+          border: Border.all(color: AppColors.premiumBorder),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.auto_awesome_rounded,
-              color: AppColors.secondary,
+              color: AppColors.premium,
               size: 26,
             ),
-            SizedBox(width: 14),
-            Expanded(
+            const SizedBox(width: 14),
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -459,7 +488,7 @@ class _IdealTypeEntryCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.premium),
           ],
         ),
       ),
@@ -490,13 +519,18 @@ class _MyFortuneSummaryCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: AppColors.fortuneAccent.withValues(alpha: 0.12),
+          ),
         ),
         child: Row(
           children: [
+            // 사주/궁합 카드 계열은 fortuneAccent로 통일해, 초록색
+            // AI 이상형 카드와 시각적으로 구분되는 "사주 가족"을 만든다.
             const Icon(
               Icons.auto_awesome_rounded,
               size: 28,
-              color: AppColors.secondary,
+              color: AppColors.fortuneAccent,
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -641,7 +675,7 @@ class _MatchFortuneTile extends StatelessWidget {
         ),
         trailing: const Icon(
           Icons.auto_awesome_rounded,
-          color: AppColors.secondary,
+          color: AppColors.fortuneAccent,
         ),
         onTap: onTap,
       ),

@@ -159,7 +159,7 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
                           opt.label,
                           style: TextStyle(
                             color: isSelected
-                                ? AppColors.primary
+                                ? AppColors.matchPrimary
                                 : AppColors.textPrimary,
                             fontWeight: isSelected
                                 ? FontWeight.w600
@@ -169,7 +169,7 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
                         trailing: isSelected
                             ? const Icon(
                                 Icons.check_rounded,
-                                color: AppColors.primary,
+                                color: AppColors.matchPrimary,
                               )
                             : null,
                         onTap: () {
@@ -250,97 +250,120 @@ class _DetailInfoStepState extends State<DetailInfoStep> {
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 28),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 4),
+                // 키 (숫자 직접 입력)
+                TextField(
+                  controller: _heightController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: '키 (cm)',
+                    hintText: '예: 172',
+                    suffixText: 'cm',
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+
+                // 직업 (2단계 피커)
+                _PickerField(
+                  label: '직업',
+                  value: _jobDisplayText(),
+                  onTap: _openJobPicker,
+                ),
+                const Divider(height: 1, color: AppColors.border),
+
+                // 단일 선택 필드들
+                _PickerField(
+                  label: '종교',
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.religions,
+                    _religion ?? '',
+                  ),
+                  onTap: () => _showPicker(
+                    title: '종교',
+                    options: ProfileOptions.religions,
+                    currentKey: _religion,
+                    onSelected: (k) => setState(() => _religion = k),
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                _PickerField(
+                  label: '흡연',
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.smokingOptions,
+                    _smoking ?? '',
+                  ),
+                  onTap: () => _showPicker(
+                    title: '흡연',
+                    options: ProfileOptions.smokingOptions,
+                    currentKey: _smoking,
+                    onSelected: (k) => setState(() => _smoking = k),
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                _PickerField(
+                  label: '음주',
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.drinkingOptions,
+                    _drinking ?? '',
+                  ),
+                  onTap: () => _showPicker(
+                    title: '음주',
+                    options: ProfileOptions.drinkingOptions,
+                    currentKey: _drinking,
+                    onSelected: (k) => setState(() => _drinking = k),
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                _PickerField(
+                  label: '최종학력',
+                  value: ProfileOptions.keyToLabel(
+                    ProfileOptions.educationOptions,
+                    _education ?? '',
+                  ),
+                  onTap: () => _showPicker(
+                    title: '최종학력',
+                    options: ProfileOptions.educationOptions,
+                    currentKey: _education,
+                    onSelected: (k) => setState(() => _education = k),
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.border),
+                _PickerField(
+                  label: 'MBTI',
+                  value: _mbti,
+                  onTap: () => _showPicker(
+                    title: 'MBTI',
+                    options: ProfileOptions.mbtiOptions,
+                    currentKey: _mbti,
+                    onSelected: (k) => setState(() => _mbti = k),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 32),
 
-          // 키 (숫자 직접 입력)
-          TextField(
-            controller: _heightController,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(3),
-            ],
-            decoration: const InputDecoration(
-              labelText: '키 (cm)',
-              hintText: '예: 172',
-              suffixText: 'cm',
-            ),
+          PrimaryButton(
+            label: '다음',
+            color: AppColors.matchPrimary,
+            onPressed: _handleNext,
           ),
-          const SizedBox(height: 8),
-
-          // 직업 (2단계 피커)
-          _PickerField(
-            label: '직업',
-            value: _jobDisplayText(),
-            onTap: _openJobPicker,
-          ),
-
-          // 단일 선택 필드들
-          _PickerField(
-            label: '종교',
-            value: ProfileOptions.keyToLabel(
-              ProfileOptions.religions,
-              _religion ?? '',
-            ),
-            onTap: () => _showPicker(
-              title: '종교',
-              options: ProfileOptions.religions,
-              currentKey: _religion,
-              onSelected: (k) => setState(() => _religion = k),
-            ),
-          ),
-          _PickerField(
-            label: '흡연',
-            value: ProfileOptions.keyToLabel(
-              ProfileOptions.smokingOptions,
-              _smoking ?? '',
-            ),
-            onTap: () => _showPicker(
-              title: '흡연',
-              options: ProfileOptions.smokingOptions,
-              currentKey: _smoking,
-              onSelected: (k) => setState(() => _smoking = k),
-            ),
-          ),
-          _PickerField(
-            label: '음주',
-            value: ProfileOptions.keyToLabel(
-              ProfileOptions.drinkingOptions,
-              _drinking ?? '',
-            ),
-            onTap: () => _showPicker(
-              title: '음주',
-              options: ProfileOptions.drinkingOptions,
-              currentKey: _drinking,
-              onSelected: (k) => setState(() => _drinking = k),
-            ),
-          ),
-          _PickerField(
-            label: '최종학력',
-            value: ProfileOptions.keyToLabel(
-              ProfileOptions.educationOptions,
-              _education ?? '',
-            ),
-            onTap: () => _showPicker(
-              title: '최종학력',
-              options: ProfileOptions.educationOptions,
-              currentKey: _education,
-              onSelected: (k) => setState(() => _education = k),
-            ),
-          ),
-          _PickerField(
-            label: 'MBTI',
-            value: _mbti,
-            onTap: () => _showPicker(
-              title: 'MBTI',
-              options: ProfileOptions.mbtiOptions,
-              currentKey: _mbti,
-              onSelected: (k) => setState(() => _mbti = k),
-            ),
-          ),
-          const SizedBox(height: 40),
-
-          PrimaryButton(label: '다음', onPressed: _handleNext),
         ],
       ),
     );

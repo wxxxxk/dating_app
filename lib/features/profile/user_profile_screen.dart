@@ -10,6 +10,7 @@ import '../../services/database/firestore_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
+import '../../shared/widgets/premium_components.dart';
 import '../safety/report_sheet.dart';
 import 'widgets/verification_badge.dart';
 
@@ -119,7 +120,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             child: const Text('취소'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('차단'),
           ),
@@ -167,7 +171,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(_profile.displayName),
+        title: Text(
+          _profile.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         backgroundColor: AppColors.background,
         elevation: 0,
         actions: [
@@ -187,50 +195,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         onRefresh: _refreshProfile,
         child: ListView(
           children: [
-            _PhotoGallery(photoUrls: _profile.photoUrls),
+            _PhotoGallery(
+              profile: _profile,
+              distanceLabel: distanceLabel,
+              blocked: _blocked,
+              loading: _loading,
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${_profile.displayName}, ${_profile.age}',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      if (_loading)
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _Badge(label: _genderLabel(_profile.gender)),
-                      if (_profile.mbti != null) _Badge(label: _profile.mbti!),
-                      if (distanceLabel != null) _Badge(label: distanceLabel),
-                      if (_blocked) _Badge(label: '차단됨', danger: true),
-                    ],
-                  ),
-                  if (_profile.verifications.hasAny) ...[
-                    const SizedBox(height: 12),
-                    VerificationBadges(verifications: _profile.verifications),
-                  ],
                   if (_profile.bio.isNotEmpty) ...[
-                    const SizedBox(height: 18),
                     Text(
                       stripEmoji(_profile.bio),
                       style: const TextStyle(
@@ -266,16 +242,29 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   if (_profile.relationshipGoal != null)
                     _InfoSection(
                       title: '찾는 관계',
-                      child: Text(
-                        ProfileOptions.keyToLabel(
-                              ProfileOptions.relationshipGoals,
-                              _profile.relationshipGoal!,
-                            ) ??
-                            _profile.relationshipGoal!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textPrimary,
-                        ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.favorite_rounded,
+                            size: 15,
+                            color: AppColors.matchPrimary,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              ProfileOptions.keyToLabel(
+                                    ProfileOptions.relationshipGoals,
+                                    _profile.relationshipGoal!,
+                                  ) ??
+                                  _profile.relationshipGoal!,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   _ProfileInsightSection(
@@ -390,15 +379,16 @@ class _ProfileInsightHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
+            color: AppColors.premiumSoft,
             borderRadius: BorderRadius.circular(AppRadius.chip),
+            border: Border.all(color: AppColors.premiumBorder),
           ),
           child: const Text(
             'AI PROFILE INSIGHT',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w900,
-              color: AppColors.primary,
+              color: AppColors.matchPrimary,
             ),
           ),
         ),
@@ -474,7 +464,7 @@ class _InsightItem extends StatelessWidget {
       children: [
         SizedBox(
           width: 24,
-          child: Icon(icon, size: 17, color: AppColors.primary),
+          child: Icon(icon, size: 17, color: AppColors.matchPrimary),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -507,9 +497,17 @@ class _InsightItem extends StatelessWidget {
 }
 
 class _PhotoGallery extends StatefulWidget {
-  final List<String> photoUrls;
+  final UserProfile profile;
+  final String? distanceLabel;
+  final bool blocked;
+  final bool loading;
 
-  const _PhotoGallery({required this.photoUrls});
+  const _PhotoGallery({
+    required this.profile,
+    required this.distanceLabel,
+    required this.blocked,
+    required this.loading,
+  });
 
   @override
   State<_PhotoGallery> createState() => _PhotoGalleryState();
@@ -528,7 +526,7 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
   @override
   void didUpdateWidget(covariant _PhotoGallery oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.photoUrls != widget.photoUrls) {
+    if (oldWidget.profile.photoUrls != widget.profile.photoUrls) {
       _index = 0;
       if (_controller.hasClients) {
         _controller.jumpToPage(0);
@@ -543,7 +541,7 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
   }
 
   void _showPrevious() {
-    if (widget.photoUrls.length <= 1 || _index == 0) return;
+    if (widget.profile.photoUrls.length <= 1 || _index == 0) return;
     _controller.previousPage(
       duration: AppDurations.base,
       curve: AppCurves.standard,
@@ -551,7 +549,8 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
   }
 
   void _showNext() {
-    if (widget.photoUrls.length <= 1 || _index >= widget.photoUrls.length - 1) {
+    if (widget.profile.photoUrls.length <= 1 ||
+        _index >= widget.profile.photoUrls.length - 1) {
       return;
     }
     _controller.nextPage(
@@ -562,47 +561,136 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
 
   @override
   Widget build(BuildContext context) {
-    final photoUrls = widget.photoUrls;
-    if (photoUrls.isEmpty) {
-      return Container(
-        height: 420,
-        color: AppColors.surface,
-        child: const Icon(
-          Icons.person_rounded,
-          size: 90,
-          color: AppColors.textSecondary,
-        ),
-      );
-    }
-    return SizedBox(
-      height: 420,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PageView.builder(
-            controller: _controller,
-            itemCount: photoUrls.length,
-            onPageChanged: (value) => setState(() => _index = value),
-            itemBuilder: (_, index) => Image.network(
-              photoUrls[index],
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const ColoredBox(
-                color: AppColors.surface,
-                child: Icon(
-                  Icons.person_rounded,
-                  color: AppColors.textSecondary,
+    final photoUrls = widget.profile.photoUrls;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: PremiumProfileImageCard(
+        child: SizedBox(
+          height: 420,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (photoUrls.isEmpty)
+                const ColoredBox(
+                  color: AppColors.surfaceElevated,
+                  child: Icon(
+                    Icons.person_rounded,
+                    size: 90,
+                    color: AppColors.textMutedOnDark,
+                  ),
+                )
+              else
+                PageView.builder(
+                  controller: _controller,
+                  itemCount: photoUrls.length,
+                  onPageChanged: (value) => setState(() => _index = value),
+                  itemBuilder: (_, index) => Image.network(
+                    photoUrls[index],
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: AppColors.surfaceElevated,
+                      child: Icon(
+                        Icons.person_rounded,
+                        color: AppColors.textMutedOnDark,
+                      ),
+                    ),
+                  ),
+                ),
+              const Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.42, 0.72, 1],
+                      colors: [
+                        Colors.transparent,
+                        Color(0x33000000),
+                        Color(0xE6000000),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${widget.profile.displayName}, ${widget.profile.age}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textOnDark,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        PremiumStatusPill(
+                          label: _genderLabel(widget.profile.gender),
+                          compact: true,
+                        ),
+                        if (widget.profile.mbti != null)
+                          PremiumStatusPill(
+                            label: widget.profile.mbti!,
+                            compact: true,
+                          ),
+                        if (widget.distanceLabel != null)
+                          PremiumStatusPill(
+                            label: widget.distanceLabel!,
+                            icon: Icons.near_me_rounded,
+                            compact: true,
+                          ),
+                        if (widget.blocked)
+                          const PremiumStatusPill(
+                            label: '차단됨',
+                            icon: Icons.block_rounded,
+                            color: AppColors.danger,
+                            compact: true,
+                          ),
+                      ],
+                    ),
+                    if (widget.profile.verifications.hasAny) ...[
+                      const SizedBox(height: 10),
+                      VerificationBadges(
+                        verifications: widget.profile.verifications,
+                        brightness: Brightness.dark,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (widget.loading)
+                const Positioned(
+                  top: 18,
+                  right: 18,
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.mint,
+                    ),
+                  ),
+                ),
+              if (photoUrls.length > 1) ...[
+                _PhotoTapZones(onPrevious: _showPrevious, onNext: _showNext),
+                _PhotoSegmentIndicator(
+                  count: photoUrls.length,
+                  activeIndex: _index,
+                ),
+              ],
+            ],
           ),
-          if (photoUrls.length > 1) ...[
-            _PhotoTapZones(onPrevious: _showPrevious, onNext: _showNext),
-            _PhotoSegmentIndicator(
-              count: photoUrls.length,
-              activeIndex: _index,
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -820,6 +908,7 @@ class _InfoPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.button),
+        border: Border.all(color: AppColors.border),
       ),
       child: Text(
         '$label · $value',
@@ -839,42 +928,16 @@ class _TagChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
+        color: AppColors.ink.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(color: AppColors.border),
       ),
       child: Text(
         label,
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: AppColors.primary,
-        ),
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  final bool danger;
-
-  const _Badge({required this.label, this.danger = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = danger ? AppColors.error : AppColors.secondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
+          color: AppColors.textPrimary,
         ),
       ),
     );

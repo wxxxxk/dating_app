@@ -14,14 +14,18 @@ import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
 import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
+import '../../services/likes/likes_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/profile/profile_insight_service.dart';
+import '../../services/ideal_type/ideal_type_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
+import '../ideal_type/ideal_type_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../profile/profile_edit_screen.dart';
 import '../profile/user_profile_screen.dart';
@@ -47,6 +51,7 @@ class HomeScreen extends StatefulWidget {
   final FortuneService fortuneService;
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
+  final LikesService likesService;
   final SafetyService safetyService;
   final ProfileInsightService profileInsightService;
   final VoidCallback? onOpenDiscovery;
@@ -62,6 +67,7 @@ class HomeScreen extends StatefulWidget {
     required this.fortuneService,
     required this.jellyService,
     required this.jellyPurchaseService,
+    required this.likesService,
     required this.safetyService,
     required this.profileInsightService,
     this.onOpenDiscovery,
@@ -77,6 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   bool _dailyPickLoading = true;
   bool _verificationLoading = false;
+  String? _errorMessage;
+  // fortune_hub_screen.dart와 같은 패턴 — 상태 없는 서비스 래퍼라 화면마다
+  // 로컬로 만들어 쓴다. app.dart의 전역 주입 체인에 추가할 필요가 없다.
+  final _idealTypeService = IdealTypeService();
 
   @override
   void initState() {
@@ -85,21 +95,40 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadProfile() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _errorMessage = null;
+      });
+    }
     final uid = widget.authService.currentUser?.uid;
     if (uid == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }
-    final profile = await widget.firestoreService.getUserProfile(uid);
-    final synced = profile == null
-        ? null
-        : await _syncEmailVerification(profile);
-    if (mounted) {
-      setState(() {
-        _profile = synced;
-        _loading = false;
-      });
+
+    UserProfile? synced;
+    try {
+      final profile = await widget.firestoreService.getUserProfile(uid);
+      synced = profile == null ? null : await _syncEmailVerification(profile);
+      if (mounted) {
+        setState(() {
+          _profile = synced;
+          _errorMessage = synced == null ? '프로필을 찾을 수 없습니다.' : null;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[HomeScreen] 프로필 로딩 실패: $e');
+      if (mounted) {
+        setState(() {
+          _profile = null;
+          _errorMessage = '프로필을 불러오지 못했어요. 네트워크를 확인한 뒤 다시 시도해주세요.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
+
     if (synced != null) {
       await _loadDailyPick(synced);
     }
@@ -391,6 +420,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openIdealType() async {
+    final profile = _profile;
+    if (profile == null) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => IdealTypeScreen(
+          profile: profile,
+          idealTypeService: _idealTypeService,
+        ),
+      ),
+    );
+  }
+
   Future<void> _openDailyPickProfile() async {
     final current = _profile;
     final pick = _dailyPick;
@@ -423,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('프로필을 불러올 수 없습니다.'),
+              Text(_errorMessage ?? '프로필을 불러올 수 없습니다.'),
               const SizedBox(height: 16),
               TextButton(onPressed: _loadProfile, child: const Text('다시 시도')),
             ],
@@ -435,11 +478,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('내 프로필'),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         actions: [
           JellyBalanceButton(
             currentUid: profile.uid,
             jellyService: widget.jellyService,
             jellyPurchaseService: widget.jellyPurchaseService,
+            foregroundColor: AppColors.matchPrimary,
           ),
           IconButton(
             icon: const Icon(Icons.edit_rounded),
@@ -471,26 +517,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ── 이름·나이·성별 ──────────────────────────────────
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Flexible(
-                        child: Text(
-                          '${profile.displayName}, ${profile.age}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${profile.displayName}, ${profile.age}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          _Badge(label: _genderLabel(profile.gender)),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      _Badge(label: _genderLabel(profile.gender)),
                       if (profile.mbti != null) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(height: 8),
                         _Badge(
                           label: profile.mbti!,
                           color: AppColors.secondary.withValues(alpha: 0.12),
@@ -511,6 +560,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 1.5,
                       ),
                     ),
+                  const SizedBox(height: 18),
+
+                  // ── 요약 지표 ────────────────────────────────────────
+                  _ProfileSummaryGrid(
+                    profile: profile,
+                    likesService: widget.likesService,
+                    jellyService: widget.jellyService,
+                    onTapCompleteness: _openEditScreen,
+                    onTapJelly: () => openJellyShop(
+                      context: context,
+                      currentUid: profile.uid,
+                      jellyService: widget.jellyService,
+                      jellyPurchaseService: widget.jellyPurchaseService,
+                    ),
+                  ),
                   const SizedBox(height: 20),
 
                   _VerificationSection(
@@ -539,8 +603,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             profile.relationshipGoal!,
                           ) ??
                           '',
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      textColor: AppColors.primary,
+                      color: AppColors.matchPrimary.withValues(alpha: 0.1),
+                      textColor: AppColors.matchPrimary,
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -579,13 +643,56 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
 
                   const SizedBox(height: 16),
-                  PrimaryButton(
-                    label: '내 매력 리포트',
-                    icon: const Icon(Icons.auto_awesome_rounded, size: 20),
-                    onPressed: _openCharmReport,
+                  // 버튼 위계: 시그니처 CTA(민트 fill)는 AI 이상형 하나만.
+                  // 나머지는 outlined로 낮춰 화면이 버튼 무더기로 보이지
+                  // 않게 한다.
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton.icon(
+                      onPressed: _openIdealType,
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 20),
+                      label: const Text('AI 이상형 만들기'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.mint,
+                        foregroundColor: AppColors.onMint,
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.button),
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  PrimaryButton(label: '프로필 편집', onPressed: _openEditScreen),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _openCharmReport,
+                      icon: const Icon(Icons.diamond_outlined, size: 20),
+                      label: const Text('내 매력 리포트'),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppColors.surface,
+                        foregroundColor: AppColors.mintDeep,
+                        side: BorderSide(
+                          color: AppColors.mintDeep.withValues(alpha: 0.55),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  PrimaryButton(
+                    label: '프로필 편집',
+                    outlined: true,
+                    onPressed: _openEditScreen,
+                  ),
                   const SizedBox(height: 12),
                   PrimaryButton(
                     label: '차단 목록 관리',
@@ -662,18 +769,17 @@ class _DailyPickHeroCard extends StatelessWidget {
     final isFallback = activePick == null && !loading;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
+      // 발표용 긴급 안정화: 다크 히어로 대신 라이트 카드 + 민트 강조로 통일한다.
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.mintSoft, AppColors.surface],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.3)),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -696,10 +802,10 @@ class _DailyPickHeroCard extends StatelessWidget {
           const Text(
             '오늘의 인연',
             style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
               color: AppColors.textPrimary,
-              fontFamily: AppFonts.display,
             ),
           ),
           const SizedBox(height: 8),
@@ -735,8 +841,12 @@ class _DailyPickHeroCard extends StatelessWidget {
               ),
               label: Text(activePick == null ? '둘러보기 시작' : '프로필 보기'),
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.surface,
+                backgroundColor: AppColors.mint,
+                foregroundColor: AppColors.onMint,
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.button),
@@ -758,16 +868,17 @@ class _AiBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.12),
+        color: AppColors.mint.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.35)),
       ),
       child: const Text(
         'AI DAILY PICK',
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
-          letterSpacing: 0,
-          color: AppColors.primary,
+          letterSpacing: 0.6,
+          color: AppColors.mintDeep,
         ),
       ),
     );
@@ -784,16 +895,18 @@ class _ScorePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.82),
+        color: AppColors.fortuneAccent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+        border: Border.all(
+          color: AppColors.fortuneAccent.withValues(alpha: 0.3),
+        ),
       ),
       child: Text(
         '궁합 $score%',
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w800,
-          color: AppColors.primary,
+          color: AppColors.fortuneAccent,
         ),
       ),
     );
@@ -807,11 +920,7 @@ class _DailyPickLoadingBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Text(
       '기존 궁합 캐시와 프로필 흐름을 바탕으로 오늘 먼저 보면 좋은 인연을 찾는 중이에요.',
-      style: TextStyle(
-        fontSize: 15,
-        height: 1.55,
-        color: AppColors.textPrimary,
-      ),
+      style: TextStyle(fontSize: 15, height: 1.55, color: AppColors.textPrimary),
     );
   }
 }
@@ -855,7 +964,8 @@ class _DailyPickSuccessBody extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 21,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
                   color: AppColors.textPrimary,
                 ),
               ),
@@ -867,8 +977,8 @@ class _DailyPickSuccessBody extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 15,
                   height: 1.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
                 ),
               ),
             ],
@@ -892,7 +1002,7 @@ class _DailyPickAvatar extends StatelessWidget {
       child: Container(
         width: 78,
         height: 98,
-        color: AppColors.surface.withValues(alpha: 0.68),
+        color: AppColors.textPrimary.withValues(alpha: 0.08),
         child: imageUrl == null
             ? const Icon(
                 Icons.person_rounded,
@@ -928,67 +1038,80 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
   @override
   Widget build(BuildContext context) {
     final urls = widget.photoUrls;
-    final height = MediaQuery.of(context).size.width; // 정사각형 갤러리
+    final height = MediaQuery.of(context).size.width - 40; // 카드 좌우 여백 제외
 
     if (urls.isEmpty) {
-      return Container(
-        height: height,
-        color: AppColors.surface,
-        child: const Icon(
-          Icons.person_rounded,
-          size: 80,
-          color: AppColors.textSecondary,
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.hero),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: const Icon(
+            Icons.person_rounded,
+            size: 80,
+            color: AppColors.textSecondary,
+          ),
         ),
       );
     }
 
-    return Stack(
-      children: [
-        SizedBox(
-          height: height,
-          child: PageView.builder(
-            itemCount: urls.length,
-            onPageChanged: (i) => setState(() => _currentPage = i),
-            itemBuilder: (ctx, i) => Image.network(
-              urls[i],
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                color: AppColors.surface,
-                child: const Icon(
-                  Icons.broken_image_rounded,
-                  size: 60,
-                  color: AppColors.textSecondary,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        child: Stack(
+          children: [
+            SizedBox(
+              height: height,
+              child: PageView.builder(
+                itemCount: urls.length,
+                onPageChanged: (i) => setState(() => _currentPage = i),
+                itemBuilder: (ctx, i) => Image.network(
+                  urls[i],
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    color: AppColors.surface,
+                    child: const Icon(
+                      Icons.broken_image_rounded,
+                      size: 60,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+            // 도트 인디케이터 — 사진이 2장 이상일 때만 표시
+            if (urls.length > 1)
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(urls.length, (i) {
+                    final active = i == _currentPage;
+                    return AnimatedContainer(
+                      duration: AppDurations.fast,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: active ? 16 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface.withValues(
+                          alpha: active ? 1 : 0.54,
+                        ),
+                        borderRadius: BorderRadius.circular(AppSpacing.xs),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+          ],
         ),
-        // 도트 인디케이터 — 사진이 2장 이상일 때만 표시
-        if (urls.length > 1)
-          Positioned(
-            bottom: 12,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(urls.length, (i) {
-                final active = i == _currentPage;
-                return AnimatedContainer(
-                  duration: AppDurations.fast,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: active ? 16 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface.withValues(
-                      alpha: active ? 1 : 0.54,
-                    ),
-                    borderRadius: BorderRadius.circular(AppSpacing.xs),
-                  ),
-                );
-              }),
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
@@ -1010,26 +1133,11 @@ class _VerificationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
-      ),
+    return PremiumSectionCard(
+      title: '인증 현황',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '인증 현황',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 10),
           VerificationBadges(
             verifications: verifications,
             showUnverified: true,
@@ -1054,7 +1162,8 @@ class _VerificationSection extends StatelessWidget {
                   icon: const Icon(Icons.mark_email_unread_rounded, size: 17),
                   label: const Text('이메일 인증하기'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+                    backgroundColor: AppColors.mint,
+                    foregroundColor: AppColors.onMint,
                   ),
                 ),
                 OutlinedButton.icon(
@@ -1298,6 +1407,166 @@ class _Badge extends StatelessWidget {
           fontSize: 13,
           color: textColor ?? AppColors.textSecondary,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+/// "내 상태를 한눈에" 보여주는 2x2 요약 카드 그리드.
+///
+/// 완성도는 UserProfile.completenessPercent(클라이언트 계산, 새 필드 없음),
+/// 받은 좋아요/젤리는 기존 스트림을 그대로 재사용한다. 어떤 스트림이 실패해도
+/// (권한 문제 등) 화면 전체가 깨지지 않도록 각 카드가 독립적으로 기본값(0)을
+/// 보여준다.
+class _ProfileSummaryGrid extends StatelessWidget {
+  final UserProfile profile;
+  final LikesService likesService;
+  final JellyService jellyService;
+  final VoidCallback onTapCompleteness;
+  final VoidCallback onTapJelly;
+
+  const _ProfileSummaryGrid({
+    required this.profile,
+    required this.likesService,
+    required this.jellyService,
+    required this.onTapCompleteness,
+    required this.onTapJelly,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final boostActive =
+        profile.boostUntil != null &&
+        profile.boostUntil!.isAfter(DateTime.now());
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 1.55,
+      children: [
+        _StatCard(
+          icon: Icons.auto_awesome_rounded,
+          label: '프로필 완성도',
+          value: '${profile.completenessPercent}%',
+          onTap: onTapCompleteness,
+        ),
+        StreamBuilder<List<ReceivedLike>>(
+          stream: likesService.watchReceivedLikes(currentUid: profile.uid),
+          builder: (context, snap) {
+            final count = snap.data?.length ?? 0;
+            return _StatCard(
+              icon: Icons.favorite_rounded,
+              label: '받은 좋아요',
+              value: '$count',
+            );
+          },
+        ),
+        StreamBuilder<int>(
+          stream: jellyService.watchBalance(profile.uid),
+          builder: (context, snap) {
+            final balance = snap.data ?? 0;
+            return _StatCard(
+              icon: Icons.local_fire_department_rounded,
+              label: '젤리 잔액',
+              value: '$balance',
+              onTap: onTapJelly,
+            );
+          },
+        ),
+        _StatCard(
+          icon: Icons.bolt_rounded,
+          label: '부스트',
+          value: boostActive ? '진행 중' : '비활성',
+          valueColor: boostActive ? AppColors.premium : null,
+          accentColor: boostActive ? AppColors.premium : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
+  final VoidCallback? onTap;
+  // 부스트가 활성 상태처럼 "지금 프리미엄 효과가 켜져 있다"는 신호가 필요한
+  // 카드에만 넘긴다 — 기본은 null(앱 기본 primary 톤)이라 나머지 카드는
+  // 그대로 유지된다.
+  final Color? accentColor;
+
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.onTap,
+    this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 4개 지표(완성도/받은 좋아요/젤리/부스트) 전부 "내 매칭 상태" 관련
+    // 수치라 기본 accent를 matchPrimary(premium green)로 통일한다.
+    final accent = accentColor ?? AppColors.matchPrimary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: AppColors.border),
+          boxShadow: AppShadows.card,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 17, color: accent),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      color: valueColor ?? AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

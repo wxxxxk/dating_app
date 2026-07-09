@@ -15,6 +15,9 @@ class PrimaryButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool outlined;
   final Widget? icon;
+  // 기본은 null → 시그니처 CTA(비비드 민트 fill + 다크 잉크 텍스트).
+  // destructive 액션 등 의미가 다른 호출부만 색을 명시적으로 넘긴다.
+  final Color? color;
 
   const PrimaryButton({
     super.key,
@@ -22,6 +25,7 @@ class PrimaryButton extends StatelessWidget {
     required this.onPressed,
     this.outlined = false,
     this.icon,
+    this.color,
   });
 
   @override
@@ -38,6 +42,14 @@ class PrimaryButton extends StatelessWidget {
       ],
     );
 
+    // 시그니처 CTA 문법: 민트 fill 위에는 항상 다크 잉크 텍스트(onMint).
+    // 흰 텍스트는 민트 계열 위에서 대비가 부족하다. 호출부가 다른 색을
+    // 명시하면(예: destructive) 그때만 흰 텍스트를 쓴다.
+    final effectiveColor = color ?? AppColors.mint;
+    final effectiveForeground = effectiveColor == AppColors.mint
+        ? AppColors.onMint
+        : AppColors.surface;
+
     // 높이를 고정해 화면 간 버튼 크기를 통일.
     return SizedBox(
       width: double.infinity,
@@ -46,8 +58,8 @@ class PrimaryButton extends StatelessWidget {
           ? OutlinedButton(
               onPressed: onPressed,
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textPrimary,
-                side: const BorderSide(color: AppColors.border),
+                foregroundColor: color ?? AppColors.textPrimary,
+                side: BorderSide(color: color ?? AppColors.border),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.button),
                 ),
@@ -57,8 +69,8 @@ class PrimaryButton extends StatelessWidget {
           : ElevatedButton(
               onPressed: onPressed,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.surface,
+                backgroundColor: effectiveColor,
+                foregroundColor: effectiveForeground,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppRadius.button),

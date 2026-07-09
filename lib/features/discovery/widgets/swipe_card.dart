@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -16,12 +18,16 @@ class SwipeCard extends StatefulWidget {
   final String profileUid;
   final Widget child;
   final void Function(String action) onSwiped;
+  final String? rewindEntryAction;
+  final int rewindEntryToken;
 
   const SwipeCard({
     super.key,
     required this.profileUid,
     required this.child,
     required this.onSwiped,
+    this.rewindEntryAction,
+    this.rewindEntryToken = 0,
   });
 
   @override
@@ -39,6 +45,7 @@ class SwipeCardState extends State<SwipeCard>
   // 스와이프 애니메이션 완료 후 onSwiped에 전달할 액션 ('like' | 'pass' | 'superlike').
   // 스냅백 중엔 null.
   String? _pendingAction;
+  String? _activeMotionAction;
 
   @override
   void initState() {
@@ -58,7 +65,12 @@ class SwipeCardState extends State<SwipeCard>
       _offset = Offset.zero;
       _anim = null;
       _pendingAction = null;
+      _activeMotionAction = null;
       _controller.reset(); // 0으로 리셋 → _onTick은 _anim이 null이라 no-op
+    }
+    if (oldWidget.rewindEntryToken != widget.rewindEntryToken &&
+        widget.rewindEntryAction != null) {
+      _startRewindEntry(widget.rewindEntryAction!);
     }
   }
 
@@ -78,6 +90,7 @@ class SwipeCardState extends State<SwipeCard>
       final action = _pendingAction;
       if (action != null) {
         _pendingAction = null;
+        _activeMotionAction = null;
         widget.onSwiped(action);
       }
     }
@@ -107,10 +120,10 @@ class SwipeCardState extends State<SwipeCard>
 
   void _snapBack() {
     _pendingAction = null;
-    _anim = Tween<Offset>(
-      begin: _offset,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.elasticOut));
+    _activeMotionAction = null;
+    _anim = Tween<Offset>(begin: _offset, end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: AppCurves.returnToCenter),
+    );
     _controller.forward(from: 0);
   }
 
@@ -122,14 +135,29 @@ class SwipeCardState extends State<SwipeCard>
     final sh = MediaQuery.sizeOf(context).height;
     final target = switch (action) {
       'like' => Offset(sw * 2.0, _offset.dy + 60),
-      'superlike' => Offset(_offset.dx, -sh * 1.4),
+      'superlike' => Offset(_offset.dx * 0.35, -sh * 1.4),
       _ => Offset(-sw * 2.0, _offset.dy + 60),
     };
     _pendingAction = action;
+    _activeMotionAction = action;
     _anim = Tween<Offset>(
       begin: _offset,
       end: target,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    ).animate(CurvedAnimation(parent: _controller, curve: AppCurves.standard));
+    _controller.forward(from: 0);
+  }
+
+  void _startRewindEntry(String action) {
+    final sw = MediaQuery.sizeOf(context).width;
+    final start = action == 'like'
+        ? Offset(sw * 1.15, 28)
+        : Offset(-sw * 1.15, 28);
+    _pendingAction = null;
+    _activeMotionAction = null;
+    _offset = start;
+    _anim = Tween<Offset>(begin: start, end: Offset.zero).animate(
+      CurvedAnimation(parent: _controller, curve: AppCurves.returnToCenter),
+    );
     _controller.forward(from: 0);
   }
 
@@ -138,6 +166,7 @@ class SwipeCardState extends State<SwipeCard>
     _controller.stop();
     _anim = null;
     _pendingAction = null;
+    _activeMotionAction = null;
     if (mounted) setState(() => _offset = Offset.zero);
   }
 
@@ -147,59 +176,93 @@ class SwipeCardState extends State<SwipeCard>
   Widget build(BuildContext context) {
     final sw = MediaQuery.sizeOf(context).width;
 
-    // 최대 ±23도 회전 (카드 하단을 기준으로 회전해 자연스러운 스와이프 느낌)
-    final angle = (_offset.dx / sw) * 0.4;
+    // 최대 ±12도 회전.
+    final angle = ((_offset.dx / sw) * (math.pi / 15)).clamp(
+      -math.pi / 15,
+      math.pi / 15,
+    );
 
     // 임계값의 20% 지점부터 라벨 페이드인
     final likeOpacity = (_offset.dx / (sw * 0.2)).clamp(0.0, 1.0);
     final passOpacity = (-_offset.dx / (sw * 0.2)).clamp(0.0, 1.0);
     final superlikeOpacity = (-_offset.dy / (sw * 0.18)).clamp(0.0, 1.0);
+    final isSuperlikeExit =
+        _activeMotionAction == 'superlike' && _controller.isAnimating;
+    final exitProgress = isSuperlikeExit ? _controller.value : 0.0;
+    final cardScale = isSuperlikeExit ? 1.0 + 0.06 * exitProgress : 1.0;
+    final cardOpacity = isSuperlikeExit
+        ? (1.0 - exitProgress * 0.55).clamp(0.0, 1.0)
+        : 1.0;
 
     return GestureDetector(
       onPanUpdate: _onPanUpdate,
       onPanEnd: _onPanEnd,
-      child: Transform.translate(
-        offset: _offset,
-        child: Transform.rotate(
-          angle: angle,
-          alignment: Alignment.bottomCenter,
-          child: Stack(
-            children: [
-              widget.child,
-              if (likeOpacity > 0)
-                Positioned(
-                  top: 52,
-                  left: 20,
-                  child: Opacity(
-                    opacity: likeOpacity,
-                    child: _SwipeLabel(label: 'LIKE', color: AppColors.wood),
-                  ),
-                ),
-              if (passOpacity > 0)
-                Positioned(
-                  top: 52,
-                  right: 20,
-                  child: Opacity(
-                    opacity: passOpacity,
-                    child: _SwipeLabel(label: 'PASS', color: AppColors.error),
-                  ),
-                ),
-              if (superlikeOpacity > 0)
-                Positioned(
-                  top: 52,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Opacity(
-                      opacity: superlikeOpacity,
-                      child: const _SwipeLabel(
-                        label: 'STAR',
-                        color: AppColors.water,
+      child: Opacity(
+        opacity: cardOpacity,
+        child: Transform.translate(
+          offset: _offset,
+          child: Transform.rotate(
+            angle: angle,
+            alignment: Alignment.bottomCenter,
+            child: Transform.scale(
+              scale: cardScale,
+              child: Stack(
+                children: [
+                  widget.child,
+                  if (likeOpacity > 0)
+                    Positioned(
+                      top: 56,
+                      left: 24,
+                      child: Transform.rotate(
+                        angle: -math.pi / 20,
+                        child: Opacity(
+                          opacity: likeOpacity,
+                          child: _SwipeStamp(
+                            icon: Icons.favorite_rounded,
+                            label: 'LIKE',
+                            color: AppColors.matchPrimary,
+                            intensity: likeOpacity,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-            ],
+                  if (passOpacity > 0)
+                    Positioned(
+                      top: 56,
+                      right: 24,
+                      child: Transform.rotate(
+                        angle: math.pi / 20,
+                        child: Opacity(
+                          opacity: passOpacity,
+                          child: _SwipeStamp(
+                            icon: Icons.close_rounded,
+                            label: 'PASS',
+                            color: AppColors.inkSecondary,
+                            intensity: passOpacity,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (superlikeOpacity > 0)
+                    Positioned(
+                      top: 56,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Opacity(
+                          opacity: superlikeOpacity,
+                          child: _SwipeStamp(
+                            icon: Icons.arrow_upward_rounded,
+                            label: 'SUPER',
+                            color: AppColors.water,
+                            intensity: superlikeOpacity,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -209,31 +272,67 @@ class SwipeCardState extends State<SwipeCard>
 
 // ── 내부 위젯 ──────────────────────────────────────────────────────────────────
 
-class _SwipeLabel extends StatelessWidget {
+/// 드래그 중 뜨는 LIKE/PASS/SUPER 표시.
+///
+/// 큰 텍스트 블록 대신 아이콘 배지 + 얇은 라벨 + 은은한 글로우로 구성한다.
+/// [intensity](드래그 진행도, 0~1)에 따라 배지가 살짝 커지고 글로우가
+/// 짙어져 "드래그할수록 반응이 강해지는" 느낌을 준다.
+class _SwipeStamp extends StatelessWidget {
+  final IconData icon;
   final String label;
   final Color color;
+  final double intensity;
 
-  const _SwipeLabel({required this.label, required this.color});
+  const _SwipeStamp({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.intensity,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: color, width: 3),
-        borderRadius: BorderRadius.circular(AppRadius.button),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        child: Text(
+    final clamped = intensity.clamp(0.0, 1.0);
+    final scale = 0.86 + 0.14 * clamped;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 60,
+            height: 60,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.surface.withValues(alpha: 0.94),
+              border: Border.all(
+                color: color.withValues(alpha: 0.85),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.32 * clamped),
+                  blurRadius: 16,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
           label,
           style: TextStyle(
             color: color,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2.5,
+            fontFamily: AppFonts.body,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.4,
           ),
         ),
-      ),
+      ],
     );
   }
 }

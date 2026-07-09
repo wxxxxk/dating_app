@@ -154,17 +154,31 @@ class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
           const SizedBox(height: 20),
           if (kDebugMode) ...[
             // 개발용, 출시 전 제거: 자연 축적 전 발표 데이터 생성용.
-            FilledButton.icon(
-              onPressed: _backfilling ? null : _backfillRecentFortunes,
-              icon: _backfilling
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_fix_high_rounded),
-              label: const Text('최근 7일 운세 채우기'),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: _backfilling ? null : _backfillRecentFortunes,
+                icon: _backfilling
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_fix_high_rounded),
+                label: const Text('최근 7일 운세 채우기'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.mint,
+                  foregroundColor: AppColors.onMint,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
           ],
@@ -208,7 +222,9 @@ class _LoveTrendSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '$filledCount일 기록됨 · 비어있는 날은 앱을 열지 않은 날이에요',
+            filledCount < 2
+                ? '$filledCount일 기록됨 · 비어있는 날은 앱을 열지 않은 날이에요 · 기록이 적으면 흐름이 단순하게 표시돼요'
+                : '$filledCount일 기록됨 · 비어있는 날은 앱을 열지 않은 날이에요',
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
@@ -384,7 +400,7 @@ class _LoveScoreChartPainter extends CustomPainter {
     canvas.drawPath(areaPath, areaPaint);
 
     final glowPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.16)
+      ..color = AppColors.fortuneAccent.withValues(alpha: 0.16)
       ..strokeWidth = 10
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -407,12 +423,12 @@ class _LoveScoreChartPainter extends CustomPainter {
       final isActual = point.actualScore != null;
       final outerPaint = Paint()
         ..color = isActual
-            ? AppColors.primary.withValues(alpha: 0.2)
+            ? AppColors.fortuneAccent.withValues(alpha: 0.2)
             : AppColors.border.withValues(alpha: 0.45);
       final fillPaint = Paint()
         ..color = isActual ? AppColors.surface : AppColors.surface;
       final strokePaint = Paint()
-        ..color = isActual ? AppColors.primary : AppColors.textSecondary
+        ..color = isActual ? AppColors.fortuneAccent : AppColors.textSecondary
         ..style = PaintingStyle.stroke
         ..strokeWidth = isActual ? 2.2 : 1.4;
 
@@ -585,7 +601,7 @@ class _HistoryTile extends StatelessWidget {
             border: Border.all(
               color: fortune == null
                   ? AppColors.border
-                  : AppColors.primary.withValues(alpha: 0.16),
+                  : AppColors.fortuneAccent.withValues(alpha: 0.16),
             ),
           ),
           child: Row(
@@ -637,7 +653,7 @@ class _HistoryTile extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
+                              color: AppColors.fortuneAccent,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -723,7 +739,7 @@ class _HeartScore extends StatelessWidget {
               ? Icons.favorite_rounded
               : Icons.favorite_border_rounded,
           size: 13,
-          color: AppColors.primary,
+          color: AppColors.fortuneAccent,
         ),
       ),
     );
@@ -787,7 +803,7 @@ class _FortuneDetailSheet extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
+                color: AppColors.fortuneAccent.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(AppRadius.button),
               ),
               child: Text(

@@ -57,6 +57,7 @@ class _TagSelectionStepState extends State<TagSelectionStep> {
               Text(
                 widget.title,
                 style: const TextStyle(
+                  fontFamily: AppFonts.display,
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
@@ -93,6 +94,7 @@ class _TagSelectionStepState extends State<TagSelectionStep> {
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
           child: PrimaryButton(
             label: widget.buttonLabel,
+            color: AppColors.matchPrimary,
             // 0개 선택해도 진행 가능(선택 사항)
             onPressed: () => widget.onNext(_selectedKeys),
           ),

@@ -83,16 +83,28 @@ class DiscoveryFilter {
   static const int defaultAgeMin = 18;
   static const int defaultAgeMax = 80;
 
+  // ProfileOptions.relationshipGoals와 같은 key 집합. 필터 라운드트립
+  // 검증용으로 여기 한 번 더 둔다 — UI 라벨과는 무관한 순수 데이터 검증이라
+  // core/constants(옵션 라벨 계층)에 대한 의존을 만들지 않기 위함이다.
+  static const validRelationshipGoals = {
+    'casual_friend',
+    'light_romance',
+    'serious_relationship',
+    'open_to_anything',
+  };
+
   final int ageMin;
   final int ageMax;
   final double? maxDistanceKm;
   final String gender; // 'male' | 'female' | 'all'
+  final String? relationshipGoal; // null = 상관없음/전체
 
   const DiscoveryFilter({
     this.ageMin = defaultAgeMin,
     this.ageMax = defaultAgeMax,
     this.maxDistanceKm,
     this.gender = 'all',
+    this.relationshipGoal,
   });
 
   factory DiscoveryFilter.fromMap(Map<String, dynamic>? map) {
@@ -102,11 +114,18 @@ class DiscoveryFilter {
     final ageMax = rawAgeMax.clamp(ageMin, defaultAgeMax);
     final rawMaxDistance = (map?['maxDistanceKm'] as num?)?.toDouble();
     final gender = map?['gender'] as String? ?? 'all';
+    final rawRelationshipGoal = map?['relationshipGoal'] as String?;
     return DiscoveryFilter(
       ageMin: ageMin,
       ageMax: ageMax,
       maxDistanceKm: rawMaxDistance?.clamp(1, 50).toDouble(),
       gender: ['male', 'female', 'all'].contains(gender) ? gender : 'all',
+      // 기존 문서엔 이 필드가 아예 없다 — null이면 그대로 "전체"로 안전 처리.
+      // 알 수 없는 key가 저장돼 있어도(예: 옵션 목록이 나중에 바뀐 경우)
+      // 조용히 무시하고 전체로 되돌린다.
+      relationshipGoal: validRelationshipGoals.contains(rawRelationshipGoal)
+          ? rawRelationshipGoal
+          : null,
     );
   }
 
@@ -116,6 +135,7 @@ class DiscoveryFilter {
       'ageMax': ageMax,
       'maxDistanceKm': maxDistanceKm,
       'gender': gender,
+      'relationshipGoal': relationshipGoal,
     };
   }
 
@@ -123,7 +143,8 @@ class DiscoveryFilter {
       ageMin != defaultAgeMin ||
       ageMax != defaultAgeMax ||
       maxDistanceKm != null ||
-      gender != 'all';
+      gender != 'all' ||
+      relationshipGoal != null;
 
   DiscoveryFilter copyWith({
     int? ageMin,
@@ -131,6 +152,8 @@ class DiscoveryFilter {
     double? maxDistanceKm,
     bool clearDistance = false,
     String? gender,
+    String? relationshipGoal,
+    bool clearRelationshipGoal = false,
   }) {
     final nextAgeMin = ageMin ?? this.ageMin;
     final nextAgeMax = ageMax ?? this.ageMax;
@@ -139,6 +162,9 @@ class DiscoveryFilter {
       ageMax: nextAgeMax.clamp(nextAgeMin, defaultAgeMax),
       maxDistanceKm: clearDistance ? null : maxDistanceKm ?? this.maxDistanceKm,
       gender: gender ?? this.gender,
+      relationshipGoal: clearRelationshipGoal
+          ? null
+          : relationshipGoal ?? this.relationshipGoal,
     );
   }
 }
@@ -232,6 +258,38 @@ class UserProfile {
     this.boostUntil,
     this.likesUnlocked = false,
   });
+
+  /// 프로필 완성도(0~100). 새 Firestore 필드 없이 기존 데이터만으로 계산한다.
+  ///
+  /// 사진 4장(최대) + 상세정보 7개 항목 + 태그 3종 + 관계목표 1개를
+  /// 동일 가중치로 채점한다. 온보딩 필수 항목(이름/생년월일/성별/기본 태그 등)은
+  /// 항상 채워져 있어 점수에 넣지 않는다 — 선택 항목을 더 채울수록 오르는
+  /// 지표로만 쓴다.
+  int get completenessPercent {
+    var filled = 0;
+    const total = 4 + 7 + 3 + 1;
+
+    filled += photoUrls.length.clamp(0, 4);
+
+    final detailFields = [
+      height,
+      religion,
+      smoking,
+      drinking,
+      jobCategory,
+      education,
+      mbti,
+    ];
+    filled += detailFields.where((field) => field != null).length;
+
+    if (interests.isNotEmpty) filled++;
+    if (personalityTags.isNotEmpty) filled++;
+    if (idealTags.isNotEmpty) filled++;
+
+    if (relationshipGoal != null) filled++;
+
+    return ((filled / total) * 100).round().clamp(0, 100);
+  }
 
   /// 생년월일로 현재 나이를 계산한다. 생일이 아직 안 지났으면 1을 뺀다.
   int get age {

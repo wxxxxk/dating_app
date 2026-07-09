@@ -188,8 +188,8 @@ class _ShareButton extends StatelessWidget {
       icon: const Icon(Icons.ios_share_rounded),
       label: Text(label),
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.surface,
+        backgroundColor: AppColors.mint,
+        foregroundColor: AppColors.onMint,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
@@ -280,6 +280,8 @@ class _AttributeBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,8 +326,10 @@ class _CharacterCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.seal,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.24)),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,17 +340,16 @@ class _CharacterCard extends StatelessWidget {
               fontFamily: AppFonts.display,
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: AppColors.surface,
+              color: AppColors.mintDeep,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             narrative.summary,
             style: const TextStyle(
-              fontFamily: AppFonts.display,
               fontSize: 15,
-              color: AppColors.surface,
-              height: 1.6,
+              color: AppColors.textPrimary,
+              height: 1.7,
             ),
           ),
         ],
@@ -434,11 +437,9 @@ class _OhaengSection extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: AppColors.secondary.withValues(alpha: 0.08),
+            color: AppColors.mintSoft,
             borderRadius: BorderRadius.circular(AppRadius.button),
-            border: Border.all(
-              color: AppColors.secondary.withValues(alpha: 0.2),
-            ),
+            border: Border.all(color: AppColors.mint.withValues(alpha: 0.35)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +447,7 @@ class _OhaengSection extends StatelessWidget {
               const Icon(
                 Icons.auto_awesome_rounded,
                 size: 18,
-                color: AppColors.secondary,
+                color: AppColors.matchPrimary,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -526,14 +527,12 @@ class _DayMasterNote extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: (ohaengColors[saju.element] ?? AppColors.primary).withValues(
-          alpha: 0.1,
-        ),
+        color: (ohaengColors[saju.element] ?? AppColors.fortuneAccent)
+            .withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppRadius.chip),
         border: Border.all(
-          color: (ohaengColors[saju.element] ?? AppColors.primary).withValues(
-            alpha: 0.25,
-          ),
+          color: (ohaengColors[saju.element] ?? AppColors.fortuneAccent)
+              .withValues(alpha: 0.25),
         ),
       ),
       child: Text(
@@ -581,7 +580,7 @@ class _ReasonList extends StatelessWidget {
                 const Icon(
                   Icons.auto_awesome_rounded,
                   size: 18,
-                  color: AppColors.primary,
+                  color: AppColors.fortuneAccent,
                 ),
                 const SizedBox(width: 10),
                 Expanded(

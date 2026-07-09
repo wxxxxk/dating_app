@@ -93,6 +93,11 @@ class DiscoveryService {
       return false;
     }
 
+    if (filter.relationshipGoal != null &&
+        profile.relationshipGoal != filter.relationshipGoal) {
+      return false;
+    }
+
     final maxDistance = filter.maxDistanceKm;
     if (maxDistance != null && currentLocation != null) {
       final distance = LocationService.distanceBetween(

@@ -71,18 +71,21 @@ class _MyAppState extends State<MyApp> {
     _jellyPurchaseService = JellyPurchaseService();
     _safetyService = SafetyService(firestoreService: _firestoreService);
     _profileInsightService = ProfileInsightService();
+    // NotificationService보다 먼저 만들어야 한다 — 알림 탭으로 채팅방을 열 때
+    // ChatScreen에 matchesService(매칭 해제용)를 넘겨줘야 하기 때문이다.
+    _matchesService = MatchesService(
+      firestoreService: _firestoreService,
+      safetyService: _safetyService,
+    );
     _notificationService = NotificationService(
       authService: _authService,
       firestoreService: _firestoreService,
       chatService: _chatService,
       fortuneService: _fortuneService,
+      matchesService: _matchesService,
       safetyService: _safetyService,
       navigatorKey: _navigatorKey,
       mainTabRequest: _mainTabRequest,
-    );
-    _matchesService = MatchesService(
-      firestoreService: _firestoreService,
-      safetyService: _safetyService,
     );
     _likesService = LikesService(
       firestoreService: _firestoreService,

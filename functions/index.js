@@ -30,6 +30,13 @@ const INVALID_FCM_TOKEN_CODES = new Set([
 // 등록: firebase functions:secrets:set OPENAI_API_KEY
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 
+// fal.ai FLUX API 키 — 기본 AI 이상형 이미지 provider(generateIdealTypeImage)와
+// 개발자 preview callable(generateIdealTypeImageProviderPreview) 양쪽에서 쓴다.
+// 절대 코드에 하드코딩하지 않고 Firebase 시크릿으로만 주입한다.
+// 등록: firebase functions:secrets:set FAL_KEY
+// 로컬 테스트는 functions/.secret.local(git-ignore 대상)에 FAL_KEY=... 로 둔다.
+const FAL_KEY = defineSecret('FAL_KEY');
+
 /**
  * users/{uid}/swipes/{targetUid} 문서가 생성/수정될 때 실행.
  *
@@ -304,6 +311,40 @@ function isValidNarrative(n) {
 }
 
 /**
+ * GPT 응답을 서사 스키마({characterType, summary, reasons, relationshipStory})에
+ * 맞게 보정한다. 필드 누락/타입 불일치가 있어도 예외를 던지는 대신 안전한
+ * 기본값으로 채워서 isValidNarrative()를 최대한 통과시킨다.
+ *
+ * @param {unknown} raw GPT 원본 응답
+ * @param {{ requireStory: boolean }} opts relationshipStory를 문자열로 채울지(궁합)
+ *   항상 null로 고정할지(내 사주) 결정한다.
+ */
+function sanitizeNarrative(raw, { requireStory }) {
+  const reasons = (Array.isArray(raw?.reasons) ? raw.reasons : [])
+    .map((r) => ({
+      icon: typeof r?.icon === 'string' && r.icon.trim() ? r.icon.trim() : '✨',
+      text: typeof r?.text === 'string' ? r.text.trim() : '',
+    }))
+    .filter((r) => r.text)
+    .slice(0, 4);
+  if (reasons.length === 0) {
+    reasons.push({ icon: '✨', text: '주어진 속성을 바탕으로 해석했어요.' });
+  }
+
+  return {
+    characterType: String(raw?.characterType || '').trim() || '🌙 균형형',
+    summary:
+      String(raw?.summary || '').trim() ||
+      '오늘의 속성을 바탕으로 캐릭터를 해석했어요.',
+    reasons,
+    relationshipStory: requireStory
+      ? String(raw?.relationshipStory || '').trim() ||
+        '두 사람의 이야기를 조금씩 채워가는 중이에요.'
+      : null,
+  };
+}
+
+/**
  * OpenAI Chat Completions를 JSON 모드로 호출해 서사를 받아온다.
  * 응답이 비어있거나 JSON 파싱에 실패하면 HttpsError로 던진다.
  */
@@ -352,15 +393,19 @@ exports.generateFortuneNarrative = onCall(
     const cached = snap.data()?.fortuneNarrative;
     if (isValidNarrative(cached)) return cached;
 
-    const narrative = await callOpenAiForNarrative({
+    const rawNarrative = await callOpenAiForNarrative({
       systemPrompt: fortuneSystemPrompt(),
       userPayload: { 속성: attrs },
     });
+    const narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
 
     if (!isValidNarrative(narrative)) {
+      console.error('[generateFortuneNarrative] GPT 응답 검증 실패', {
+        raw: rawNarrative,
+        sanitized: narrative,
+      });
       throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
     }
-    narrative.relationshipStory = null; // 개인 서사는 항상 null로 고정
 
     await userRef.set({ fortuneNarrative: narrative }, { merge: true });
     return narrative;
@@ -398,12 +443,17 @@ exports.generateMatchNarrative = onCall(
     const cached = matchSnap.data()?.fortuneMatch;
     if (isValidNarrative(cached)) return cached;
 
-    const narrative = await callOpenAiForNarrative({
+    const rawNarrative = await callOpenAiForNarrative({
       systemPrompt: matchSystemPrompt(),
       userPayload: { 속성A: userA, 속성B: userB },
     });
+    const narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
 
     if (!isValidNarrative(narrative) || typeof narrative.relationshipStory !== 'string') {
+      console.error('[generateMatchNarrative] GPT 응답 검증 실패', {
+        raw: rawNarrative,
+        sanitized: narrative,
+      });
       throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
     }
 
@@ -953,6 +1003,25 @@ function isValidDailyFortune(n) {
 }
 
 /**
+ * GPT 응답을 오늘의 운세 스키마({loveScore, mood, message, advice})에 맞게
+ * 보정한다. 필드 누락/타입 불일치가 있어도 예외 대신 안전한 기본값으로 채운다.
+ */
+function sanitizeDailyFortune(raw) {
+  const score = Number(raw?.loveScore);
+  const loveScore = Number.isFinite(score)
+    ? Math.min(5, Math.max(1, Math.round(score)))
+    : 3;
+  return {
+    loveScore,
+    mood: String(raw?.mood || '').trim() || '잔잔한 하루',
+    message:
+      String(raw?.message || '').trim() ||
+      '오늘은 마음이 이끄는 대로 편안하게 흘러가 보세요.',
+    advice: String(raw?.advice || '').trim() || '먼저 인사를 건네보는 건 어때요?',
+  };
+}
+
+/**
  * 오늘의 운세(애정 중심) 생성 (callable).
  *
  * 입력: { date: 'yyyy-MM-dd', attrs: { zodiac: {sign, element}, saju: {dayMaster, element} } }
@@ -982,12 +1051,17 @@ exports.generateDailyFortune = onCall(
     const snap = await dailyRef.get();
     if (isValidDailyFortune(snap.data())) return snap.data();
 
-    const fortune = await callOpenAiForNarrative({
+    const rawFortune = await callOpenAiForNarrative({
       systemPrompt: dailyFortuneSystemPrompt(),
       userPayload: { 날짜: date, 속성: attrs },
     });
+    const fortune = sanitizeDailyFortune(rawFortune);
 
     if (!isValidDailyFortune(fortune)) {
+      console.error('[generateDailyFortune] GPT 응답 검증 실패', {
+        raw: rawFortune,
+        sanitized: fortune,
+      });
       throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
     }
 
@@ -1381,6 +1455,13 @@ exports.generateProfileInsight = onCall(
 // fictional person, not a real individual, 실제 앱 사용자가 아님을 명시한다.
 // ============================================================================
 
+// 성별 무관(neutral) 키는 그대로 둔다 — gender: 'all'일 때 그대로 쓰이므로
+// 하나도 지우거나 이름을 바꾸지 않는다(기존 캐시/앱 버전과의 호환성).
+// 성별별 taxonomy(IDEAL_MOOD/STYLE/IMPRESSION/HAIR_BY_GENDER, 클라이언트
+// IdealTypeOptionSets와 대응)에서 쓰는 새 키들은 여기 추가만 한다 — 서버는
+// gender와 mood/style/impression 키를 서로 검증하지 않는다(기존부터 그랬음,
+// 하위 호환을 위해 이번에도 유지). 어떤 키가 들어와도 이 맵에 있으면 그대로
+// 인정한다.
 const IDEAL_IMAGE_OPTIONS = {
   mood: {
     pure: { ko: '청순한', en: 'soft and innocent mood' },
@@ -1388,12 +1469,31 @@ const IDEAL_IMAGE_OPTIONS = {
     playful: { ko: '발랄한', en: 'bright and playful mood' },
     intellectual: { ko: '지적인', en: 'intellectual and thoughtful mood' },
     gentle: { ko: '부드러운', en: 'gentle and warm mood' },
+    // 여성 전용 taxonomy
+    refined: { ko: '세련된', en: 'polished and refined mood' },
+    lovely: { ko: '러블리한', en: 'lovely and sweet mood' },
+    calm: { ko: '차분한', en: 'calm and composed mood' },
+    luxury: { ko: '고급스러운', en: 'elegant and luxurious mood' },
+    mysterious: { ko: '신비로운', en: 'mysterious and alluring mood' },
+    // 남성 전용 taxonomy
+    dandy_mood: { ko: '댄디한', en: 'dandy and refined mood' },
+    warm_hearted: { ko: '훈훈한', en: 'warm-hearted and approachable mood' },
+    mature: { ko: '성숙한', en: 'mature and grounded mood' },
+    sporty: { ko: '스포티한', en: 'sporty and energetic mood' },
   },
   style: {
     casual: { ko: '캐주얼', en: 'casual everyday outfit' },
     formal: { ko: '포멀', en: 'clean formal outfit' },
     street: { ko: '스트릿', en: 'modern street style outfit' },
     minimal: { ko: '미니멀', en: 'minimal and neat outfit' },
+    // 여성 전용 taxonomy
+    natural: { ko: '내추럴', en: 'natural and relaxed outfit' },
+    feminine: { ko: '페미닌', en: 'feminine and soft outfit' },
+    modern_casual: { ko: '모던 캐주얼', en: 'modern casual outfit' },
+    sensitive: { ko: '감성적인', en: 'sensitive and tasteful outfit' },
+    // 남성 전용 taxonomy
+    dandy_casual: { ko: '댄디 캐주얼', en: 'dandy casual outfit' },
+    clean_shirt: { ko: '깔끔한 셔츠 스타일', en: 'clean shirt-based outfit' },
   },
   hair: {
     long_straight: { ko: '긴 생머리', en: 'long straight hair' },
@@ -1403,11 +1503,26 @@ const IDEAL_IMAGE_OPTIONS = {
     two_block: { ko: '투블럭', en: 'neat two-block haircut' },
     dandy: { ko: '댄디컷', en: 'clean dandy haircut' },
     medium: { ko: '미디엄 헤어', en: 'medium-length natural hair' },
+    // 여성 전용 신규
+    layered: { ko: '레이어드 컷', en: 'layered haircut' },
+    // 남성 전용 신규
+    regent: { ko: '리젠트', en: 'regent-style slicked back hair' },
   },
   impression: {
     bright_smile: { ko: '밝은 미소', en: 'bright friendly smile' },
     calm: { ko: '무심한', en: 'calm and understated expression' },
     warm: { ko: '따뜻한', en: 'warm and approachable expression' },
+    // 여성 전용 taxonomy
+    bright_clear: { ko: '맑은 인상', en: 'bright and clear impression' },
+    clear_features: { ko: '또렷한 이목구비', en: 'distinct clear facial features' },
+    calm_eyes: { ko: '차분한 눈빛', en: 'calm and composed eyes' },
+    luxury_vibe: { ko: '고급스러운 분위기', en: 'elegant refined atmosphere' },
+    // 남성 전용 taxonomy
+    sharp_eyes: { ko: '선명한 눈매', en: 'sharp and clear eyes' },
+    calm_smile: { ko: '차분한 미소', en: 'calm gentle smile' },
+    mature_impression: { ko: '성숙한 인상', en: 'mature composed impression' },
+    soft_impression: { ko: '부드러운 인상', en: 'soft gentle impression' },
+    confident: { ko: '자신감 있는 분위기', en: 'confident self-assured atmosphere' },
   },
   background: {
     cafe: { ko: '카페', en: 'cozy cafe background' },
@@ -1418,14 +1533,107 @@ const IDEAL_IMAGE_OPTIONS = {
 };
 
 const IDEAL_HAIR_BY_GENDER = {
-  male: ['short', 'two_block', 'dandy', 'medium'],
-  female: ['long_straight', 'bob', 'wavy', 'short'],
-  all: ['long_straight', 'bob', 'wavy', 'short', 'two_block', 'dandy', 'medium'],
+  male: ['short', 'two_block', 'dandy', 'medium', 'regent'],
+  female: ['long_straight', 'bob', 'wavy', 'short', 'layered'],
+  all: [
+    'long_straight',
+    'bob',
+    'wavy',
+    'short',
+    'two_block',
+    'dandy',
+    'medium',
+    'layered',
+    'regent',
+  ],
 };
 
 // OpenAI 계정/조직 권한에 따라 사용 가능한 이미지 모델은 달라질 수 있다.
 // 배포 후 "model does not exist"가 계속되면 OpenAI 대시보드에서 접근 가능한 모델명을 확인한다.
 const IDEAL_IMAGE_MODEL = 'gpt-image-1';
+
+// ============================================================================
+// AI 이상형 이미지 — provider abstraction
+//
+// generateIdealTypeImage 콜러블 자체(캐시 조회 → 생성 → Storage 업로드 →
+// Firestore 저장)는 그대로 두고, "실제 이미지 생성 API를 호출하는 부분"만
+// provider 함수로 분리한다. 일반 앱 기본 provider는 fal_flux다(2026-07-08
+// 전환, ACTIVE_IDEAL_IMAGE_PROVIDER 참고). openai 구현은 롤백/비교용으로
+// 남겨뒀고 generateIdealTypeImageProviderPreview에서 계속 호출 가능하다.
+// 나머지 후보 provider는 명시적 스텁이다.
+// ============================================================================
+
+const IDEAL_IMAGE_PROVIDERS = Object.freeze({
+  OPENAI: 'openai',
+  FAL_FLUX: 'fal_flux',
+  REPLICATE_FLUX: 'replicate_flux',
+  GENERATED_PHOTOS: 'generated_photos',
+  GETTY: 'getty',
+  FIREFLY: 'firefly',
+  BRIA: 'bria',
+});
+
+// 지금 실제로 사용하는 provider. fal.ai FLUX PoC 결과가 OpenAI보다 현실감
+// 있는 데이팅 앱용 이상형 이미지를 만들어 기본 provider를 fal_flux로
+// 전환했다(2026-07-08). OpenAI 구현은 generateIdealTypeImageWithOpenAI로
+// 그대로 남아 있어 여기 값만 되돌리면 즉시 롤백 가능하다.
+// openai 경로는 generateIdealTypeImageProviderPreview에서 비교용으로 계속
+// 호출할 수 있다(custom claim이 있는 개발자/운영자 전용).
+const ACTIVE_IDEAL_IMAGE_PROVIDER = IDEAL_IMAGE_PROVIDERS.FAL_FLUX;
+
+// fal.ai 공식 FLUX.1 [schnell] endpoint.
+// 문서 기준:
+// - 모델 경로: fal-ai/flux/schnell
+// - 호출: synchronous run 계열은 https://fal.run/{model}에 JSON body를 POST
+// - 입력: prompt, image_size, num_images, enable_safety_checker, output_format 등
+// - 출력: images[0].url/content_type, prompt
+// PoC에서는 빠른 실험을 위해 schnell을 기본값으로 둔다. dev는 품질 비교 후보지만
+// 기본 앱 provider로 전환하지 않는다.
+const FAL_FLUX_MODEL = 'fal-ai/flux/schnell';
+const FAL_FLUX_TIMEOUT_MS = 110000;
+
+// 프롬프트(창작 지시문 + 안전 정책 문구) 구성 버전. provider나 프롬프트 문구가
+// 바뀌면 올려서, 나중에 응답에 저장된 값만 보고 "어떤 프롬프트 규칙으로 생성된
+// 이미지인지"를 구분할 수 있게 한다.
+const IDEAL_IMAGE_PROMPT_POLICY_VERSION = 'v1';
+const IDEAL_IMAGE_FAL_PROMPT_POLICY_VERSION = 'fal-flux-v3';
+
+// 사용자가 직접 입력하는 짧은 수정 요청(refinementText). 클라이언트가 임의
+// 문자열을 prompt에 그대로 꽂는 게 아니라, 서버가 항상 길이 제한 + 키워드
+// 차단을 거친 뒤에만 prompt에 반영한다.
+const IDEAL_IMAGE_REFINEMENT_MAX_LENGTH = 100;
+
+// 완벽한 필터는 아니다 — 미성년 암시/실존 인물·연예인 닮기/노출·선정적 요청
+// 같은 명백한 위험 표현을 걸러내는 최소한의 키워드 기반 방어선이다. 여기
+// 없는 표현이 전부 안전하다는 뜻은 아니며, 우회 가능성이 있다.
+const IDEAL_IMAGE_REFINEMENT_BLOCKED_PATTERNS = [
+  /미성년/i, /초등학생/i, /중학생/i, /고등학생/i, /어린애/i, /아이처럼/i, /학생처럼/i,
+  /child/i, /minor/i, /teen/i,
+  /노출/i, /벗은/i, /알몸/i, /섹시하게/i, /야하게/i, /선정적/i, /성적으로/i,
+  /nude/i, /naked/i, /sexy/i, /explicit/i,
+  /연예인/i, /아이돌/i, /배우처럼/i, /실존.*인물/i, /닮게/i, /똑같이 생기/i,
+  /celebrity/i, /resemble/i, /look like [a-z]/i,
+  /실제.*회원/i, /진짜 사람처럼/i, /특정 인물/i,
+];
+
+/**
+ * refinementText를 길이 제한 + 키워드 차단으로 검사한다.
+ * 반환값의 text는 항상 안전하게 다듬어진(또는 차단 시 빈) 문자열이고,
+ * blocked가 true면 호출부에서 사용자에게 실패로 안내해야 한다.
+ */
+function sanitizeIdealImageRefinementText(raw) {
+  if (typeof raw !== 'string') {
+    return { text: '', blocked: false };
+  }
+  const trimmed = raw.trim().slice(0, IDEAL_IMAGE_REFINEMENT_MAX_LENGTH);
+  if (!trimmed) {
+    return { text: '', blocked: false };
+  }
+  const blocked = IDEAL_IMAGE_REFINEMENT_BLOCKED_PATTERNS.some((pattern) =>
+    pattern.test(trimmed),
+  );
+  return { text: blocked ? '' : trimmed, blocked };
+}
 
 function optionValue(group, key, fallback) {
   const safeKey = typeof key === 'string' && IDEAL_IMAGE_OPTIONS[group]?.[key]
@@ -1445,6 +1653,7 @@ function normalizeIdealImageInput(data) {
   const idealTags = Array.isArray(data?.idealTags)
     ? data.idealTags.map(String).slice(0, 8)
     : [];
+  const refinement = sanitizeIdealImageRefinementText(data?.refinementText);
   return {
     gender,
     idealTags,
@@ -1453,6 +1662,8 @@ function normalizeIdealImageInput(data) {
     hair: optionValue('hair', hairKey, fallbackHair),
     impression: optionValue('impression', data?.impression, 'warm'),
     background: optionValue('background', data?.background, 'studio'),
+    refinementText: refinement.text,
+    refinementBlocked: refinement.blocked,
   };
 }
 
@@ -1472,21 +1683,61 @@ function idealImageSummary(input) {
   ].join(' · ');
 }
 
-function idealImageHash(input) {
+function idealImageHashPayload(input) {
+  return {
+    gender: input.gender,
+    idealTags: input.idealTags,
+    mood: input.mood.key,
+    style: input.style.key,
+    hair: input.hair.key,
+    impression: input.impression.key,
+    background: input.background.key,
+  };
+}
+
+function stableHash(value) {
   return crypto
     .createHash('sha256')
-    .update(
-      JSON.stringify({
-        gender: input.gender,
-        idealTags: input.idealTags,
-        mood: input.mood.key,
-        style: input.style.key,
-        hair: input.hair.key,
-        impression: input.impression.key,
-        background: input.background.key,
-      }),
-    )
+    .update(JSON.stringify(value))
     .digest('hex');
+}
+
+function legacyIdealImageHash(input) {
+  return stableHash(idealImageHashPayload(input));
+}
+
+function idealImageHash(input, provider, promptVersion) {
+  return stableHash({
+    ...idealImageHashPayload(input),
+    provider,
+    promptVersion,
+    // legacyIdealImageHash/idealImageHashPayload는 손대지 않는다 — refinementText는
+    // 여기(신규 provider-aware 해시)에만 추가해 아주 오래된 openai 캐시의
+    // backward-compat 경로에 영향을 주지 않는다.
+    refinementText: input.refinementText || '',
+  });
+}
+
+// provider가 바뀌어도 항상 함께 붙어야 하는 안전 정책 문구. 실존 인물
+// 사칭/신원 특정 방지(PRIMARY)와 표현 수위·식별 정보 회피(TRAILING) 두
+// 덩어리로 나눠 두면, 나중에 다른 provider의 프롬프트 포맷에 맞춰 순서를
+// 조정해야 할 때도 문구 자체는 그대로 재사용할 수 있다.
+// 문구는 기존 buildIdealImagePrompt에서 그대로 옮긴 것이라 최종 프롬프트
+// 문자열은 이전과 완전히 동일하다(순서 포함).
+const IDEAL_IMAGE_SAFETY_POLICY_PRIMARY =
+  'The character is not a real individual, not a celebrity, not an app user, and not based on any identifiable person.';
+const IDEAL_IMAGE_SAFETY_POLICY_TRAILING = [
+  'Soft editorial illustration, tasteful, non-sexual, adult, single character, simple natural lighting.',
+  'Avoid realistic identity details, biometric specificity, logos, names, usernames, or identifying marks.',
+].join(' ');
+
+// 사용자가 입력한 refinementText가 있으면 prompt 맨 끝(안전 문구 바로 앞)에
+// 추가 절로 붙인다. 안전 문구보다 앞에 둬서, 모델이 "마지막 지시를 더 강하게
+// 따르는" 경향이 있어도 안전 제약이 항상 이 요청보다 뒤에서 우선하게 한다.
+function idealImageRefinementClause(input) {
+  const text = input.refinementText;
+  if (!text) return null;
+  return `Additional user-requested styling refinement — apply only within all safety constraints above, never let it override them: "${text}"`;
 }
 
 function buildIdealImagePrompt(input) {
@@ -1496,20 +1747,57 @@ function buildIdealImagePrompt(input) {
   const tagClause = tagText
     ? `Preference cues interpreted as personality and styling mood only: ${tagText}.`
     : 'Preference cues should remain broad and non-specific.';
+  const refinementClause = idealImageRefinementClause(input);
   return [
     `A gentle stylized portrait illustration of one ${idealGenderPrompt(input.gender)} as an original fictional character.`,
-    'The character is not a real individual, not a celebrity, not an app user, and not based on any identifiable person.',
+    IDEAL_IMAGE_SAFETY_POLICY_PRIMARY,
     `${input.mood.en}, ${input.style.en}, ${input.hair.en}, ${input.impression.en}, ${input.background.en}.`,
     tagClause,
-    'Soft editorial illustration, tasteful, non-sexual, adult, single character, simple natural lighting.',
-    'Avoid realistic identity details, biometric specificity, logos, names, usernames, or identifying marks.',
+    ...(refinementClause ? [refinementClause] : []),
+    IDEAL_IMAGE_SAFETY_POLICY_TRAILING,
   ].join(' ');
 }
 
-async function fetchImageBytes(imageUrl) {
-  const response = await fetch(imageUrl);
+function buildFalFluxIdealImagePrompt(input) {
+  const tagText = tagLabels(input.idealTags)
+    .filter((label) => !['예쁘고 잘생긴'].includes(label))
+    .join(', ');
+  const tagClause = tagText
+    ? `Use these as broad personality and styling cues only: ${tagText}.`
+    : 'Keep personality and styling cues broad and non-specific.';
+  const refinementClause = idealImageRefinementClause(input);
+  return [
+    `A realistic AI-generated fictional person portrait of one ${idealGenderPrompt(input.gender)}.`,
+    'The person is fictional, not a real person, not a celebrity, and has no resemblance to any specific real person.',
+    'Adult, appears 20s or older, tasteful portrait, non-explicit, polished dating-app concept image.',
+    `${input.mood.en}, ${input.style.en}, ${input.hair.en}, ${input.impression.en}, ${input.background.en}.`,
+    tagClause,
+    'Natural face proportions, warm approachable expression, high-quality portrait photography style, clean composition.',
+    'Solo portrait, single person only, exactly one face in the entire frame.',
+    'No other people, no background people, no additional faces, no crowd, no bystanders, no reflections of other people.',
+    'No posters, no framed photos, no portraits, no screens showing faces anywhere in the background.',
+    'Plain or softly blurred non-human background — architecture, foliage, fabric, or bokeh only, never another person or a depiction of a person.',
+    'Even if the background setting normally implies other people nearby (e.g. a cafe or a street), render the person as completely alone there — empty of any other visible person, face, or figure, blurred into abstract bokeh if needed.',
+    ...(refinementClause ? [refinementClause] : []),
+    'No identifying marks, no logos, no name tags, no watermark, no text overlays, no usernames, no biometric specificity.',
+  ].join(' ');
+}
+
+async function fetchImageBytes(imageUrl, { timeoutMs = 30000, requireImage = true } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(imageUrl, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     throw new Error(`이미지 URL 다운로드 실패 status=${response.status}`);
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (requireImage && !contentType.toLowerCase().startsWith('image/')) {
+    throw new Error(`이미지 URL content-type 오류 type=${contentType || 'unknown'}`);
   }
   const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
@@ -1565,109 +1853,454 @@ function imageGenerationErrorMessage(error) {
 }
 
 /**
+ * OpenAI(gpt-image-1)로 실제 이미지를 생성해 바이트를 반환한다.
+ * generateIdealTypeImage 콜러블 안에 있던 OpenAI 호출 코드를 동작 변경 없이
+ * 그대로 옮긴 것이라 에러 처리/메시지가 이전과 동일하다.
+ *
+ * 반환: { imageBuffer: Buffer, model: string, revisedPrompt: string|null }
+ */
+async function generateIdealTypeImageWithOpenAI({ prompt }) {
+  const client = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
+  let imageResponse;
+  try {
+    imageResponse = await client.images.generate({
+      model: IDEAL_IMAGE_MODEL,
+      prompt,
+      n: 1,
+      size: '1024x1024',
+    });
+  } catch (error) {
+    console.error('[generateIdealTypeImage] OpenAI image error', {
+      status: error?.status,
+      code: error?.code,
+      message: error?.message,
+    });
+    throw new HttpsError(
+      'failed-precondition',
+      imageGenerationErrorMessage(error),
+    );
+  }
+
+  const imageData = imageResponse.data?.[0];
+  let imageBuffer;
+  try {
+    if (imageData?.b64_json) {
+      imageBuffer = Buffer.from(imageData.b64_json, 'base64');
+    } else if (imageData?.url) {
+      imageBuffer = await fetchImageBytes(imageData.url, { requireImage: false });
+    }
+  } catch (error) {
+    console.error('[generateIdealTypeImage] image download/parse error', {
+      message: error?.message,
+    });
+    throw new HttpsError(
+      'internal',
+      '생성된 이미지를 저장하기 위해 내려받는 중 실패했습니다.',
+    );
+  }
+
+  if (!imageBuffer) {
+    throw new HttpsError('internal', '이미지 응답이 비어 있습니다.');
+  }
+
+  return {
+    imageBuffer,
+    model: IDEAL_IMAGE_MODEL,
+    revisedPrompt: imageData?.revised_prompt || null,
+  };
+}
+
+function falFluxUserMessage() {
+  return 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.';
+}
+
+function mapFalFluxHttpsError(status) {
+  if (status === 401 || status === 403) {
+    return new HttpsError('failed-precondition', falFluxUserMessage());
+  }
+  if (status === 404) {
+    return new HttpsError('failed-precondition', falFluxUserMessage());
+  }
+  if (status === 408 || status === 429 || status >= 500) {
+    return new HttpsError('unavailable', falFluxUserMessage());
+  }
+  return new HttpsError('internal', falFluxUserMessage());
+}
+
+async function callFalFluxRun({ prompt, falKey }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FAL_FLUX_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`https://fal.run/${FAL_FLUX_MODEL}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Key ${falKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        image_size: 'square_hd',
+        num_inference_steps: 4,
+        guidance_scale: 3.5,
+        num_images: 1,
+        enable_safety_checker: true,
+        output_format: 'png',
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    const isTimeout = error?.name === 'AbortError';
+    console.error('[generateIdealTypeImage] fal_flux request error', {
+      provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
+      model: FAL_FLUX_MODEL,
+      stage: 'request',
+      timeout: isTimeout,
+      message: error?.message,
+    });
+    throw new HttpsError(
+      isTimeout ? 'deadline-exceeded' : 'unavailable',
+      falFluxUserMessage(),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    console.error('[generateIdealTypeImage] fal_flux API error', {
+      provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
+      model: FAL_FLUX_MODEL,
+      stage: 'api',
+      status: response.status,
+    });
+    throw mapFalFluxHttpsError(response.status);
+  }
+
+  try {
+    return await response.json();
+  } catch (error) {
+    console.error('[generateIdealTypeImage] fal_flux response parse error', {
+      provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
+      model: FAL_FLUX_MODEL,
+      stage: 'parse',
+      message: error?.message,
+    });
+    throw new HttpsError('internal', falFluxUserMessage());
+  }
+}
+
+/**
+ * fal.ai FLUX.1 [schnell]로 현실적인 가상 인물 초상을 생성한다.
+ *
+ * 반환: { imageBuffer: Buffer, model: string, revisedPrompt: string|null }
+ */
+async function generateIdealTypeImageWithFalFlux({ prompt }) {
+  const falKey = FAL_KEY.value();
+  if (!falKey) {
+    console.error('[generateIdealTypeImage] fal_flux missing secret', {
+      provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
+      model: FAL_FLUX_MODEL,
+      stage: 'secret',
+    });
+    throw new HttpsError('failed-precondition', falFluxUserMessage());
+  }
+
+  const data = await callFalFluxRun({ prompt, falKey });
+  const image = Array.isArray(data?.images) ? data.images[0] : null;
+  if (!image?.url || typeof image.url !== 'string') {
+    console.error('[generateIdealTypeImage] fal_flux image URL missing', {
+      provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
+      model: FAL_FLUX_MODEL,
+      stage: 'response',
+      hasImages: Array.isArray(data?.images),
+    });
+    throw new HttpsError('internal', falFluxUserMessage());
+  }
+
+  let imageBuffer;
+  try {
+    imageBuffer = await fetchImageBytes(image.url, {
+      timeoutMs: 30000,
+      requireImage: true,
+    });
+  } catch (error) {
+    console.error('[generateIdealTypeImage] fal_flux image fetch error', {
+      provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
+      model: FAL_FLUX_MODEL,
+      stage: 'image_fetch',
+      contentType: image.content_type || null,
+      message: error?.message,
+    });
+    throw new HttpsError('internal', falFluxUserMessage());
+  }
+
+  if (!imageBuffer) {
+    throw new HttpsError('internal', falFluxUserMessage());
+  }
+
+  return {
+    imageBuffer,
+    model: FAL_FLUX_MODEL,
+    revisedPrompt: typeof data?.prompt === 'string' ? data.prompt : prompt,
+  };
+}
+async function generateIdealTypeImageWithReplicateFlux() {
+  throw new HttpsError('unimplemented', 'Replicate FLUX provider는 아직 연동되지 않았습니다.');
+}
+async function generateIdealTypeImageWithGeneratedPhotos() {
+  throw new HttpsError('unimplemented', 'Generated Photos provider는 아직 연동되지 않았습니다.');
+}
+async function generateIdealTypeImageWithGetty() {
+  throw new HttpsError('unimplemented', 'Getty Generative AI provider는 아직 연동되지 않았습니다.');
+}
+async function generateIdealTypeImageWithFirefly() {
+  throw new HttpsError('unimplemented', 'Adobe Firefly provider는 아직 연동되지 않았습니다.');
+}
+async function generateIdealTypeImageWithBria() {
+  throw new HttpsError('unimplemented', 'BRIA provider는 아직 연동되지 않았습니다.');
+}
+
+/**
+ * provider 이름으로 실제 생성 함수를 라우팅한다. 등록되지 않은 provider
+ * 이름이 들어오면(설정 실수 등) 조용히 openai로 폴백하지 않고 즉시 에러를
+ * 던진다 — 어떤 provider가 실제로 쓰였는지 항상 명확해야 한다.
+ */
+async function generateIdealTypeImageWithProvider(provider, { prompt }) {
+  switch (provider) {
+    case IDEAL_IMAGE_PROVIDERS.OPENAI:
+      return generateIdealTypeImageWithOpenAI({ prompt });
+    case IDEAL_IMAGE_PROVIDERS.FAL_FLUX:
+      return generateIdealTypeImageWithFalFlux({ prompt });
+    case IDEAL_IMAGE_PROVIDERS.REPLICATE_FLUX:
+      return generateIdealTypeImageWithReplicateFlux({ prompt });
+    case IDEAL_IMAGE_PROVIDERS.GENERATED_PHOTOS:
+      return generateIdealTypeImageWithGeneratedPhotos({ prompt });
+    case IDEAL_IMAGE_PROVIDERS.GETTY:
+      return generateIdealTypeImageWithGetty({ prompt });
+    case IDEAL_IMAGE_PROVIDERS.FIREFLY:
+      return generateIdealTypeImageWithFirefly({ prompt });
+    case IDEAL_IMAGE_PROVIDERS.BRIA:
+      return generateIdealTypeImageWithBria({ prompt });
+    default:
+      throw new HttpsError('internal', `알 수 없는 이미지 provider: ${provider}`);
+  }
+}
+
+function isReusableIdealImageCache(cached, { inputHash, legacyInputHash, provider }) {
+  if (
+    !cached ||
+    typeof cached.imageUrl !== 'string' ||
+    !cached.imageUrl ||
+    typeof cached.inputHash !== 'string'
+  ) {
+    return false;
+  }
+
+  const cachedProvider = cached.provider || IDEAL_IMAGE_PROVIDERS.OPENAI;
+  if (cachedProvider !== provider) {
+    return false;
+  }
+
+  if (cached.inputHash === inputHash) {
+    return true;
+  }
+
+  // provider 메타데이터가 없던 기존 OpenAI 캐시는 legacy hash로 계속 재사용한다.
+  return (
+    provider === IDEAL_IMAGE_PROVIDERS.OPENAI &&
+    !cached.provider &&
+    cached.inputHash === legacyInputHash
+  );
+}
+
+function promptVersionForProvider(provider) {
+  return provider === IDEAL_IMAGE_PROVIDERS.FAL_FLUX
+    ? IDEAL_IMAGE_FAL_PROMPT_POLICY_VERSION
+    : IDEAL_IMAGE_PROMPT_POLICY_VERSION;
+}
+
+function buildPromptForProvider(provider, input) {
+  if (provider === IDEAL_IMAGE_PROVIDERS.FAL_FLUX) {
+    return buildFalFluxIdealImagePrompt(input);
+  }
+  return buildIdealImagePrompt(input);
+}
+
+function requireIdealImagePreviewAccess(request) {
+  const token = request.auth?.token || {};
+  if (
+    token.admin === true ||
+    token.developer === true ||
+    token.idealImageProviderPreview === true
+  ) {
+    return;
+  }
+  throw new HttpsError('permission-denied', '개발자 preview 권한이 필요합니다.');
+}
+
+function normalizeIdealImageProvider(value) {
+  if (value === IDEAL_IMAGE_PROVIDERS.OPENAI) {
+    return IDEAL_IMAGE_PROVIDERS.OPENAI;
+  }
+  if (value === IDEAL_IMAGE_PROVIDERS.FAL_FLUX) {
+    return IDEAL_IMAGE_PROVIDERS.FAL_FLUX;
+  }
+  throw new HttpsError('invalid-argument', '지원하지 않는 provider입니다.');
+}
+
+async function generateIdealTypeImageResult({
+  uid,
+  data,
+  provider,
+  cacheField = 'idealTypeImage',
+}) {
+  const input = normalizeIdealImageInput(data || {});
+  if (input.refinementBlocked) {
+    // 원문은 로그에 남기지 않는다 — 어떤 요청이 막혔는지가 아니라 막혔다는
+    // 사실만 남긴다.
+    console.warn('[generateIdealTypeImage] refinementText blocked', {
+      provider,
+      stage: 'refinement_validation',
+    });
+    throw new HttpsError(
+      'invalid-argument',
+      '요청하신 수정 문구는 반영할 수 없어요. 다른 표현으로 다시 시도해주세요.',
+    );
+  }
+  const promptVersion = promptVersionForProvider(provider);
+  const inputHash = idealImageHash(input, provider, promptVersion);
+  const legacyInputHash = legacyIdealImageHash(input);
+  const userRef = db.collection('users').doc(uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
+  }
+
+  const cached = userSnap.data()?.[cacheField];
+  if (
+    isReusableIdealImageCache(cached, {
+      inputHash,
+      legacyInputHash,
+      provider,
+    })
+  ) {
+    return cached;
+  }
+
+  const prompt = buildPromptForProvider(provider, input);
+  const generation = await generateIdealTypeImageWithProvider(provider, { prompt });
+
+  let uploaded;
+  try {
+    uploaded = await uploadIdealImage({
+      uid,
+      inputHash,
+      imageBuffer: generation.imageBuffer,
+    });
+  } catch (error) {
+    console.error('[generateIdealTypeImage] storage upload error', {
+      provider,
+      model: generation.model,
+      stage: 'storage_upload',
+      cacheField,
+      message: error?.message,
+    });
+    throw new HttpsError('internal', 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.');
+  }
+  const result = {
+    inputHash,
+    imageUrl: uploaded.url,
+    storagePath: uploaded.path,
+    summary: idealImageSummary(input),
+    safetyLabel: 'AI가 생성한 가상의 이미지입니다. 실제 앱 사용자가 아닙니다.',
+    options: {
+      gender: input.gender,
+      idealTags: input.idealTags,
+      mood: input.mood.key,
+      style: input.style.key,
+      hair: input.hair.key,
+      impression: input.impression.key,
+      background: input.background.key,
+    },
+    revisedPrompt: generation.revisedPrompt,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    provider,
+    model: generation.model,
+    promptVersion,
+    safetyPolicyVersion: promptVersion,
+    imageCount: 1,
+    syntheticHuman: true,
+  };
+
+  try {
+    await userRef.set({ [cacheField]: result }, { merge: true });
+  } catch (error) {
+    console.error('[generateIdealTypeImage] storage metadata write error', {
+      provider,
+      model: generation.model,
+      stage: 'firestore_write',
+      cacheField,
+      message: error?.message,
+    });
+    throw new HttpsError('internal', 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.');
+  }
+  return {
+    ...result,
+    createdAt: null,
+  };
+}
+
+/**
  * AI 이상형 이미지 생성 (callable).
  *
  * 입력: { gender, idealTags, mood, style, hair, impression, background }
+ * provider: ACTIVE_IDEAL_IMAGE_PROVIDER(현재 fal_flux) 고정. openai로 롤백하려면
+ * 이 값만 바꿔서 재배포하면 된다 — 나머지 로직/응답 schema는 provider에 무관하다.
  * 캐싱: users/{uid}.idealTypeImage.inputHash가 같으면 Storage URL을 재사용한다.
  */
 exports.generateIdealTypeImage = onCall(
-  { secrets: [OPENAI_API_KEY], timeoutSeconds: 120, memory: '1GiB' },
+  { secrets: [OPENAI_API_KEY, FAL_KEY], timeoutSeconds: 120, memory: '1GiB' },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     }
 
-    const input = normalizeIdealImageInput(request.data || {});
-    const inputHash = idealImageHash(input);
-    const userRef = db.collection('users').doc(request.auth.uid);
-    const userSnap = await userRef.get();
-    if (!userSnap.exists) {
-      throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
-    }
-
-    const cached = userSnap.data()?.idealTypeImage;
-    if (
-      cached &&
-      cached.inputHash === inputHash &&
-      typeof cached.imageUrl === 'string' &&
-      cached.imageUrl
-    ) {
-      return cached;
-    }
-
-    const client = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
-    const prompt = buildIdealImagePrompt(input);
-    let imageResponse;
-    try {
-      imageResponse = await client.images.generate({
-        model: IDEAL_IMAGE_MODEL,
-        prompt,
-        n: 1,
-        size: '1024x1024',
-      });
-    } catch (error) {
-      console.error('[generateIdealTypeImage] OpenAI image error', {
-        status: error?.status,
-        code: error?.code,
-        message: error?.message,
-      });
-      throw new HttpsError(
-        'failed-precondition',
-        imageGenerationErrorMessage(error),
-      );
-    }
-
-    const imageData = imageResponse.data?.[0];
-    let imageBuffer;
-    try {
-      if (imageData?.b64_json) {
-        imageBuffer = Buffer.from(imageData.b64_json, 'base64');
-      } else if (imageData?.url) {
-        imageBuffer = await fetchImageBytes(imageData.url);
-      }
-    } catch (error) {
-      console.error('[generateIdealTypeImage] image download/parse error', {
-        message: error?.message,
-      });
-      throw new HttpsError(
-        'internal',
-        '생성된 이미지를 저장하기 위해 내려받는 중 실패했습니다.',
-      );
-    }
-
-    if (!imageBuffer) {
-      throw new HttpsError('internal', '이미지 응답이 비어 있습니다.');
-    }
-
-    const uploaded = await uploadIdealImage({
+    return generateIdealTypeImageResult({
       uid: request.auth.uid,
-      inputHash,
-      imageBuffer,
+      data: request.data || {},
+      provider: ACTIVE_IDEAL_IMAGE_PROVIDER,
+      cacheField: 'idealTypeImage',
     });
-    const result = {
-      inputHash,
-      imageUrl: uploaded.url,
-      storagePath: uploaded.path,
-      summary: idealImageSummary(input),
-      safetyLabel: 'AI가 생성한 가상의 이미지입니다. 실제 앱 사용자가 아닙니다.',
-      options: {
-        gender: input.gender,
-        idealTags: input.idealTags,
-        mood: input.mood.key,
-        style: input.style.key,
-        hair: input.hair.key,
-        impression: input.impression.key,
-        background: input.background.key,
-      },
-      revisedPrompt: imageData?.revised_prompt || null,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
+  },
+);
 
-    await userRef.set({ idealTypeImage: result }, { merge: true });
-    return {
-      ...result,
-      createdAt: null,
-    };
+/**
+ * AI 이상형 이미지 provider preview (developer/PoC only).
+ *
+ * 입력: { provider: 'openai' | 'fal_flux', ...generateIdealTypeImage options }
+ * 일반 앱 UI에서는 호출하지 않는다. custom claim(admin/developer/
+ * idealImageProviderPreview) 중 하나가 있는 계정만 접근 가능하다.
+ * 결과는 users/{uid}.idealTypeImageProviderPreview에 저장해 일반 앱 캐시와
+ * 섞이지 않게 한다.
+ */
+exports.generateIdealTypeImageProviderPreview = onCall(
+  {
+    secrets: [OPENAI_API_KEY, FAL_KEY],
+    timeoutSeconds: 120,
+    memory: '1GiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+    requireIdealImagePreviewAccess(request);
+    const provider = normalizeIdealImageProvider(request.data?.provider);
+    return generateIdealTypeImageResult({
+      uid: request.auth.uid,
+      data: request.data || {},
+      provider,
+      cacheField: 'idealTypeImageProviderPreview',
+    });
   },
 );
 

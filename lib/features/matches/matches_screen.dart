@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -14,12 +15,14 @@ import '../../services/likes/likes_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
+import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
 import '../fortune/fortune_route_names.dart';
 import '../fortune/match_fortune_screen.dart';
 import '../likes/received_likes_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
+import 'widgets/match_celebration_overlay.dart';
 
 /// 매칭 목록 화면 (하단 탭 1번).
 ///
@@ -67,6 +70,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
   Stream<List<ReceivedLike>>? _likesStream;
   String? _currentUid;
   UserProfile? _currentProfile;
+  bool _celebrationChecked = false;
 
   @override
   void initState() {
@@ -77,12 +81,76 @@ class _MatchesScreenState extends State<MatchesScreen> {
       _stream = widget.matchesService.watchMatches(currentUid: uid);
       _likesStream = widget.likesService.watchReceivedLikes(currentUid: uid);
       _loadCurrentProfile(uid);
+      _checkPendingCelebration(uid);
     }
   }
 
   Future<void> _loadCurrentProfile(String uid) async {
     final profile = await widget.firestoreService.getUserProfile(uid);
     if (mounted) setState(() => _currentProfile = profile);
+  }
+
+  /// 매칭 탭 진입 시 "아직 이 uid가 축하를 못 본 매칭"이 있는지 한 번만 확인한다.
+  ///
+  /// celebratedBy가 아예 없는 매치(이 기능 이전에 생성됐거나, 스와이프 쪽의
+  /// markCelebrated 기록이 실패한 경우)는 대상에서 제외한다 — 그래야 기존
+  /// 매치 전체가 한꺼번에 축하 대상으로 뜨는 걸 막을 수 있다.
+  /// 여러 건이 대기 중이면 가장 최근 매치(스트림이 matchedAt desc 정렬) 하나만 보여준다.
+  Future<void> _checkPendingCelebration(String uid) async {
+    final stream = _stream;
+    if (stream == null || _celebrationChecked) return;
+    try {
+      final matches = await stream.first;
+      if (!mounted || _celebrationChecked) return;
+      _celebrationChecked = true;
+
+      MatchWithProfile? pending;
+      for (final mwp in matches) {
+        if (mwp.match.isPendingCelebrationFor(uid)) {
+          pending = mwp;
+          break;
+        }
+      }
+      if (pending == null) return;
+
+      final toShow = pending;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showPendingCelebration(toShow, uid);
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Matches] 미확인 매칭 축하 체크 실패: $e');
+    }
+  }
+
+  void _showPendingCelebration(MatchWithProfile mwp, String uid) {
+    void markSeen() {
+      widget.matchesService
+          .markCelebrated(matchId: mwp.match.matchId, uid: uid)
+          .catchError((e) {
+            if (kDebugMode) debugPrint('[Matches] 매칭 축하 기록 실패: $e');
+          });
+    }
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: AppColors.ink.withValues(alpha: 0),
+      pageBuilder: (ctx, _, _) => MatchCelebrationOverlay(
+        match: mwp,
+        currentUserPhotoUrl: _currentProfile?.photoUrls.isNotEmpty == true
+            ? _currentProfile!.photoUrls.first
+            : '',
+        onKeepSwiping: () {
+          markSeen();
+          Navigator.pop(ctx);
+        },
+        onChat: () {
+          markSeen();
+          Navigator.pop(ctx);
+          _openChat(mwp);
+        },
+      ),
+    );
   }
 
   void _openChat(MatchWithProfile mwp) {
@@ -96,10 +164,54 @@ class _MatchesScreenState extends State<MatchesScreen> {
           currentUid: uid,
           chatService: widget.chatService,
           fortuneService: widget.fortuneService,
+          matchesService: widget.matchesService,
           safetyService: widget.safetyService,
         ),
       ),
     );
+  }
+
+  Future<void> _confirmUnmatch(MatchWithProfile mwp) async {
+    final uid = _currentUid;
+    if (uid == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('매칭을 해제할까요?'),
+        content: const Text('해제하면 서로의 매칭 목록에서 사라지고 더 이상 대화할 수 없어요.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('해제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.matchesService.unmatch(matchId: mwp.match.matchId, uid: uid);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('매칭을 해제했어요.')));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('매칭 해제에 실패했어요. 잠시 후 다시 시도해주세요.')),
+          );
+      }
+    }
   }
 
   void _openFortune(MatchWithProfile mwp) {
@@ -173,6 +285,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
       appBar: AppBar(
         title: const Text('매칭', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
       ),
       body: StreamBuilder<List<MatchWithProfile>>(
@@ -191,7 +304,12 @@ class _MatchesScreenState extends State<MatchesScreen> {
           }
           final matches = snap.data ?? [];
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              24 + MediaQuery.of(context).padding.bottom,
+            ),
             children: [
               _ReceivedLikesEntry(
                 stream: _likesStream!,
@@ -203,19 +321,63 @@ class _MatchesScreenState extends State<MatchesScreen> {
               if (matches.isEmpty)
                 const _EmptyMatchesInline()
               else
-                ...matches.map(
-                  (mwp) => _MatchTile(
-                    mwp: mwp,
-                    currentUid: _currentUid!,
-                    onProfileTap: () => _openProfile(mwp.otherProfile),
-                    onChatTap: () => _openChat(mwp),
-                    onFortuneTap: () => _openFortune(mwp),
+                ...matches.asMap().entries.map(
+                  (entry) => _StaggeredMatchTile(
+                    index: entry.key,
+                    child: _MatchTile(
+                      mwp: entry.value,
+                      currentUid: _currentUid!,
+                      onProfileTap: () =>
+                          _openProfile(entry.value.otherProfile),
+                      onChatTap: () => _openChat(entry.value),
+                      onFortuneTap: () => _openFortune(entry.value),
+                      onUnmatchRequested: () => _confirmUnmatch(entry.value),
+                    ),
                   ),
                 ),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+class _StaggeredMatchTile extends StatefulWidget {
+  final int index;
+  final Widget child;
+
+  const _StaggeredMatchTile({required this.index, required this.child});
+
+  @override
+  State<_StaggeredMatchTile> createState() => _StaggeredMatchTileState();
+}
+
+class _StaggeredMatchTileState extends State<_StaggeredMatchTile> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(AppDurations.staggerDelay(widget.index), () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: _visible ? 1 : 0),
+      duration: AppDurations.fast,
+      curve: AppCurves.standard,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, 10 * (1 - value)),
+          child: child,
+        ),
+      ),
+      child: widget.child,
     );
   }
 }
@@ -240,9 +402,8 @@ class _ReceivedLikesEntry extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.card),
-              border: Border.all(
-                color: AppColors.primary.withValues(alpha: 0.14),
-              ),
+              border: Border.all(color: AppColors.mint.withValues(alpha: 0.22)),
+              boxShadow: AppShadows.card,
             ),
             child: Row(
               children: [
@@ -250,12 +411,12 @@ class _ReceivedLikesEntry extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
+                    color: AppColors.mint.withValues(alpha: 0.14),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.favorite_rounded,
-                    color: AppColors.primary,
+                    color: AppColors.mint,
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -282,10 +443,7 @@ class _ReceivedLikesEntry extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textSecondary,
-                ),
+                const Icon(Icons.chevron_right_rounded, color: AppColors.mint),
               ],
             ),
           ),
@@ -319,19 +477,39 @@ class _EmptyMatchesInline extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 28),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.border),
       ),
-      child: const Text(
-        '아직 매칭이 없어요\n둘러보기에서 마음에 드는 분께 Like를 보내보세요!',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 14,
-          color: AppColors.textSecondary,
-          height: 1.6,
-        ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.favorite_border_rounded,
+            size: 40,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            '아직 매칭이 없어요',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '둘러보기에서 마음에 드는 분께\nLike를 보내보세요!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+              height: 1.55,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -343,12 +521,14 @@ class _MatchTile extends StatelessWidget {
   final VoidCallback onProfileTap;
   final VoidCallback onChatTap;
   final VoidCallback onFortuneTap;
+  final VoidCallback onUnmatchRequested;
   const _MatchTile({
     required this.mwp,
     required this.currentUid,
     required this.onProfileTap,
     required this.onChatTap,
     required this.onFortuneTap,
+    required this.onUnmatchRequested,
   });
 
   @override
@@ -358,73 +538,144 @@ class _MatchTile extends StatelessWidget {
     final lastMessage = mwp.match.lastMessage;
     final hasUnread = _hasUnread(mwp, currentUid);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
-      ),
-      elevation: 0,
-      color: AppColors.surface,
-      child: ListTile(
-        onTap: onProfileTap,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 10,
-        ),
-        leading: _Avatar(photoUrl: photoUrl),
-        title: Text(
-          '${profile.displayName}, ${profile.age}',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _subtitle(mwp),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-              ),
+        child: InkWell(
+          onTap: onProfileTap,
+          onLongPress: onUnmatchRequested,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: AppColors.border),
+              boxShadow: AppShadows.card,
             ),
-            if (profile.verifications.hasAny) ...[
-              const SizedBox(height: 5),
-              VerificationBadges(verifications: profile.verifications),
-            ],
-          ],
-        ),
-        isThreeLine: profile.verifications.hasAny,
-        titleAlignment: ListTileTitleAlignment.center,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (lastMessage != null) ...[
-              _MessageMeta(
-                createdAt: lastMessage.createdAt,
-                hasUnread: hasUnread,
-              ),
-              const SizedBox(width: 4),
-            ],
-            IconButton(
-              icon: const Icon(
-                Icons.auto_awesome_rounded,
-                color: AppColors.secondary,
-              ),
-              tooltip: '궁합 보기',
-              onPressed: onFortuneTap,
-              visualDensity: VisualDensity.compact,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Avatar(photoUrl: photoUrl),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${profile.displayName}, ${profile.age}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 17,
+                              ),
+                            ),
+                          ),
+                          if (hasUnread || lastMessage == null) ...[
+                            const SizedBox(width: 6),
+                            PremiumStatusPill(
+                              label: hasUnread ? '읽지 않음' : '새 매칭',
+                              compact: true,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _subtitle(mwp),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: hasUnread
+                                    ? AppColors.textPrimary
+                                    : AppColors.textSecondary,
+                                fontWeight: hasUnread
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                          if (lastMessage != null)
+                            _MessageMeta(
+                              createdAt: lastMessage.createdAt,
+                              hasUnread: hasUnread,
+                            ),
+                        ],
+                      ),
+                      if (profile.verifications.hasAny) ...[
+                        const SizedBox(height: 7),
+                        VerificationBadges(
+                          verifications: profile.verifications,
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: onFortuneTap,
+                              icon: const Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 16,
+                              ),
+                              label: const Text(
+                                '궁합',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.textPrimary,
+                                side: const BorderSide(
+                                  color: AppColors.border,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: onChatTap,
+                              icon: const Icon(
+                                Icons.chat_bubble_rounded,
+                                size: 16,
+                              ),
+                              label: const Text(
+                                '대화',
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(
-                Icons.chat_bubble_outline_rounded,
-                color: AppColors.primary,
-              ),
-              tooltip: '채팅 열기',
-              onPressed: onChatTap,
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -536,13 +787,21 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 30,
-      backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
-      backgroundColor: AppColors.border,
-      child: photoUrl == null
-          ? const Icon(Icons.person_rounded, color: AppColors.textSecondary)
-          : null,
+    return PremiumProfileImageCard(
+      radius: AppRadius.button,
+      child: SizedBox(
+        width: 82,
+        height: 108,
+        child: photoUrl == null
+            ? const ColoredBox(
+                color: AppColors.surface,
+                child: Icon(
+                  Icons.person_rounded,
+                  color: AppColors.textSecondary,
+                ),
+              )
+            : Image.network(photoUrl!, fit: BoxFit.cover),
+      ),
     );
   }
 }

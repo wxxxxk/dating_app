@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +9,7 @@ import '../../models/message_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/fortune/fortune_service.dart';
+import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../safety/report_sheet.dart';
 
@@ -20,6 +23,7 @@ class ChatScreen extends StatefulWidget {
   final String currentUid;
   final ChatService chatService;
   final FortuneService fortuneService;
+  final MatchesService matchesService;
   final SafetyService safetyService;
 
   const ChatScreen({
@@ -29,6 +33,7 @@ class ChatScreen extends StatefulWidget {
     required this.currentUid,
     required this.chatService,
     required this.fortuneService,
+    required this.matchesService,
     required this.safetyService,
   });
 
@@ -48,10 +53,13 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _blocked = false;
   bool _hasMessages = false;
   bool _showConversationTips = false;
+  bool _unmatched = false;
+  bool _unmatching = false;
   String? _lastReadMarker;
   String? _latestConversationTipMessageId;
   // 실제 typing 이벤트가 연결되면 이 값만 갱신하면 된다.
   final bool _isOtherTyping = false;
+  StreamSubscription<bool>? _unmatchedSub;
 
   @override
   void initState() {
@@ -59,6 +67,15 @@ class _ChatScreenState extends State<ChatScreen> {
     _stream = widget.chatService.watchMessages(widget.matchId);
     _markMatchRead();
     _checkBlocked();
+    // 채팅방을 열어둔 채로 상대가 매칭을 해제해도 바로 반영되도록 구독한다.
+    // 실제 차단은 firestore.rules(메시지 create)가 서버 단에서 하므로,
+    // 이 구독은 UX(입력창 비활성화·안내) 목적이다.
+    _unmatchedSub = widget.chatService.watchIsUnmatched(widget.matchId).listen((
+      value,
+    ) {
+      if (!mounted) return;
+      setState(() => _unmatched = value);
+    }, onError: (Object e) => _debugLog('[Chat] unmatch 상태 구독 실패: $e'));
   }
 
   @override
@@ -66,12 +83,13 @@ class _ChatScreenState extends State<ChatScreen> {
     _textController.dispose();
     _inputFocusNode.dispose();
     _scrollController.dispose();
+    _unmatchedSub?.cancel();
     super.dispose();
   }
 
   Future<void> _send() async {
     final text = _textController.text;
-    if (text.trim().isEmpty || _sending || _blocked) return;
+    if (text.trim().isEmpty || _sending || _blocked || _unmatched) return;
 
     // 입력창은 전송 시도와 동시에 비워 즉각 반응하게 하고, 실패 시 되돌린다.
     _textController.clear();
@@ -103,7 +121,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
         duration: AppDurations.base,
-        curve: Curves.easeOut,
+        curve: AppCurves.standard,
       );
     });
   }
@@ -133,7 +151,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _fillInput(String message) {
-    if (_blocked) return;
+    if (_blocked || _unmatched) return;
     _textController.text = message;
     _textController.selection = TextSelection.collapsed(offset: message.length);
     _inputFocusNode.requestFocus();
@@ -168,7 +186,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _requestConversationTips({bool forceRefresh = false}) {
-    if (_blocked || !_hasMessages) return;
+    if (_blocked || _unmatched || !_hasMessages) return;
     setState(() {
       _showConversationTips = true;
       if (forceRefresh || _conversationTipsFuture == null) {
@@ -270,7 +288,10 @@ class _ChatScreenState extends State<ChatScreen> {
             child: const Text('취소'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('차단'),
           ),
@@ -292,6 +313,51 @@ class _ChatScreenState extends State<ChatScreen> {
         '[Safety] 차단 실패 blockedUid=${widget.otherProfile.uid} error=$e',
       );
       if (mounted) _showSnack('차단에 실패했어요. 잠시 후 다시 시도해주세요.');
+    }
+  }
+
+  Future<void> _confirmUnmatch() async {
+    if (_unmatching || _unmatched) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('매칭을 해제할까요?'),
+        content: const Text('해제하면 서로의 매칭 목록에서 사라지고 더 이상 대화할 수 없어요.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('해제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _unmatching = true);
+    try {
+      await widget.matchesService.unmatch(
+        matchId: widget.matchId,
+        uid: widget.currentUid,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('매칭을 해제했어요.')));
+      Navigator.pop(context);
+    } catch (e) {
+      _debugLog('[Chat] 매칭 해제 실패 matchId=${widget.matchId} error=$e');
+      if (mounted) {
+        setState(() => _unmatching = false);
+        _showSnack('매칭 해제에 실패했어요. 잠시 후 다시 시도해주세요.');
+      }
     }
   }
 
@@ -351,10 +417,19 @@ class _ChatScreenState extends State<ChatScreen> {
             onSelected: (value) {
               if (value == 'report') _reportUser();
               if (value == 'block') _blockUser();
+              if (value == 'unmatch') _confirmUnmatch();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'report', child: Text('신고하기')),
-              PopupMenuItem(value: 'block', child: Text('차단하기')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'report', child: Text('신고하기')),
+              const PopupMenuItem(value: 'block', child: Text('차단하기')),
+              if (!_unmatched)
+                const PopupMenuItem(
+                  value: 'unmatch',
+                  child: Text(
+                    '매칭 해제',
+                    style: TextStyle(color: AppColors.error),
+                  ),
+                ),
             ],
           ),
         ],
@@ -369,7 +444,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(child: _buildMessageList()),
                   _TypingSlot(isTyping: _isOtherTyping),
                   _buildConversationCoach(),
-                  _buildInputBar(),
+                  _unmatched ? const _UnmatchedInputBar() : _buildInputBar(),
                 ],
               ),
       ),
@@ -445,7 +520,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildConversationCoach() {
-    if (!_hasMessages) return const SizedBox.shrink();
+    if (!_hasMessages || _unmatched) return const SizedBox.shrink();
     return _ConversationCoachPanel(
       future: _conversationTipsFuture,
       expanded: _showConversationTips,
@@ -546,10 +621,48 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton(
+          IconButton.filled(
             onPressed: _sending ? null : _send,
             icon: const Icon(Icons.send_rounded),
-            color: AppColors.primary,
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.mintStrong,
+              foregroundColor: AppColors.onMint,
+              disabledBackgroundColor: AppColors.divider,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 입력창 자리를 대체하는 안내 바 — 매칭이 해제된 뒤에도 기존 대화 기록은
+/// 그대로 보여주되(삭제하지 않음), 새 메시지만 보낼 수 없게 막는다.
+class _UnmatchedInputBar extends StatelessWidget {
+  const _UnmatchedInputBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.06),
+        border: const Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.block_rounded, size: 18, color: AppColors.error),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '매칭이 해제되어 더 이상 대화할 수 없어요.',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
           ),
         ],
       ),
@@ -639,10 +752,13 @@ class _ConversationCoachPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.3)),
+        boxShadow: AppShadows.card,
       ),
       child: AnimatedSwitcher(
         duration: AppDurations.fast,
@@ -656,12 +772,19 @@ class _ConversationCoachPanel extends StatelessWidget {
             : Align(
                 key: const ValueKey('conversation-button'),
                 alignment: Alignment.centerLeft,
+                // premium accent로 "이건 AI가 돕는 기능"이라는 신호를 준다 —
+                // 전송 버튼(primary)과 구분되게.
                 child: TextButton.icon(
                   onPressed: onRequest,
                   icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                  label: const Text('대화 이어가기'),
+                  label: const Text(
+                    '대화 이어가기',
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
+                    foregroundColor: AppColors.mintDeep,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 8,
@@ -715,7 +838,7 @@ class _ConversationTipsFuture extends StatelessWidget {
                 const Icon(
                   Icons.auto_awesome_rounded,
                   size: 17,
-                  color: AppColors.primary,
+                  color: AppColors.mint,
                 ),
                 const SizedBox(width: 6),
                 const Expanded(
@@ -838,7 +961,7 @@ class _ConversationTipButton extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppRadius.button),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: AppColors.mint.withValues(alpha: 0.24)),
             ),
             child: Text(
               tip.message,
@@ -1052,7 +1175,7 @@ class _AnimatedMessageRow extends StatelessWidget {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: AppDurations.fast,
-      curve: Curves.easeOutCubic,
+      curve: AppCurves.standard,
       builder: (context, value, child) {
         return Opacity(
           opacity: value,
@@ -1096,7 +1219,9 @@ class _MessageBubble extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isMine ? AppColors.primary : AppColors.surface,
+                // 내 버블: 시그니처 민트 fill + 다크 잉크 텍스트.
+                // (구 seal red 버블은 경고/에러처럼 읽혀서 폐기)
+                color: isMine ? AppColors.mint : AppColors.surface,
                 borderRadius: _radius,
                 border: isMine ? null : Border.all(color: AppColors.border),
               ),
@@ -1104,7 +1229,7 @@ class _MessageBubble extends StatelessWidget {
                 message.text,
                 style: TextStyle(
                   fontSize: 15,
-                  color: isMine ? AppColors.surface : AppColors.textPrimary,
+                  color: isMine ? AppColors.onMint : AppColors.textPrimary,
                   height: 1.4,
                 ),
               ),
@@ -1264,8 +1389,8 @@ class _TypingSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: AppDurations.fast,
-      switchInCurve: Curves.easeOut,
-      switchOutCurve: Curves.easeIn,
+      switchInCurve: AppCurves.standard,
+      switchOutCurve: AppCurves.exit,
       child: isTyping
           ? const Padding(
               key: ValueKey('typing-on'),

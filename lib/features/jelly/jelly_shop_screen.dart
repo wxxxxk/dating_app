@@ -7,6 +7,8 @@ import '../../core/theme/app_colors.dart';
 import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../../shared/widgets/premium_components.dart';
+import 'jelly_history_screen.dart';
 
 /// 젤리 충전 화면.
 ///
@@ -195,18 +197,40 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => JellyHistoryScreen(
+                  currentUid: widget.currentUid,
+                  jellyService: widget.jellyService,
+                ),
+              ),
+            ),
+            style: TextButton.styleFrom(foregroundColor: AppColors.mintDeep),
+            child: const Text('내역'),
+          ),
+        ],
       ),
       body: Stack(
         children: [
           ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              12,
+              20,
+              28 + MediaQuery.of(context).padding.bottom,
+            ),
             children: [
               _BalanceHeader(
                 currentUid: widget.currentUid,
                 jellyService: widget.jellyService,
               ),
               const SizedBox(height: 14),
+              const _JellyBenefitsCard(),
+              const SizedBox(height: 20),
               Text(
                 kJellyMockPurchases ? '테스트 모드 상품' : '충전 상품',
                 style: const TextStyle(
@@ -247,6 +271,86 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
   }
 }
 
+/// 젤리로 실제 할 수 있는 것들을 보여주는 카드. JellyCosts에 있는 실제 값만
+/// 쓴다 — 존재하지 않는 혜택을 만들어내지 않는다.
+class _JellyBenefitsCard extends StatelessWidget {
+  const _JellyBenefitsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumSectionCard(
+      title: '젤리로 할 수 있는 것',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: const [
+          _BenefitRow(
+            icon: Icons.star_rounded,
+            label: '슈퍼라이크 보내기',
+            cost: '${JellyCosts.superlike}개',
+          ),
+          _BenefitRow(
+            icon: Icons.replay_rounded,
+            label: '스와이프 되돌리기',
+            cost: '${JellyCosts.rewind}개',
+          ),
+          _BenefitRow(
+            icon: Icons.bolt_rounded,
+            label: '30분 부스트로 우선 노출',
+            cost: '${JellyCosts.boost}개',
+          ),
+          _BenefitRow(
+            icon: Icons.favorite_rounded,
+            label: '받은 좋아요 전체 보기',
+            cost: '${JellyCosts.unlockReceivedLikes}개',
+            isLast: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BenefitRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String cost;
+  final bool isLast;
+
+  const _BenefitRow({
+    required this.icon,
+    required this.label,
+    required this.cost,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.mintDeep),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            ),
+          ),
+          Text(
+            cost,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.mintDeep,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class JellyBalanceButton extends StatelessWidget {
   final String currentUid;
   final JellyService jellyService;
@@ -263,7 +367,10 @@ class JellyBalanceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = foregroundColor ?? AppColors.textPrimary;
+    // 젤리는 프리미엄 재화라, 앱바에 뜰 때도 기본으로 matchPrimary를 쓴다.
+    // 아무 호출부도 foregroundColor를 넘기지 않아(전부 기본값 사용 중)
+    // 이 기본값 변경만으로 Home/Discovery/받은 좋아요 앱바 전부에 반영된다.
+    final color = foregroundColor ?? AppColors.matchPrimary;
     return StreamBuilder<int>(
       stream: jellyService.watchBalance(currentUid),
       builder: (context, snap) {
@@ -311,12 +418,14 @@ class _BalanceHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 발표용 긴급 안정화: 다크 히어로 대신 mintSoft 라이트 카드로 통일한다.
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
+        color: AppColors.mintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        border: Border.all(color: AppColors.mint.withValues(alpha: 0.3)),
+        boxShadow: AppShadows.card,
       ),
       child: StreamBuilder<int>(
         stream: jellyService.watchBalance(currentUid),
@@ -324,24 +433,36 @@ class _BalanceHeader extends StatelessWidget {
           final balance = snap.data ?? 0;
           return Row(
             children: [
-              const Icon(
-                Icons.local_fire_department_rounded,
-                color: AppColors.primary,
-                size: 34,
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.mint.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: AppColors.mint,
+                  size: 28,
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     '보유 젤리',
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     '$balance개',
                     style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
                       color: AppColors.textPrimary,
                     ),
                   ),
@@ -368,52 +489,76 @@ class _ProductTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.mint.withValues(alpha: 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 3),
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.local_fire_department_rounded,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Row(
-                  children: [
-                    Text(
-                      '젤리 ${product.amount}개',
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimary,
+        ],
+      ),
+      child: Material(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: AppColors.mint.withValues(alpha: 0.24)),
+            ),
+            child: Row(
+              children: [
+                // 잔액 헤더/혜택 카드와 같은 premium 톤으로 통일한다.
+                const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: AppColors.mint,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '젤리 ${product.amount}개',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                    ),
-                    if (product.badge != null) ...[
-                      const SizedBox(width: 8),
-                      _ProductBadge(label: product.badge!),
+                      if (product.badge != null) ...[
+                        const SizedBox(height: 5),
+                        _ProductBadge(label: product.badge!),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              Text(
-                priceLabel,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                const SizedBox(width: 10),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 96),
+                  child: Text(
+                    priceLabel,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -431,7 +576,7 @@ class _ProductBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.secondary.withValues(alpha: 0.12),
+        color: AppColors.mintSoft,
         borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Text(
@@ -439,7 +584,7 @@ class _ProductBadge extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
-          color: AppColors.secondary,
+          color: AppColors.onMint,
         ),
       ),
     );

@@ -85,6 +85,50 @@ class JellyPurchaseCatalog {
   }
 }
 
+/// 젤리 사용 내역 화면용 뷰 모델. users/{uid}/jellyTransactions/{txId} 1건.
+class JellyTransaction {
+  final String type; // 'charge' | 'spend'
+  final int amount; // charge는 양수, spend는 음수
+  final String
+  reason; // 'superlike' | 'rewind' | 'boost' | 'unlock_received_likes' | 상품ID 등
+  final DateTime? createdAt;
+
+  const JellyTransaction({
+    required this.type,
+    required this.amount,
+    required this.reason,
+    required this.createdAt,
+  });
+
+  bool get isCharge => type == 'charge';
+
+  factory JellyTransaction.fromMap(Map<String, dynamic> map) {
+    final ts = map['createdAt'];
+    return JellyTransaction(
+      type: map['type'] as String? ?? 'spend',
+      amount: (map['amount'] as num?)?.toInt() ?? 0,
+      reason: map['reason'] as String? ?? '',
+      createdAt: ts is Timestamp ? ts.toDate() : null,
+    );
+  }
+
+  /// reason key를 화면에 보여줄 한글 라벨로 변환한다.
+  String get label {
+    switch (reason) {
+      case 'superlike':
+        return '슈퍼라이크';
+      case 'rewind':
+        return '되돌리기';
+      case 'boost':
+        return '부스트';
+      case 'unlock_received_likes':
+        return '받은 좋아요 전체보기';
+      default:
+        return isCharge ? '젤리 충전' : reason;
+    }
+  }
+}
+
 class JellyService {
   JellyService({FirebaseFirestore? firestore})
     : _db = firestore ?? FirebaseFirestore.instance;
@@ -257,6 +301,22 @@ class JellyService {
       });
       return true;
     });
+  }
+
+  /// 최근 젤리 거래 내역을 실시간으로 구독한다 (충전/사용 화면용).
+  Stream<List<JellyTransaction>> watchTransactions(
+    String uid, {
+    int limit = 50,
+  }) {
+    return _txRef(uid)
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((doc) => JellyTransaction.fromMap(doc.data()))
+              .toList(),
+        );
   }
 
   Stream<bool> watchReceivedLikesUnlocked(String uid) {

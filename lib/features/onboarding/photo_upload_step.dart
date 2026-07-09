@@ -90,6 +90,7 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
                 const Text(
                   '프로필 사진 추가',
                   style: TextStyle(
+                    fontFamily: AppFonts.display,
                     fontSize: 26,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
@@ -98,10 +99,11 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  '나를 잘 표현하는 사진을 선택해주세요',
+                  '가장 먼저 보이는 정보예요. 나를 잘 표현하는 사진을 선택해주세요',
                   style: TextStyle(
                     fontSize: 15,
                     color: AppColors.textSecondary,
+                    height: 1.4,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -158,6 +160,7 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           child: PrimaryButton(
             label: '다음',
+            color: AppColors.matchPrimary,
             // 메인 사진이 있어야 다음으로 진행 가능
             onPressed: hasMain ? widget.onNext : null,
           ),
@@ -182,9 +185,14 @@ class _MainPhotoSlot extends StatelessWidget {
         aspectRatio: 1,
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: image == null ? AppColors.premiumSoft : AppColors.surface,
             borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(
+              color: image == null
+                  ? AppColors.premiumBorder
+                  : AppColors.matchPrimary,
+              width: image == null ? 1 : 1.5,
+            ),
             image: image != null
                 ? DecorationImage(image: FileImage(image!), fit: BoxFit.cover)
                 : null,
@@ -196,14 +204,15 @@ class _MainPhotoSlot extends StatelessWidget {
                     Icon(
                       Icons.add_a_photo_rounded,
                       size: 44,
-                      color: AppColors.textSecondary,
+                      color: AppColors.matchPrimary,
                     ),
                     SizedBox(height: 10),
                     Text(
                       '메인 사진 선택 (필수)',
                       style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.matchPrimary,
                       ),
                     ),
                   ],
@@ -247,7 +256,9 @@ class _SubPhotoSlot extends StatelessWidget {
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(AppRadius.button),
                 border: Border.all(
-                  color: image != null ? AppColors.primary : AppColors.border,
+                  color: image != null
+                      ? AppColors.matchPrimary
+                      : AppColors.border,
                   width: image != null ? 1.5 : 1,
                 ),
                 image: image != null

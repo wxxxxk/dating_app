@@ -259,8 +259,8 @@ class _ShareButton extends StatelessWidget {
       icon: const Icon(Icons.ios_share_rounded),
       label: Text(label),
       style: FilledButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.surface,
+        backgroundColor: AppColors.mint,
+        foregroundColor: AppColors.onMint,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
@@ -336,7 +336,7 @@ class _CoupleRow extends StatelessWidget {
           padding: EdgeInsets.symmetric(horizontal: 8),
           child: Icon(
             Icons.favorite_rounded,
-            color: AppColors.primary,
+            color: AppColors.fortuneAccent,
             size: 28,
           ),
         ),
@@ -415,8 +415,9 @@ class _CharacterCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.seal,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.seal.withValues(alpha: 0.16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,17 +428,16 @@ class _CharacterCard extends StatelessWidget {
               fontFamily: AppFonts.display,
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: AppColors.surface,
+              color: AppColors.seal,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             narrative.summary,
             style: const TextStyle(
-              fontFamily: AppFonts.display,
               fontSize: 15,
-              color: AppColors.surface,
-              height: 1.6,
+              color: AppColors.textPrimary,
+              height: 1.7,
             ),
           ),
         ],
@@ -465,7 +465,7 @@ class _AiRecommendationReasons extends StatelessWidget {
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(AppRadius.card),
             border: Border.all(
-              color: AppColors.primary.withValues(alpha: 0.12),
+              color: AppColors.fortuneAccent.withValues(alpha: 0.12),
             ),
           ),
           child: Column(
@@ -475,7 +475,7 @@ class _AiRecommendationReasons extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
+                    color: AppColors.fortuneAccent,
                     size: 20,
                   ),
                   SizedBox(width: 8),
@@ -556,9 +556,11 @@ class _RecommendationChip extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 42),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: AppColors.primary.withValues(alpha: 0.08),
+          color: AppColors.fortuneAccent.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(AppRadius.chip),
-          border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
+          border: Border.all(
+            color: AppColors.fortuneAccent.withValues(alpha: 0.16),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -566,7 +568,7 @@ class _RecommendationChip extends StatelessWidget {
             const Icon(
               Icons.auto_awesome_rounded,
               size: 15,
-              color: AppColors.primary,
+              color: AppColors.fortuneAccent,
             ),
             const SizedBox(width: 7),
             Flexible(

@@ -212,31 +212,34 @@ class _FirstImpressionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.seal,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.button),
+        // 매력 리포트는 AI/매칭 계열 기능 → 민트 accent (사주 레드 아님).
+        border: Border.all(
+          color: AppColors.matchPrimary.withValues(alpha: 0.2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             '첫인상',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: AppColors.surface.withValues(alpha: 0.7),
+              color: AppColors.matchPrimary,
             ),
           ),
           const SizedBox(height: 10),
           Text(
             text,
             style: const TextStyle(
-              fontFamily: AppFonts.display,
-              fontSize: 22,
-              height: 1.35,
-              fontWeight: FontWeight.w900,
-              color: AppColors.surface,
+              fontSize: 18,
+              height: 1.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
             ),
           ),
         ],

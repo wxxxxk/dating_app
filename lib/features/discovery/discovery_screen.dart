@@ -18,6 +18,7 @@ import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
+import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../matches/widgets/match_celebration_overlay.dart';
@@ -80,6 +81,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   Timer? _boostTimer;
   _RewindCandidate? _rewindCandidate;
   bool _rewinding = false;
+  String? _rewindEntryAction;
+  int _rewindEntryToken = 0;
 
   // `GlobalKey<SwipeCardState>`로 현재 카드의 triggerSwipe()를 호출한다.
   final _swipeKey = GlobalKey<SwipeCardState>();
@@ -176,7 +179,11 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     setState(() {
       _currentIndex++;
       _rewindCandidate = (action == 'pass' || action == 'like')
-          ? _RewindCandidate(profile: swipedProfile, previousIndex: swipedIndex)
+          ? _RewindCandidate(
+              profile: swipedProfile,
+              previousIndex: swipedIndex,
+              action: action,
+            )
           : null;
     });
     _recordAndCheckMatch(
@@ -243,6 +250,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   }
 
   void _showCelebration(MatchWithProfile match) {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid != null) {
+      widget.matchesService
+          .markCelebrated(matchId: match.match.matchId, uid: uid)
+          .catchError((e) {
+            _debugLog('[Discovery] 매칭 축하 기록 실패: $e');
+          });
+    }
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
@@ -272,6 +287,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           currentUid: uid,
           chatService: widget.chatService,
           fortuneService: widget.fortuneService,
+          matchesService: widget.matchesService,
           safetyService: widget.safetyService,
         ),
       ),
@@ -320,7 +336,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             child: const Text('취소'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('차단'),
           ),
@@ -399,6 +418,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
             _profiles.insert(restoreIndex, candidate.profile);
             _currentIndex = restoreIndex;
             _rewindCandidate = null;
+            _rewindEntryAction = candidate.action;
+            _rewindEntryToken++;
           });
           _showSnack('방금 넘긴 카드를 되돌렸어요.');
           return;
@@ -432,6 +453,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       builder: (_) => DiscoveryFilterSheet(
         initialFilter: _filter,
         hasLocation: _currentUserLocation != null,
+        onRetryLocation: _retryLocationForFilter,
+        myProfile: _currentUserProfile,
       ),
     );
     if (result == null) return;
@@ -440,6 +463,21 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     if (!mounted) return;
     setState(() => _filter = result);
     await _loadDiscovery();
+  }
+
+  /// 필터 시트의 "위치 다시 확인" 버튼에서 호출한다.
+  /// 위치를 다시 가져와 화면 상태(_currentUserLocation)도 함께 갱신한다.
+  Future<bool> _retryLocationForFilter() async {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid == null) return false;
+    final location = await _locationService.updateCurrentUserLocation(
+      uid: uid,
+      firestoreService: widget.firestoreService,
+    );
+    if (mounted && location != null) {
+      setState(() => _currentUserLocation = location);
+    }
+    return location != null;
   }
 
   // ── 더미 유저 생성 (개발용 — 출시 전 제거) ────────────────────────────────
@@ -551,13 +589,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   Widget build(BuildContext context) {
     final boostLabel = _boostRemainingLabel();
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
           '둘러보기',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
         actions: [
           if (widget.authService.currentUser?.uid != null)
@@ -565,12 +604,15 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
               currentUid: widget.authService.currentUser!.uid,
               jellyService: widget.jellyService,
               jellyPurchaseService: widget.jellyPurchaseService,
+              foregroundColor: AppColors.matchPrimary,
             ),
           IconButton(
             onPressed: _loading ? null : _activateBoost,
             icon: Icon(
               Icons.flash_on_rounded,
-              color: boostLabel == null ? null : AppColors.primary,
+              // 부스트는 젤리로 사는 프리미엄 기능이라 활성 상태는
+              // matchPrimary(premium green)로 표시한다.
+              color: boostLabel == null ? null : AppColors.matchPrimary,
             ),
             tooltip: boostLabel == null ? '부스트' : '부스트 남은 시간 $boostLabel',
           ),
@@ -655,10 +697,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                 child: Transform.scale(
                   scale: 0.95,
                   alignment: Alignment.topCenter,
-                  child: ProfileCardContent(
-                    profile: _profiles[_currentIndex + 1],
-                    currentUserBirthDate: _currentUserProfile?.birthDate,
-                    currentUserLocation: _currentUserLocation,
+                  child: PremiumProfileImageCard(
+                    child: ProfileCardContent(
+                      profile: _profiles[_currentIndex + 1],
+                      currentUserBirthDate: _currentUserProfile?.birthDate,
+                      currentUserLocation: _currentUserLocation,
+                    ),
                   ),
                 ),
               ),
@@ -669,29 +713,50 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           // 감지하고 _offset을 Offset.zero로 초기화한다.
           // 이 초기화가 없으면 이전 카드의 fly-off 위치가 남아 잔상이 생긴다.
           Positioned.fill(
-            child: SwipeCard(
-              key: _swipeKey,
-              profileUid: _profiles[_currentIndex].uid,
-              onSwiped: (action) =>
-                  _onSwiped(_profiles[_currentIndex].uid, action),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ProfileCardContent(
-                    profile: _profiles[_currentIndex],
-                    currentUserBirthDate: _currentUserProfile?.birthDate,
-                    currentUserLocation: _currentUserLocation,
-                    onProfileTap: () => _openProfile(_profiles[_currentIndex]),
+            child: TweenAnimationBuilder<double>(
+              key: ValueKey(_profiles[_currentIndex].uid),
+              tween: Tween(begin: 0, end: 1),
+              duration: AppDurations.base,
+              curve: AppCurves.standard,
+              builder: (context, value, child) => Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, 14 * (1 - value)),
+                  child: child,
+                ),
+              ),
+              child: SwipeCard(
+                key: _swipeKey,
+                profileUid: _profiles[_currentIndex].uid,
+                rewindEntryAction: _rewindEntryAction,
+                rewindEntryToken: _rewindEntryToken,
+                onSwiped: (action) =>
+                    _onSwiped(_profiles[_currentIndex].uid, action),
+                child: PremiumProfileImageCard(
+                  glow: true,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ProfileCardContent(
+                        profile: _profiles[_currentIndex],
+                        currentUserBirthDate: _currentUserProfile?.birthDate,
+                        currentUserLocation: _currentUserLocation,
+                        onProfileTap: () =>
+                            _openProfile(_profiles[_currentIndex]),
+                      ),
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: _SafetyMenuButton(
+                          onReport: () =>
+                              _reportProfile(_profiles[_currentIndex]),
+                          onBlock: () =>
+                              _blockProfile(_profiles[_currentIndex]),
+                        ),
+                      ),
+                    ],
                   ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: _SafetyMenuButton(
-                      onReport: () => _reportProfile(_profiles[_currentIndex]),
-                      onBlock: () => _blockProfile(_profiles[_currentIndex]),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -708,33 +773,37 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           // REWIND 버튼 — 세션 내 직전 pass/like 한 번만 되돌린다.
-          _ActionButton(
+          PremiumActionCircleButton(
             icon: Icons.undo_rounded,
             color: AppColors.textSecondary,
             size: 50,
             onPressed: canRewind ? _handleRewind : null,
+            tooltip: '되돌리기',
           ),
           // PASS 버튼
-          _ActionButton(
+          PremiumActionCircleButton(
             icon: Icons.close_rounded,
             color: AppColors.error,
             size: 56,
             onPressed: () => _handleButtonSwipe('pass'),
+            tooltip: '패스',
           ),
-          // SUPER LIKE 버튼
+          // SUPER LIKE 버튼 — like(민트)와 구분되는 딥 블루(water) 프리미엄 톤.
           // 추후 결제/일일제한 연동: 지금은 발표용으로 무제한 허용한다.
-          _ActionButton(
+          PremiumActionCircleButton(
             icon: Icons.star_rounded,
             color: AppColors.water,
             size: 60,
             onPressed: () => _handleButtonSwipe('superlike'),
+            tooltip: '슈퍼라이크',
           ),
-          // LIKE 버튼
-          _ActionButton(
+          // LIKE 버튼 — 시그니처 민트. 이 화면의 대표 긍정 액션.
+          PremiumActionCircleButton(
             icon: Icons.favorite_rounded,
-            color: AppColors.wood,
+            color: AppColors.mint,
             size: 64,
             onPressed: () => _handleButtonSwipe('like'),
+            tooltip: '좋아요',
           ),
         ],
       ),
@@ -745,51 +814,103 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.search_off_rounded,
-              size: 72,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(height: 20),
-            Text(
-              _filter.hasActiveFilters ? '필터로 인해 볼 사람이 없어요' : '지금은 새로운 사람이 없어요',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _filter.hasActiveFilters
-                  ? '나이·거리·성별 조건을 조금 완화해보세요.'
-                  : '나중에 다시 확인하거나\n더미 유저를 생성해보세요.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.hero),
+            border: Border.all(color: AppColors.border),
+            boxShadow: AppShadows.card,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.search_off_rounded,
+                size: 72,
                 color: AppColors.textSecondary,
-                height: 1.6,
               ),
-            ),
-            const SizedBox(height: 28),
-            if (_filter.hasActiveFilters) ...[
-              OutlinedButton.icon(
-                onPressed: _openFilterSheet,
-                icon: const Icon(Icons.tune_rounded),
-                label: const Text('필터 조정하기'),
+              const SizedBox(height: 20),
+              Text(
+                _filter.hasActiveFilters
+                    ? '필터로 인해 볼 사람이 없어요'
+                    : '지금은 새로운 사람이 없어요',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+              Text(
+                _filter.hasActiveFilters
+                    ? '나이·거리·성별 조건을 조금 완화해보세요.'
+                    : '나중에 다시 확인하거나\n더미 유저를 생성해보세요.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.6,
+                ),
+              ),
+              if (_currentUserLocation == null) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.24),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.location_off_rounded,
+                        size: 16,
+                        color: AppColors.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '현재 위치를 불러오지 못해 거리 필터가 적용되지 않았어요.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textPrimary.withValues(
+                              alpha: 0.85,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 28),
+              if (_filter.hasActiveFilters) ...[
+                OutlinedButton.icon(
+                  onPressed: _openFilterSheet,
+                  icon: const Icon(Icons.tune_rounded),
+                  label: const Text('필터 조정하기'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.mintDeep,
+                    side: const BorderSide(color: AppColors.mintDeep),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              FilledButton.icon(
+                onPressed: _loadDiscovery,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('새로고침'),
+              ),
             ],
-            FilledButton.icon(
-              onPressed: _loadDiscovery,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('새로고침'),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -828,58 +949,16 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   }
 }
 
-// ── 하단 액션 버튼 ─────────────────────────────────────────────────────────────
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final double size;
-  final VoidCallback? onPressed;
-
-  const _ActionButton({
-    required this.icon,
-    required this.color,
-    required this.size,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    final effectiveColor = enabled
-        ? color
-        : AppColors.textSecondary.withValues(alpha: 0.35);
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink.withValues(alpha: 0.1),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-          border: Border.all(
-            color: effectiveColor.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-        ),
-        child: Icon(icon, color: effectiveColor, size: size * 0.5),
-      ),
-    );
-  }
-}
-
 class _RewindCandidate {
   final UserProfile profile;
   final int previousIndex;
+  final String action;
 
-  const _RewindCandidate({required this.profile, required this.previousIndex});
+  const _RewindCandidate({
+    required this.profile,
+    required this.previousIndex,
+    required this.action,
+  });
 }
 
 class _SafetyMenuButton extends StatelessWidget {

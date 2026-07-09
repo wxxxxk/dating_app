@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
@@ -126,10 +127,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // 3. 완료: app.dart에 알려 HomeScreen으로 전환
       widget.onCompleted();
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Onboarding] 프로필 저장 실패: $e');
+      }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('저장 중 오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('프로필 저장에 실패했어요. 잠시 후 다시 시도해주세요.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -264,12 +268,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onPressed: _isLoading ? null : _prevStep,
                   )
                 : null,
-            title: _StepIndicator(current: _step + 1, total: _totalSteps),
-            centerTitle: true,
             backgroundColor: AppColors.background.withValues(alpha: 0),
             elevation: 0,
           ),
-          body: SafeArea(child: _buildCurrentStep()),
+          body: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 14),
+                  child: _StepProgressBar(
+                    current: _step + 1,
+                    total: _totalSteps,
+                  ),
+                ),
+                Expanded(child: _buildCurrentStep()),
+              ],
+            ),
+          ),
         ),
         // 저장 중 전체 화면 오버레이 — 중복 탭 방지
         if (_isLoading) const LoadingIndicator(overlay: true),
@@ -278,30 +293,59 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-/// 현재 스텝 위치를 점(dot) 형태로 표시하는 진행 인디케이터.
-class _StepIndicator extends StatelessWidget {
+/// 현재 스텝 진행률을 얇은 바 형태로 보여주는 프리미엄 진행 인디케이터.
+///
+/// 기존 dot 인디케이터는 7스텝이 되면서 한눈에 "얼마나 남았는지"를
+/// 가늠하기 어려웠다. 바 + 숫자 조합이 더 명확하고 프리미엄 매칭앱에
+/// 가까운 느낌을 준다.
+class _StepProgressBar extends StatelessWidget {
   final int current;
   final int total;
 
-  const _StepIndicator({required this.current, required this.total});
+  const _StepProgressBar({required this.current, required this.total});
 
   @override
   Widget build(BuildContext context) {
+    final progress = (current / total).clamp(0.0, 1.0);
     return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(total, (i) {
-        final active = i + 1 == current;
-        return AnimatedContainer(
-          duration: AppDurations.base,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: active ? 20 : 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: active ? AppColors.primary : AppColors.border,
-            borderRadius: BorderRadius.circular(AppSpacing.xs),
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Stack(
+                children: [
+                  Container(
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: AppColors.divider,
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                    ),
+                  ),
+                  AnimatedContainer(
+                    duration: AppDurations.base,
+                    curve: AppCurves.standard,
+                    height: 6,
+                    width: constraints.maxWidth * progress,
+                    decoration: BoxDecoration(
+                      color: AppColors.matchPrimary,
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-        );
-      }),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          '$current / $total',
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -65,10 +65,10 @@ class _VerificationBadge extends StatelessWidget {
     final bgColor = verified
         ? (dark
               ? AppColors.surface.withValues(alpha: 0.2)
-              : AppColors.primary.withValues(alpha: 0.1))
+              : AppColors.matchPrimary.withValues(alpha: 0.1))
         : AppColors.surface;
     final fgColor = verified
-        ? (dark ? AppColors.surface : AppColors.primary)
+        ? (dark ? AppColors.surface : AppColors.matchPrimary)
         : AppColors.textSecondary;
 
     return Container(
@@ -81,21 +81,27 @@ class _VerificationBadge extends StatelessWidget {
           width: 0.7,
         ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(data.icon, size: 13, color: fgColor),
-          const SizedBox(width: 4),
-          Text(
-            verified ? '${data.label} 인증' : '${data.label} 미인증',
-            style: TextStyle(
-              color: fgColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              height: 1,
+      // 매칭 목록 ListTile subtitle처럼 폭이 아주 좁은 곳에 들어가면 Row가
+      // 오버플로우로 깨질 수 있다(RenderFlex overflowed). FittedBox로 감싸
+      // 공간이 모자라면 배지 전체가 비율 유지한 채 축소되도록 방어한다.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(data.icon, size: 13, color: fgColor),
+            const SizedBox(width: 4),
+            Text(
+              verified ? '${data.label} 인증' : '${data.label} 미인증',
+              style: TextStyle(
+                color: fgColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                height: 1,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

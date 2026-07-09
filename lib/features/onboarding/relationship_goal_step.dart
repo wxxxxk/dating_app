@@ -77,11 +77,13 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
                   ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.primary.withValues(alpha: 0.08)
+                        ? AppColors.matchPrimary.withValues(alpha: 0.08)
                         : AppColors.surface,
                     borderRadius: BorderRadius.circular(AppRadius.button),
                     border: Border.all(
-                      color: isSelected ? AppColors.primary : AppColors.border,
+                      color: isSelected
+                          ? AppColors.matchPrimary
+                          : AppColors.border,
                       width: isSelected ? 1.8 : 1,
                     ),
                   ),
@@ -96,7 +98,7 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
                                 ? FontWeight.w600
                                 : FontWeight.normal,
                             color: isSelected
-                                ? AppColors.primary
+                                ? AppColors.matchPrimary
                                 : AppColors.textPrimary,
                           ),
                         ),
@@ -104,7 +106,7 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
                       if (isSelected)
                         const Icon(
                           Icons.check_circle_rounded,
-                          color: AppColors.primary,
+                          color: AppColors.matchPrimary,
                           size: 22,
                         ),
                     ],
@@ -117,6 +119,7 @@ class _RelationshipGoalStepState extends State<RelationshipGoalStep> {
           const Spacer(),
           PrimaryButton(
             label: '완료',
+            color: AppColors.matchPrimary,
             // 선택하지 않아도 완료 가능 (선택 사항)
             onPressed: widget.isLoading
                 ? null

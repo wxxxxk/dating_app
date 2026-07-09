@@ -39,16 +39,16 @@ class TagSelector extends StatelessWidget {
           '${selectedKeys.length}/$maxSelection개 선택',
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w700,
             color: selectedKeys.length >= maxSelection
-                ? AppColors.primary
+                ? AppColors.matchPrimary
                 : AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
-          runSpacing: 10,
+          runSpacing: 12,
           children: options.map((opt) {
             final isSelected = selectedKeys.contains(opt.key);
             return _TagChip(
@@ -102,12 +102,13 @@ class _TagChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: AppDurations.fast,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surface,
+          // 선택 상태 문법: 민트 fill + 다크 잉크 텍스트
+          color: isSelected ? AppColors.mint : AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.chip),
           border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.border,
+            color: isSelected ? AppColors.mint : AppColors.border,
             width: 1.2,
           ),
         ),
@@ -115,8 +116,8 @@ class _TagChip extends StatelessWidget {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: isSelected ? AppColors.surface : AppColors.textPrimary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            color: isSelected ? AppColors.onMint : AppColors.textPrimary,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
           ),
         ),
       ),

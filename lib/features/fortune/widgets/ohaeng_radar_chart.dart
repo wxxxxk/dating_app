@@ -187,7 +187,7 @@ class _OhaengRadarPainter extends CustomPainter {
           angles[i],
           maxRadius *
               (displayBalance[ohaengOrder[i]] ?? 0).clamp(0.0, 1.0) *
-              progress,
+              _axisProgress(i),
         ),
     ];
 
@@ -200,7 +200,7 @@ class _OhaengRadarPainter extends CustomPainter {
 
     // 은은한 글로우(흐린 외곽선).
     final glowPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.5)
+      ..color = AppColors.fortuneAccent.withValues(alpha: 0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
@@ -208,7 +208,7 @@ class _OhaengRadarPainter extends CustomPainter {
 
     // 선명한 외곽선.
     final strokePaint = Paint()
-      ..color = AppColors.primary
+      ..color = AppColors.fortuneAccent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawPath(path, strokePaint);
@@ -220,7 +220,7 @@ class _OhaengRadarPainter extends CustomPainter {
       final isZero = actualValue <= 0;
       final pointColor = isZero
           ? AppColors.textSecondary.withValues(alpha: 0.45)
-          : ohaengColors[key] ?? AppColors.primary;
+          : ohaengColors[key] ?? AppColors.fortuneAccent;
       canvas.drawCircle(points[i], 4.5, Paint()..color = pointColor);
       canvas.drawCircle(
         points[i],
@@ -259,6 +259,11 @@ class _OhaengRadarPainter extends CustomPainter {
     if (maxValue <= 0) return _visualFloor;
     final normalized = (value ?? 0).clamp(0.0, 1.0) / maxValue;
     return math.max(_visualFloor, normalized);
+  }
+
+  double _axisProgress(int index) {
+    final shifted = progress - index * 0.1;
+    return (shifted / 0.6).clamp(0.0, 1.0);
   }
 
   @override

@@ -1,7 +1,9 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
@@ -17,6 +19,7 @@ import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
+import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../matches/widgets/match_celebration_overlay.dart';
@@ -111,6 +114,11 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
   }
 
   void _showMatch(MatchWithProfile match) {
+    widget.matchesService
+        .markCelebrated(matchId: match.match.matchId, uid: widget.currentUid)
+        .catchError((e) {
+          if (kDebugMode) debugPrint('[ReceivedLikes] 매칭 축하 기록 실패: $e');
+        });
     showGeneralDialog(
       context: context,
       barrierDismissible: false,
@@ -139,6 +147,7 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
           currentUid: widget.currentUid,
           chatService: widget.chatService,
           fortuneService: widget.fortuneService,
+          matchesService: widget.matchesService,
           safetyService: widget.safetyService,
         ),
       ),
@@ -170,12 +179,14 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
         actions: [
           JellyBalanceButton(
             currentUid: widget.currentUid,
             jellyService: widget.jellyService,
             jellyPurchaseService: widget.jellyPurchaseService,
+            foregroundColor: AppColors.matchPrimary,
           ),
         ],
       ),
@@ -325,19 +336,23 @@ class _ReceivedLikeTile extends StatelessWidget {
     final distanceLabel = distanceKm == null
         ? null
         : LocationService.formatDistance(distanceKm);
+    final interestLabels = ProfileOptions.keysToLabels(
+      ProfileOptions.interests,
+      profile.interests,
+    ).take(2).toList();
 
     final content = Card(
       elevation: 0,
       color: like.isSuperlike
-          ? AppColors.water.withValues(alpha: 0.08)
+          ? AppColors.water.withValues(alpha: 0.16)
           : AppColors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(
           color: like.isSuperlike
-              ? AppColors.water
-              : AppColors.background.withValues(alpha: 0),
-          width: like.isSuperlike ? 1.2 : 0,
+              ? AppColors.water.withValues(alpha: 0.7)
+              : AppColors.border,
+          width: 1,
         ),
       ),
       child: Padding(
@@ -347,11 +362,11 @@ class _ReceivedLikeTile extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.button),
               child: SizedBox(
-                width: 74,
-                height: 88,
+                width: 88,
+                height: 116,
                 child: photoUrl == null
                     ? const ColoredBox(
-                        color: AppColors.border,
+                        color: AppColors.surface,
                         child: Icon(
                           Icons.person_rounded,
                           color: AppColors.textSecondary,
@@ -377,11 +392,18 @@ class _ReceivedLikeTile extends StatelessWidget {
                   ),
                   if (like.isSuperlike) ...[
                     const SizedBox(height: 6),
-                    const _SuperlikeBadge(),
+                    const PremiumStatusPill(
+                      label: '슈퍼라이크',
+                      icon: Icons.star_rounded,
+                      color: AppColors.water,
+                      compact: true,
+                    ),
                   ],
                   if (profile.verifications.hasAny) ...[
                     const SizedBox(height: 6),
-                    VerificationBadges(verifications: profile.verifications),
+                    VerificationBadges(
+                      verifications: profile.verifications,
+                    ),
                   ],
                   const SizedBox(height: 4),
                   Text(
@@ -407,29 +429,56 @@ class _ReceivedLikeTile extends StatelessWidget {
                       ),
                     ),
                   ],
+                  if (interestLabels.isNotEmpty) ...[
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      children: interestLabels
+                          .map(
+                            (label) => PremiumStatusPill(
+                              label: label,
+                              color: AppColors.mint,
+                              compact: true,
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      OutlinedButton.icon(
-                        onPressed: processing || locked ? null : onPass,
-                        icon: const Icon(Icons.close_rounded, size: 16),
-                        label: const Text('패스'),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: processing || locked ? null : onPass,
+                          icon: const Icon(Icons.close_rounded, size: 16),
+                          label: const Text('패스'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                            side: const BorderSide(
+                              color: AppColors.border,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: processing || locked ? null : onLike,
-                        icon: processing
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.favorite_rounded, size: 16),
-                        label: const Text('좋아요'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: processing || locked ? null : onLike,
+                          icon: processing
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.favorite_rounded, size: 16),
+                          label: const Text('좋아요'),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ),
                       ),
                     ],
@@ -458,10 +507,14 @@ class _ReceivedLikeTile extends StatelessWidget {
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.35),
+              color: AppColors.surface.withValues(alpha: 0.82),
               borderRadius: BorderRadius.circular(AppRadius.card),
             ),
-            child: const _LockedLikeBadge(),
+            child: const PremiumStatusPill(
+              label: '멤버십으로 확인',
+              icon: Icons.lock_rounded,
+              color: AppColors.mintDeep,
+            ),
           ),
         ),
       ],
@@ -486,101 +539,12 @@ class _UnlockLikesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.lock_open_rounded, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '$hiddenCount명이 더 좋아요를 보냈어요',
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          FilledButton(
-            onPressed: unlocking ? null : onUnlock,
-            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-            child: unlocking
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text('전체 보기 ${JellyCosts.unlockReceivedLikes}'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LockedLikeBadge extends StatelessWidget {
-  const _LockedLikeBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.textPrimary.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.lock_rounded, size: 15, color: AppColors.surface),
-          SizedBox(width: 6),
-          Text(
-            '잠금',
-            style: TextStyle(
-              color: AppColors.surface,
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SuperlikeBadge extends StatelessWidget {
-  const _SuperlikeBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.water.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.star_rounded, size: 14, color: AppColors.water),
-          SizedBox(width: 4),
-          Text(
-            '슈퍼라이크!',
-            style: TextStyle(
-              color: AppColors.water,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              height: 1,
-            ),
-          ),
-        ],
-      ),
+    return PremiumLockedPanel(
+      title: '$hiddenCount명이 더 좋아요를 보냈어요',
+      description: '받은 좋아요를 모두 확인하고 마음에 드는 인연에게 바로 응답해보세요.',
+      actionLabel: '전체 보기 · 젤리 ${JellyCosts.unlockReceivedLikes}개',
+      onPressed: onUnlock,
+      loading: unlocking,
     );
   }
 }
@@ -590,37 +554,46 @@ class _EmptyLikes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.favorite_border_rounded,
-              size: 72,
-              color: AppColors.textSecondary,
-            ),
-            SizedBox(height: 20),
-            Text(
-              '아직 받은 좋아요가 없어요',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+        padding: const EdgeInsets.all(32),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.hero),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.favorite_border_rounded,
+                size: 72,
+                color: AppColors.mintDeep,
               ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              '누군가 나를 좋아요하면 여기에서 바로 응답할 수 있어요.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textSecondary,
-                height: 1.5,
+              SizedBox(height: 20),
+              Text(
+                '아직 받은 좋아요가 없어요',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-          ],
+              SizedBox(height: 10),
+              Text(
+                '누군가 나를 좋아요하면 여기에서 바로 응답할 수 있어요.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -143,6 +143,27 @@ service cloud.firestore {
           after[request.auth.uid] == request.time;
       }
 
+      // celebratedBy: 매칭 축하(MatchCelebrationOverlay)를 봤다고 표시하는 배열.
+      // 본인 uid를 끝에 arrayUnion으로 추가하는 쓰기만 허용한다 — 다른 사람 uid를
+      // 대신 추가하거나, 이미 있던 항목을 지우거나 순서를 바꾸는 쓰기는 막는다.
+      function changesOnlyOwnCelebratedBy() {
+        let before = resource.data.get('celebratedBy', []);
+        let after = request.resource.data.celebratedBy;
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['celebratedBy']) &&
+          (after == before || after == before.concat([request.auth.uid]));
+      }
+
+      // unmatchedBy: 이 매칭을 더 이상 원하지 않는다고 표시하는 배열.
+      // celebratedBy와 같은 패턴 — 본인 uid를 끝에 arrayUnion으로 추가하는
+      // 쓰기만 허용한다. 한쪽이 넣은 uid를 상대방이나 본인이 다시 빼는 것도
+      // 막는다 — "매칭 해제 취소" 기능은 없으므로 배열은 늘어나기만 해야 한다.
+      function changesOnlyOwnUnmatchedBy() {
+        let before = resource.data.get('unmatchedBy', []);
+        let after = request.resource.data.unmatchedBy;
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unmatchedBy']) &&
+          (after == before || after == before.concat([request.auth.uid]));
+      }
+
       allow get: if request.auth != null && (
         resource == null ||
         request.auth.uid in resource.data.participants
@@ -154,23 +175,36 @@ service cloud.firestore {
       allow create, delete: if false;
 
       // update:
-      // - lastMessage 필드만 갱신 허용 (M5 채팅 전송 시 미리보기 갱신용).
+      // - lastMessage 필드만 갱신 허용 (M5 채팅 전송 시 미리보기 갱신용) — 단,
+      //   이 매칭이 아직 해제되지 않았을 때만. sendMessage()는 항상 메시지
+      //   create와 이 update를 한 batch로 묶어 보내므로, 정상 전송 흐름에는
+      //   영향이 없다(둘 다 이미 unmatchedBy가 빈 상태에서만 통과하던 조건이라
+      //   동일 기준을 여기 한 곳에 더 추가하는 것뿐). 이 조건이 없으면 이미
+      //   해제된 매칭에 실제 메시지 문서 없이 lastMessage만 단독으로 조작해
+      //   가짜 미리보기를 남길 수 있었다.
       // - lastReadAtByUid는 본인 uid 키 하나만 갱신 허용 (매칭 목록 안읽음 표시용).
+      // - celebratedBy는 본인 uid를 끝에 추가하는 쓰기만 허용 (매칭 축하 중복/비대칭 표시 방지용).
+      // - unmatchedBy는 본인 uid를 끝에 추가하는 쓰기만 허용 (매칭 해제용).
       // matchedAt·participants 등 나머지 필드는 여전히 Cloud Functions만 쓸 수 있다 —
       // affectedKeys()와 map diff로 이번 쓰기가 건드리는 필드를 좁힌다.
       allow update: if isParticipant() && (
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage']) ||
-        changesOnlyOwnLastReadAt()
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage']) &&
+          resource.data.get('unmatchedBy', []).size() == 0) ||
+        changesOnlyOwnLastReadAt() ||
+        changesOnlyOwnCelebratedBy() ||
+        changesOnlyOwnUnmatchedBy()
       );
 
       // matches/{matchId}/messages/{messageId}:
       // - read: 이 매치의 participants 중 한 명만 가능.
-      // - create: participants 중 한 명 + senderId가 본인 uid와 일치할 때만
-      //   (다른 사람 이름으로 메시지를 못 보내게 막는다).
+      // - create: participants 중 한 명 + senderId가 본인 uid와 일치 + 이 매칭이
+      //   아직 해제(unmatch)되지 않았을 때만(둘 중 누구든 해제하면 새 메시지 생성이
+      //   서버 단에서도 막힌다 — 클라이언트 UI를 우회해도 뚫리지 않는다).
       // - update/delete: 항상 금지 — 메시지 수정·삭제 기능은 아직 없다.
       //
-      // 부모 matches 문서를 get()으로 한 번 더 읽으므로 매 메시지 read/create마다
-      // 추가 문서 읽기 1회가 발생한다(과금·쿼터에 반영됨). MVP에서는 허용.
+      // 부모 matches 문서를 get()으로 조회한다. 같은 문서를 같은 요청 안에서
+      // 여러 번 get()해도 Firestore 규칙 엔진이 결과를 재사용하므로(memoized)
+      // 추가 문서 읽기는 실질적으로 1회다.
       match /messages/{messageId} {
         allow read: if request.auth != null &&
           request.auth.uid in
@@ -179,7 +213,8 @@ service cloud.firestore {
         allow create: if request.auth != null &&
           request.auth.uid in
             get(/databases/$(database)/documents/matches/$(matchId)).data.participants &&
-          request.resource.data.senderId == request.auth.uid;
+          request.resource.data.senderId == request.auth.uid &&
+          get(/databases/$(database)/documents/matches/$(matchId)).data.get('unmatchedBy', []).size() == 0;
 
         allow update, delete: if false;
       }

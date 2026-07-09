@@ -8,7 +8,7 @@ class AppTheme {
   static ThemeData get light {
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
-      primary: AppColors.seal,
+      primary: AppColors.matchPrimary,
       onPrimary: AppColors.surface,
       secondary: AppColors.inkSecondary,
       onSecondary: AppColors.surface,
@@ -137,8 +137,8 @@ class AppTheme {
       textTheme: baseTextTheme,
       primaryTextTheme: baseTextTheme,
       dividerColor: AppColors.divider,
-      splashColor: AppColors.seal.withValues(alpha: 0.08),
-      highlightColor: AppColors.seal.withValues(alpha: 0.06),
+      splashColor: AppColors.mint.withValues(alpha: 0.10),
+      highlightColor: AppColors.mint.withValues(alpha: 0.06),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.background,
         foregroundColor: AppColors.ink,
@@ -154,6 +154,7 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: AppColors.ink),
         actionsIconTheme: IconThemeData(color: AppColors.ink),
+        toolbarHeight: 60,
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
@@ -180,18 +181,18 @@ class AppTheme {
               return AppColors.divider;
             }
             if (states.contains(WidgetState.pressed)) {
-              return AppColors.sealPressed;
+              return AppColors.mintPressed;
             }
-            return AppColors.seal;
+            return AppColors.mint;
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.disabled)) {
               return AppColors.inkSecondary;
             }
-            return AppColors.surface;
+            return AppColors.onMint;
           }),
           overlayColor: WidgetStatePropertyAll(
-            AppColors.surface.withValues(alpha: 0.08),
+            AppColors.onMint.withValues(alpha: 0.06),
           ),
           textStyle: const WidgetStatePropertyAll(
             TextStyle(
@@ -222,15 +223,15 @@ class AppTheme {
               return AppColors.divider;
             }
             if (states.contains(WidgetState.pressed)) {
-              return AppColors.sealPressed;
+              return AppColors.mintPressed;
             }
-            return AppColors.seal;
+            return AppColors.mint;
           }),
           foregroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.disabled)) {
               return AppColors.inkSecondary;
             }
-            return AppColors.surface;
+            return AppColors.onMint;
           }),
           textStyle: const WidgetStatePropertyAll(
             TextStyle(
@@ -273,9 +274,9 @@ class AppTheme {
         style: ButtonStyle(
           foregroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed)) {
-              return AppColors.sealPressed;
+              return AppColors.mintDeepPressed;
             }
-            return AppColors.seal;
+            return AppColors.mintDeep;
           }),
           textStyle: const WidgetStatePropertyAll(
             TextStyle(
@@ -294,12 +295,13 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surface,
-        selectedColor: AppColors.seal,
+        selectedColor: AppColors.mint,
         disabledColor: AppColors.divider,
-        secondarySelectedColor: AppColors.seal,
+        secondarySelectedColor: AppColors.mint,
+        checkmarkColor: AppColors.onMint,
         labelStyle: baseTextTheme.labelMedium,
         secondaryLabelStyle: baseTextTheme.labelMedium?.copyWith(
-          color: AppColors.surface,
+          color: AppColors.onMint,
         ),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
@@ -313,7 +315,7 @@ class AppTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.background,
-        selectedItemColor: AppColors.seal,
+        selectedItemColor: AppColors.matchPrimary,
         unselectedItemColor: AppColors.inkSecondary,
         selectedLabelStyle: TextStyle(
           fontFamily: AppFonts.body,
@@ -330,7 +332,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.background,
-        indicatorColor: AppColors.seal.withValues(alpha: 0.12),
+        indicatorColor: AppColors.mint.withValues(alpha: 0.18),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return TextStyle(
@@ -338,7 +340,7 @@ class AppTheme {
             fontSize: 12,
             height: 1.2,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            color: selected ? AppColors.seal : AppColors.inkSecondary,
+            color: selected ? AppColors.matchPrimary : AppColors.inkSecondary,
           );
         }),
       ),
@@ -356,13 +358,16 @@ class AppTheme {
           color: AppColors.inkSecondary,
         ),
         floatingLabelStyle: baseTextTheme.labelLarge?.copyWith(
-          color: AppColors.seal,
+          color: AppColors.matchPrimary,
         ),
         border: outlineBorder,
         enabledBorder: outlineBorder,
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),
-          borderSide: const BorderSide(color: AppColors.seal, width: 1.5),
+          borderSide: const BorderSide(
+            color: AppColors.matchPrimary,
+            width: 1.5,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.button),

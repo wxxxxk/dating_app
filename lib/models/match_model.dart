@@ -43,6 +43,20 @@ class MatchModel {
   final LastMessage? lastMessage;
   final Map<String, DateTime> lastReadAtByUid;
 
+  /// 매칭 축하(MatchCelebrationOverlay)를 이미 본 uid 목록.
+  ///
+  /// null이면 "이 필드를 아직 아무도 쓴 적 없는 매치"(이 기능 도입 이전 매치 포함)라는
+  /// 뜻이라 자동 축하 표시 대상에서 제외한다. 빈 배열이 아닌 null과 빈 배열을
+  /// 구분하는 것이 기존 매치를 한꺼번에 재축하하지 않기 위한 핵심이다.
+  final List<String>? celebratedBy;
+
+  /// 이 매칭을 더 이상 원하지 않는다고 표시한 uid 목록.
+  ///
+  /// celebratedBy와 달리 null/빈 배열을 구분할 필요가 없다 — "아무도 해제
+  /// 안 함"과 "필드가 아예 없음"은 의미가 같다(둘 다 활성 매칭). 한 명이라도
+  /// 포함되면 양쪽 모두에게 목록/채팅에서 숨긴다([isUnmatched]).
+  final List<String> unmatchedBy;
+
   const MatchModel({
     required this.matchId,
     required this.participants,
@@ -51,12 +65,24 @@ class MatchModel {
     required this.matchedAt,
     this.lastMessage,
     this.lastReadAtByUid = const {},
+    this.celebratedBy,
+    this.unmatchedBy = const [],
   });
 
   /// 현재 유저의 UID를 받아 상대방 UID를 반환한다.
   String otherUid(String currentUid) => uid1 == currentUid ? uid2 : uid1;
 
   DateTime? lastReadAtFor(String uid) => lastReadAtByUid[uid];
+
+  /// uid가 이 매치의 축하를 이미 봤는지. celebratedBy가 없는 매치는 항상 false.
+  bool hasCelebrated(String uid) => celebratedBy?.contains(uid) ?? false;
+
+  /// 이 매치가 "누군가는 봤지만 uid는 아직 못 본" 축하 대기 상태인지.
+  bool isPendingCelebrationFor(String uid) =>
+      celebratedBy != null && !celebratedBy!.contains(uid);
+
+  /// 둘 중 누구라도 매칭을 해제했는지. true면 양쪽 목록/채팅에서 숨겨야 한다.
+  bool get isUnmatched => unmatchedBy.isNotEmpty;
 
   factory MatchModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final d = doc.data() ?? {};
@@ -72,7 +98,19 @@ class MatchModel {
         d['lastMessage'] as Map<String, dynamic>?,
       ),
       lastReadAtByUid: _parseLastReadAtByUid(d['lastReadAtByUid']),
+      celebratedBy: _parseCelebratedBy(d['celebratedBy']),
+      unmatchedBy: _parseStringList(d['unmatchedBy']),
     );
+  }
+
+  static List<String>? _parseCelebratedBy(Object? value) {
+    if (value is! List) return null;
+    return value.map((e) => e.toString()).toList();
+  }
+
+  static List<String> _parseStringList(Object? value) {
+    if (value is! List) return const [];
+    return value.map((e) => e.toString()).toList();
   }
 
   static Map<String, DateTime> _parseLastReadAtByUid(Object? value) {

@@ -13,6 +13,7 @@ import '../auth/auth_service.dart';
 import '../chat/chat_service.dart';
 import '../database/firestore_service.dart';
 import '../fortune/fortune_service.dart';
+import '../matches/matches_service.dart';
 import '../safety/safety_service.dart';
 
 class NotificationService {
@@ -23,6 +24,7 @@ class NotificationService {
     required FirestoreService firestoreService,
     required ChatService chatService,
     required FortuneService fortuneService,
+    required MatchesService matchesService,
     required SafetyService safetyService,
     required GlobalKey<NavigatorState> navigatorKey,
     required ValueNotifier<int?> mainTabRequest,
@@ -32,6 +34,7 @@ class NotificationService {
        _firestoreService = firestoreService,
        _chatService = chatService,
        _fortuneService = fortuneService,
+       _matchesService = matchesService,
        _safetyService = safetyService,
        _navigatorKey = navigatorKey,
        _mainTabRequest = mainTabRequest;
@@ -42,6 +45,7 @@ class NotificationService {
   final FirestoreService _firestoreService;
   final ChatService _chatService;
   final FortuneService _fortuneService;
+  final MatchesService _matchesService;
   final SafetyService _safetyService;
   final GlobalKey<NavigatorState> _navigatorKey;
   final ValueNotifier<int?> _mainTabRequest;
@@ -218,6 +222,7 @@ class NotificationService {
             currentUid: currentUid,
             chatService: _chatService,
             fortuneService: _fortuneService,
+            matchesService: _matchesService,
             safetyService: _safetyService,
           ),
         ),

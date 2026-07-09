@@ -104,61 +104,90 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
               ),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 6),
+            const Text(
+              '매칭과 사주 풀이에 함께 쓰이는 정보예요',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 이름
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: '이름'),
+                    textInputAction: TextInputAction.next,
+                    validator: Validators.name,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 생년월일 — 사주 풀이에도 함께 쓰이므로 fortuneAccent를 절제해서 사용
+                  TextFormField(
+                    controller: _birthDateController,
+                    readOnly: true,
+                    onTap: _pickBirthDate,
+                    decoration: const InputDecoration(
+                      labelText: '생년월일',
+                      hintText: '날짜를 선택하세요',
+                      helperText: '나의 사주 운세 계산에도 사용돼요',
+                      suffixIcon: Icon(
+                        Icons.calendar_today_rounded,
+                        size: 18,
+                        color: AppColors.fortuneAccent,
+                      ),
+                    ),
+                    validator: (_) =>
+                        _birthDate == null ? '생년월일을 선택해주세요.' : null,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // 성별
+                  const Text(
+                    '성별',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _GenderSelector(
+                    selected: _gender,
+                    onChanged: (g) => setState(() => _gender = g),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 한줄 소개
+                  TextFormField(
+                    controller: _bioController,
+                    decoration: const InputDecoration(
+                      labelText: '한줄 소개',
+                      hintText: '나를 소개하는 한 문장을 써보세요',
+                      counterText: '',
+                    ),
+                    maxLength: 100,
+                    validator: (v) =>
+                        Validators.required(v, fieldName: '한줄 소개'),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 32),
 
-            // 이름
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: '이름'),
-              textInputAction: TextInputAction.next,
-              validator: Validators.name,
+            PrimaryButton(
+              label: '다음',
+              color: AppColors.matchPrimary,
+              onPressed: _handleNext,
             ),
-            const SizedBox(height: 20),
-
-            // 생년월일
-            TextFormField(
-              controller: _birthDateController,
-              readOnly: true,
-              onTap: _pickBirthDate,
-              decoration: const InputDecoration(
-                labelText: '생년월일',
-                hintText: '날짜를 선택하세요',
-                suffixIcon: Icon(
-                  Icons.calendar_today_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              validator: (_) => _birthDate == null ? '생년월일을 선택해주세요.' : null,
-            ),
-            const SizedBox(height: 24),
-
-            // 성별
-            const Text(
-              '성별',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 8),
-            _GenderSelector(
-              selected: _gender,
-              onChanged: (g) => setState(() => _gender = g),
-            ),
-            const SizedBox(height: 20),
-
-            // 한줄 소개
-            TextFormField(
-              controller: _bioController,
-              decoration: const InputDecoration(
-                labelText: '한줄 소개',
-                hintText: '나를 소개하는 한 문장을 써보세요',
-                counterText: '',
-              ),
-              maxLength: 100,
-              validator: (v) => Validators.required(v, fieldName: '한줄 소개'),
-            ),
-            const SizedBox(height: 40),
-
-            PrimaryButton(label: '다음', onPressed: _handleNext),
           ],
         ),
       ),
@@ -193,10 +222,14 @@ class _GenderSelector extends StatelessWidget {
                 alignment: Alignment.center,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.primary : AppColors.surface,
+                  color: isSelected
+                      ? AppColors.matchPrimary
+                      : AppColors.surface,
                   borderRadius: BorderRadius.circular(AppRadius.button),
                   border: Border.all(
-                    color: isSelected ? AppColors.primary : AppColors.border,
+                    color: isSelected
+                        ? AppColors.matchPrimary
+                        : AppColors.border,
                   ),
                 ),
                 child: Text(

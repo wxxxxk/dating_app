@@ -70,4 +70,17 @@ class ChatService {
       FieldPath(['lastReadAtByUid', currentUid]): FieldValue.serverTimestamp(),
     });
   }
+
+  /// 이 매치가 (나든 상대든) 해제됐는지 실시간으로 구독한다.
+  ///
+  /// 채팅방 접근 제한(입력 비활성화/안내 배너)용. 채팅방을 이미 열어둔 채로
+  /// 상대가 해제해도 바로 반영되도록 스트림으로 둔다. 메시지 create 자체는
+  /// firestore.rules가 서버 단에서도 막으므로, 이 스트림은 UX(안내/비활성화)
+  /// 목적이지 유일한 방어선이 아니다.
+  Stream<bool> watchIsUnmatched(String matchId) {
+    return _matchRef(matchId).snapshots().map((snap) {
+      final unmatchedBy = snap.data()?['unmatchedBy'] as List<dynamic>?;
+      return unmatchedBy != null && unmatchedBy.isNotEmpty;
+    });
+  }
 }

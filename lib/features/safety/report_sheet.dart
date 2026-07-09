@@ -108,7 +108,10 @@ class _ReportSheetState extends State<_ReportSheet> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  foregroundColor: AppColors.surface,
+                ),
                 onPressed: () {
                   Navigator.pop(
                     context,

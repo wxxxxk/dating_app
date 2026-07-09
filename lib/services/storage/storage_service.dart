@@ -7,7 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 /// 프로필 사진 업로드/삭제처럼 "파일"을 다루는 책임을 한 곳에 모은다.
 class StorageService {
   StorageService({FirebaseStorage? storage})
-      : _storage = storage ?? FirebaseStorage.instance;
+    : _storage = storage ?? FirebaseStorage.instance;
 
   final FirebaseStorage _storage;
 
@@ -61,7 +61,8 @@ class StorageService {
 
     // 2. 일상 사진 순차 업로드 (순서가 중요하므로 병렬이 아닌 순차 처리)
     for (var i = 0; i < subPhotos.length; i++) {
-      final subFileName = 'sub_${i}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final subFileName =
+          'sub_${i}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final subUrl = await uploadProfilePhoto(
         uid: uid,
         fileName: subFileName,

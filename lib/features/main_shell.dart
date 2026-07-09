@@ -70,12 +70,19 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  Stream<int>? _unreadMatchStream;
 
   @override
   void initState() {
     super.initState();
     widget.mainTabRequest.addListener(_handleTabRequest);
     _applyPendingTabRequest();
+    final uid = widget.authService.currentUser?.uid;
+    if (uid != null) {
+      _unreadMatchStream = widget.matchesService.watchUnreadMatchCount(
+        currentUid: uid,
+      );
+    }
   }
 
   @override
@@ -151,47 +158,153 @@ class _MainShellState extends State<MainShell> {
             fortuneService: widget.fortuneService,
             jellyService: widget.jellyService,
             jellyPurchaseService: widget.jellyPurchaseService,
+            likesService: widget.likesService,
             safetyService: widget.safetyService,
             profileInsightService: widget.profileInsightService,
             onOpenDiscovery: () => setState(() => _selectedIndex = 0),
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textSecondary,
-        backgroundColor: AppColors.background,
-        type: BottomNavigationBarType.fixed,
-        selectedLabelStyle: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+      bottomNavigationBar: Container(
+        // 발표용 긴급 안정화: 탭바를 전면 다크로 고정하지 않고 앱 전체와
+        // 같은 라이트/크림 언어로 복구한다. 선택 상태만 mintDeep으로 강조한다.
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          border: Border(top: BorderSide(color: AppColors.divider)),
         ),
-        unselectedLabelStyle: const TextStyle(fontSize: 11),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.explore_rounded),
-            activeIcon: Icon(Icons.explore_rounded),
-            label: '둘러보기',
+        child: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) => setState(() => _selectedIndex = index),
+          selectedItemColor: AppColors.matchPrimary,
+          unselectedItemColor: AppColors.inkSecondary,
+          backgroundColor: AppColors.background,
+          elevation: 0,
+          type: BottomNavigationBarType.fixed,
+          selectedLabelStyle: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.favorite_outline_rounded),
-            activeIcon: Icon(Icons.favorite_rounded),
-            label: '매칭',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.auto_awesome_rounded),
-            activeIcon: Icon(Icons.auto_awesome_rounded),
-            label: '사주',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person_rounded),
-            activeIcon: Icon(Icons.person_rounded),
-            label: '내 프로필',
-          ),
-        ],
+          unselectedLabelStyle: const TextStyle(fontSize: 11),
+          items: [
+            const BottomNavigationBarItem(
+              icon: _NavIconPill(icon: Icons.explore_outlined, selected: false),
+              activeIcon: _NavIconPill(
+                icon: Icons.explore_rounded,
+                selected: true,
+              ),
+              label: '둘러보기',
+            ),
+            BottomNavigationBarItem(
+              icon: _NavIconPill(
+                selected: false,
+                child: _MatchesTabIcon(
+                  stream: _unreadMatchStream,
+                  icon: Icons.favorite_outline_rounded,
+                  selected: false,
+                ),
+              ),
+              activeIcon: _NavIconPill(
+                selected: true,
+                child: _MatchesTabIcon(
+                  stream: _unreadMatchStream,
+                  icon: Icons.favorite_rounded,
+                  selected: true,
+                ),
+              ),
+              label: '매칭',
+            ),
+            const BottomNavigationBarItem(
+              icon: _NavIconPill(
+                icon: Icons.auto_awesome_outlined,
+                selected: false,
+              ),
+              activeIcon: _NavIconPill(
+                icon: Icons.auto_awesome_rounded,
+                selected: true,
+              ),
+              label: '사주',
+            ),
+            const BottomNavigationBarItem(
+              icon: _NavIconPill(
+                icon: Icons.person_outline_rounded,
+                selected: false,
+              ),
+              activeIcon: _NavIconPill(
+                icon: Icons.person_rounded,
+                selected: true,
+              ),
+              label: '내 프로필',
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// 선택된 탭에 부드러운 pill 배경을 깔아 "이 탭이 활성 상태"라는 신호를
+/// 아이콘 색만이 아니라 배경으로도 준다 — 프리미엄 매칭앱 탭바에서 흔한
+/// 패턴. [child]가 있으면(매칭 탭처럼 배지 조합이 필요한 경우) 그걸 감싸고,
+/// 없으면 [icon]을 바로 그린다.
+class _NavIconPill extends StatelessWidget {
+  final IconData? icon;
+  final Widget? child;
+  final bool selected;
+
+  const _NavIconPill({this.icon, this.child, required this.selected})
+    : assert(icon != null || child != null, 'icon 또는 child 중 하나는 있어야 한다');
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: AppDurations.fast,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? AppColors.mintSoft : null,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+      child:
+          child ??
+          Icon(
+            icon,
+            size: 22,
+            color: selected ? AppColors.matchPrimary : AppColors.inkSecondary,
+          ),
+    );
+  }
+}
+
+/// "매칭" 탭 아이콘 + 안읽음 배지.
+///
+/// StreamBuilder를 아이콘 단위로 좁혀서, 안읽음 개수가 바뀔 때
+/// BottomNavigationBar 전체가 아니라 이 작은 위젯만 다시 그린다.
+class _MatchesTabIcon extends StatelessWidget {
+  final Stream<int>? stream;
+  final IconData icon;
+  final bool selected;
+
+  const _MatchesTabIcon({
+    required this.stream,
+    required this.icon,
+    required this.selected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.matchPrimary : AppColors.inkSecondary;
+    final s = stream;
+    if (s == null) return Icon(icon, color: color);
+    return StreamBuilder<int>(
+      stream: s,
+      builder: (context, snap) {
+        final count = snap.data ?? 0;
+        return Badge(
+          isLabelVisible: count > 0,
+          label: Text(count > 9 ? '9+' : '$count'),
+          backgroundColor: AppColors.danger,
+          child: Icon(icon, color: color),
+        );
+      },
     );
   }
 }
