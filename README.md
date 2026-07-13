@@ -1,17 +1,195 @@
-# dating_app
+# 오늘의 인연
 
-A new Flutter project.
+## 프로젝트 소개
+이 프로젝트는 사주와 AI를 활용한 데이팅 앱 프로토타입입니다.
+사용자는 자신의 프로필을 만들고, 다른 사람을 둘러보고, 좋아요와 매칭을 통해 채팅으로 이어질 수 있습니다.
 
-## Getting Started
+일반적인 데이팅 앱 기능에 사주 분석, 오늘의 애정운, AI 이상형 만들기, 젤리 포인트 시스템을 결합해 더 재미있는 매칭 경험을 목표로 합니다.
 
-This project is a starting point for a Flutter application.
+## 발표용 한 줄 설명
+사주와 AI를 활용해 나와 잘 맞는 사람을 더 재미있고 직관적으로 찾을 수 있게 만든 데이팅 앱입니다.
 
-A few resources to get you started if this is your first Flutter project:
+## 주요 기능
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### 1. 로그인 / 회원가입
+- 이메일 회원가입 및 로그인, 이메일 인증 메일 발송/확인
+- Google 로그인
+- 전화번호 기반 인증(OTP)
+- 로그인 상태에 따라 온보딩 또는 메인 화면으로 자동 이동
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 2. 온보딩 / 프로필 관리
+- 사진 업로드 → 기본 정보 → 상세 정보 → 관심사/성향/이상형 태그 → 찾는 관계 순서의 온보딩(총 7단계)
+- 내 프로필 확인 및 편집, 대표 사진 설정/교체/삭제(최소 1장, 최대 4장)
+- 이름, 나이, 성별, MBTI, 직업, 학력, 종교, 흡연/음주 등 기본·상세 정보 표시
+- 관심사, 성향, 이상형 태그, 찾는 관계 표시
+- 이메일/전화 인증 배지 표시
+- 차단 목록 관리 화면
+
+### 3. 둘러보기 (Discovery)
+- 사진 중심의 카드 UI로 다른 사용자 프로필 확인
+- 좋아요 / 슈퍼라이크 / 패스
+- 되돌리기(직전 좋아요·패스 1회, 젤리 소모)
+- 나이/거리/성별/찾는 관계 필터 설정
+- 프로필 상세 화면으로 진입, 신고/차단 가능
+
+### 4. 좋아요 / 매칭
+- 받은 좋아요 목록 확인(슈퍼라이크 강조 표시)
+- 서로 좋아요를 보내면 자동으로 매칭 생성 및 매칭 알림
+- 매칭 목록에서 안읽은 메시지 배지 확인
+- 매칭 축하 연출, 매칭 해제(언매치) 기능
+
+### 5. 채팅
+- 매칭된 사용자와 실시간 채팅
+- 메시지 입력 및 전송, 날짜/시간 구분선
+- 빈 채팅방 아이스브레이커(대화 주제) 추천
+- AI 대화 코치: 대화가 멈췄을 때 이어갈 문장 추천
+- 매칭 해제 시 채팅방 비활성화 처리
+
+### 6. AI 이상형 만들기
+- 원하는 분위기, 스타일, 헤어, 인상 등 조건 선택
+- 선택한 조건을 바탕으로 AI가 이상형 이미지 생성
+- 자유 텍스트로 추가 요청(수정 문구) 입력 가능
+- 다시 생성 기능
+
+> AI 이상형 이미지는 실제 앱 사용자가 아니라 **AI가 생성한 가상의 이미지**입니다.
+
+### 7. 사주 / 운세
+- 내 사주 분석 및 캐릭터 서사
+- 오행 밸런스 레이더 차트
+- 오늘의 애정운 확인
+- 운세 기록/히스토리 확인
+- 매칭 상대와의 궁합 보기
+- 사주/궁합 결과 이미지 공유 기능
+
+### 8. 젤리 시스템
+- 보유 젤리 잔액 확인
+- 젤리 사용 내역(충전/사용) 조회
+- 젤리 상품 목록 표시(젤리샵)
+- 슈퍼라이크, 되돌리기, 부스트, 받은 좋아요 전체보기 해제 등에 젤리 사용
+
+> 현재 프로토타입에서는 결제가 테스트 모드로 구성되어 있으며, 실제 결제 검증 로직은 출시 전 보강이 필요합니다.
+
+## 주요 화면
+
+- **로그인 화면** — 이메일/Google/전화번호 로그인 진입점
+- **둘러보기 화면** — 스와이프 카드로 다른 사용자를 탐색
+- **매칭 화면** — 매칭된 상대 목록과 안읽음 상태 확인
+- **채팅 화면** — 매칭 상대와 대화, AI 대화 코치 제공
+- **내 프로필 화면** — 내 정보 확인 및 편집
+- **AI 이상형 만들기 화면** — 조건을 선택해 가상의 이상형 이미지 생성
+- **사주 허브 화면** — 내 사주/궁합/운세 기록으로 이동하는 진입점
+- **내 사주 화면** — 사주 캐릭터 서사와 오행 밸런스 확인
+- **운세 기록 화면** — 날짜별 애정운 히스토리 확인
+- **젤리 충전 화면** — 젤리 잔액 확인 및 상품 목록(젤리샵)
+
+## 기술 스택
+
+- Flutter / Dart
+- Firebase Authentication (이메일, Google, 전화번호 인증)
+- Cloud Firestore
+- Firebase Storage
+- Firebase Cloud Messaging(FCM, 푸시 알림)
+- Cloud Functions (AI 호출, 매칭/알림 서버 로직)
+- Google Sign-In
+- Android, iOS
+
+## 프로젝트 구조
+
+```text
+lib/
+├── main.dart                  # Firebase 초기화, FCM 백그라운드 핸들러 등록
+├── app.dart                   # 서비스 생성/주입, 인증 상태에 따른 라우팅
+├── firebase_options.dart      # FlutterFire 설정
+├── core/                      # 라우트, 디자인 토큰(테마), 상수, 유틸리티
+├── dev/                       # 개발/시연용 더미 데이터 생성 (출시 전 제거 대상)
+├── features/                  # 화면 단위 기능 모듈 (auth, discovery, chat, fortune, jelly 등)
+├── models/                    # 사용자/매칭/메시지/사주 등 데이터 모델
+├── services/                  # Firebase 및 비즈니스 로직 서비스 계층
+└── shared/                    # 공용 위젯, 전역 상태
+```
+
+각 폴더 역할:
+- `core/` — 라우트 이름 상수, 디자인 토큰(색상/간격/타이포), 공통 유틸리티
+- `dev/` — 시연/테스트용 더미 데이터 생성 로직
+- `features/` — 로그인, 온보딩, 프로필, 둘러보기, 매칭, 채팅, 사주, AI 이상형, 젤리, 안전(신고/차단) 등 화면별 모듈
+- `models/` — Firestore 문서와 매핑되는 데이터 모델 클래스
+- `services/` — Firebase Auth/Firestore/Storage/Functions 호출 및 도메인 로직
+- `shared/` — 여러 화면에서 재사용하는 공용 위젯과 전역 상태
+
+## 실행 방법
+
+### 1. 패키지 설치
+```bash
+flutter pub get
+```
+
+### 2. 앱 실행
+```bash
+flutter run
+```
+
+### 3. Android 실기기 실행
+```bash
+flutter devices
+flutter run -d <DEVICE_ID>
+```
+
+### 4. iOS Simulator 실행
+```bash
+open -a Simulator
+flutter devices
+flutter run -d <SIMULATOR_ID>
+```
+
+## APK 빌드 및 로컬 배포
+
+### 1. APK 빌드
+```bash
+flutter build apk --release
+```
+
+### 2. APK 폴더로 이동
+```bash
+cd build/app/outputs/flutter-apk
+```
+
+### 3. 로컬 HTTP 서버 실행
+```bash
+python3 -m http.server 8765 --bind 0.0.0.0
+```
+
+### 4. Mac 내부 IP 확인
+```bash
+ipconfig getifaddr en0
+```
+
+### 5. 다른 기기에서 다운로드
+```
+http://<Mac_IP>:8765/app-release.apk
+```
+
+같은 Wi-Fi에 연결된 기기에서만 접근 가능합니다.
+
+## 현재 프로젝트 상태
+
+- 발표용 프로토타입 구현 완료
+- 로그인, 프로필, 둘러보기, 매칭, 채팅, 사주, AI 이상형, 젤리 등 주요 앱 흐름 구현 완료
+- 실제 출시 전에는 보안, 결제, 예외 처리, UI QA, 개인정보 처리 검토가 필요
+
+## 향후 개선할 점
+
+- 전체 디자인 완성도 개선
+- 추천 알고리즘 고도화
+- 실제 결제 검증 로직 강화
+- Firebase 보안 규칙 점검
+- 채팅 UX 개선(사진 메시지, 읽음 표시, 실제 온라인 상태 등)
+- 알림 기능 강화
+- 앱스토어 / 플레이스토어 출시 준비
+- 개인정보 처리 및 신고/차단 정책 보강
+
+## 주의사항
+
+- 이 프로젝트는 프로토타입입니다.
+- AI 이상형 이미지는 실제 사용자가 아닌 AI 생성 이미지입니다.
+- 젤리 결제 기능은 테스트 모드로 구성된 프로토타입 단계입니다.
+- 실제 서비스 출시 전에는 보안 규칙, 개인정보 처리, 결제 검증, 운영 정책 보강이 필요합니다.
