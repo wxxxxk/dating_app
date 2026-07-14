@@ -14,5 +14,6 @@
     "firebase-functions": "^6.0.0",
     "openai": "^6.45.0"
   },
-  "private": true
+  "private": true,
+  "packageManager": "npm@10.8.2"
 }
