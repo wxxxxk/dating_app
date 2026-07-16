@@ -118,11 +118,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         personalityTags: _personalityTags,
         idealTags: _idealTags,
         relationshipGoal: goalKey,
-        verifications: VerificationStatus(
-          email: widget.authService.isEmailVerified,
-        ),
+        verifications: const VerificationStatus(),
       );
       await widget.firestoreService.createUserProfile(profile);
+      await widget.authService.reloadUser();
+      if (widget.authService.hasAnyAuthVerificationSignal) {
+        try {
+          await widget.authService.syncAuthVerificationBadges();
+        } on AuthFailure catch (e) {
+          if (kDebugMode) {
+            debugPrint('[Onboarding] 인증 배지 동기화 실패: ${e.message}');
+          }
+        }
+      }
 
       // 3. 완료: app.dart에 알려 HomeScreen으로 전환
       widget.onCompleted();

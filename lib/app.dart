@@ -257,11 +257,18 @@ class _AuthGateState extends State<_AuthGate> {
       final profile = await widget.firestoreService.getUserProfile(uid);
       if (profile != null) {
         await widget.authService.reloadUser();
-        final synced = profile.verifications.copyWith(
-          email: widget.authService.isEmailVerified,
-        );
-        if (synced.email != profile.verifications.email) {
-          await widget.firestoreService.updateUserVerifications(uid, synced);
+        final shouldSyncVerifications =
+            widget.authService.isEmailVerified != profile.verifications.email ||
+            widget.authService.hasPhoneNumber != profile.verifications.phone ||
+            profile.verifications.photo;
+        if (shouldSyncVerifications) {
+          try {
+            await widget.authService.syncAuthVerificationBadges();
+          } on AuthFailure catch (e) {
+            if (mounted) {
+              debugPrint('[AuthGate] 인증 배지 동기화 실패: ${e.message}');
+            }
+          }
         }
         unawaited(widget.notificationService.registerForUser(uid));
       }

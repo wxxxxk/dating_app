@@ -1,6 +1,12 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+
+import '../../core/constants/app_constants.dart';
+import '../../models/user_profile.dart';
+
+typedef AuthBadgeSyncCaller = Future<dynamic> Function();
 
 /// 인증 관련 결과를 화면에 전달하기 위한 의미 있는 예외.
 ///
@@ -22,10 +28,33 @@ class AuthFailure implements Exception {
 ///   테스트용 가짜(Mock)로 교체하기가 어렵다.
 /// - 모든 인증 로직을 이 클래스 한 곳에 모아두면 교체/테스트/에러처리가 쉬워진다.
 class AuthService {
-  AuthService({FirebaseAuth? firebaseAuth})
-    : _auth = firebaseAuth ?? FirebaseAuth.instance;
+  AuthService({
+    FirebaseAuth? firebaseAuth,
+    FirebaseFunctions? functions,
+    AuthBadgeSyncCaller? authBadgeSyncCaller,
+  }) : _auth =
+           firebaseAuth ??
+           (authBadgeSyncCaller == null ? FirebaseAuth.instance : null),
+       _functions =
+           functions ??
+           (authBadgeSyncCaller == null
+               ? FirebaseFunctions.instanceFor(
+                   region: AppConstants.functionsRegion,
+                 )
+               : null),
+       _authBadgeSyncCaller = authBadgeSyncCaller;
 
-  final FirebaseAuth _auth;
+  final FirebaseAuth? _auth;
+  final FirebaseFunctions? _functions;
+  final AuthBadgeSyncCaller? _authBadgeSyncCaller;
+
+  FirebaseAuth get _firebaseAuth {
+    final auth = _auth;
+    if (auth == null) {
+      throw StateError('FirebaseAuth is not configured.');
+    }
+    return auth;
+  }
 
   /// google_sign_in 7.x 부터는 인스턴스를 직접 생성하지 않고
   /// 싱글턴 [GoogleSignIn.instance] 를 사용하고, 쓰기 전에 initialize() 해야 한다.
@@ -35,13 +64,13 @@ class AuthService {
   bool _googleInitialized = false;
 
   /// 현재 로그인된 사용자(없으면 null). 동기적으로 즉시 확인할 때 사용.
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _auth?.currentUser;
 
   /// 로그인 상태 변화 스트림.
   ///
   /// 로그인/로그아웃이 일어날 때마다 새 값을 흘려보낸다.
   /// AuthState(ChangeNotifier)가 이 스트림을 구독해 앱 전체 화면 전환을 처리한다.
-  Stream<User?> authStateChanges() => _auth.authStateChanges();
+  Stream<User?> authStateChanges() => _firebaseAuth.authStateChanges();
 
   // ===========================================================================
   // 구글 로그인
@@ -79,7 +108,7 @@ class AuthService {
       }
 
       final credential = GoogleAuthProvider.credential(idToken: idToken);
-      return await _auth.signInWithCredential(credential);
+      return await _firebaseAuth.signInWithCredential(credential);
     } on GoogleSignInException catch (e) {
       // 사용자가 로그인 창을 닫은 경우는 에러가 아니라 "취소"로 처리한다.
       if (e.code == GoogleSignInExceptionCode.canceled) {
@@ -120,7 +149,7 @@ class AuthService {
     required String password,
   }) async {
     try {
-      return await _auth.createUserWithEmailAndPassword(
+      return await _firebaseAuth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
@@ -137,7 +166,7 @@ class AuthService {
     required String password,
   }) async {
     try {
-      return await _auth.signInWithEmailAndPassword(
+      return await _firebaseAuth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
@@ -154,7 +183,7 @@ class AuthService {
   /// too-many-requests 에러가 날 수 있으니 화면에서 버튼 쿨다운을 걸어야 한다.
   Future<void> sendEmailVerification() async {
     try {
-      final user = _auth.currentUser;
+      final user = _auth?.currentUser;
       if (user != null && !user.emailVerified) {
         await user.sendEmailVerification();
       }
@@ -168,13 +197,18 @@ class AuthService {
   /// [emailVerified]는 로그인 시 캐시된 값이므로, 사용자가 인증 링크를 클릭한
   /// 뒤에도 앱은 이 메서드를 호출해야 변경을 반영할 수 있다.
   Future<void> reloadUser() async {
-    await _auth.currentUser?.reload();
+    await _auth?.currentUser?.reload();
   }
 
   /// 현재 로그인된 사용자의 이메일 인증 여부.
   ///
   /// 최신 상태를 얻으려면 [reloadUser] 후에 읽어야 한다.
-  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
+  bool get isEmailVerified => _auth?.currentUser?.emailVerified ?? false;
+
+  bool get hasPhoneNumber =>
+      (_auth?.currentUser?.phoneNumber ?? '').trim().isNotEmpty;
+
+  bool get hasAnyAuthVerificationSignal => isEmailVerified || hasPhoneNumber;
 
   /// 비밀번호 재설정 메일을 보낸다.
   ///
@@ -182,7 +216,7 @@ class AuthService {
   /// 가입되지 않은 주소로 보내도 에러 없이 동일한 응답이 온다.
   Future<void> sendPasswordResetEmail({required String email}) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email.trim());
+      await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
     } on FirebaseAuthException catch (e) {
       throw AuthFailure(_firebaseAuthMessage(e));
     } catch (_) {
@@ -223,7 +257,7 @@ class AuthService {
     bool linkToCurrentUser = false,
   }) async {
     try {
-      await _auth.verifyPhoneNumber(
+      await _firebaseAuth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: const Duration(seconds: 60),
         verificationCompleted: (PhoneAuthCredential credential) async {
@@ -231,7 +265,7 @@ class AuthService {
           try {
             final userCredential = linkToCurrentUser
                 ? await _linkCredentialToCurrentUser(credential)
-                : await _auth.signInWithCredential(credential);
+                : await _firebaseAuth.signInWithCredential(credential);
             onVerified(userCredential);
           } on FirebaseAuthException catch (e) {
             onFailed(_firebaseAuthMessage(e));
@@ -273,10 +307,57 @@ class AuthService {
       );
       return linkToCurrentUser
           ? await _linkCredentialToCurrentUser(credential)
-          : await _auth.signInWithCredential(credential);
+          : await _firebaseAuth.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
       throw AuthFailure(_firebaseAuthMessage(e));
     }
+  }
+
+  /// Firebase Auth의 canonical 상태를 서버에서 확인해 Firestore 배지를 동기화한다.
+  ///
+  /// 클라이언트는 uid나 verified 값을 보내지 않는다. 최종 판정은 Cloud Functions가
+  /// Admin SDK로 현재 로그인 사용자만 조회해 결정한다.
+  Future<VerificationStatus> syncAuthVerificationBadges() async {
+    try {
+      final data = _authBadgeSyncCaller != null
+          ? await _authBadgeSyncCaller()
+          : (await _functions!
+                    .httpsCallable('syncAuthVerificationBadges')
+                    .call())
+                .data;
+      return _verificationStatusFromSyncResponse(data);
+    } on AuthFailure {
+      rethrow;
+    } on FirebaseFunctionsException catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[AuthService] syncAuthVerificationBadges failed code="${e.code}" message="${e.message}"',
+        );
+      }
+      throw const AuthFailure('인증 상태를 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[AuthService] syncAuthVerificationBadges malformed: $e');
+      }
+      throw const AuthFailure('인증 상태를 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
+    }
+  }
+
+  VerificationStatus _verificationStatusFromSyncResponse(dynamic data) {
+    if (data is! Map) {
+      throw const AuthFailure('인증 상태 응답이 올바르지 않습니다.');
+    }
+    final verifications = data['verifications'];
+    if (verifications is! Map) {
+      throw const AuthFailure('인증 상태 응답이 올바르지 않습니다.');
+    }
+    final email = verifications['email'];
+    final phone = verifications['phone'];
+    final photo = verifications['photo'];
+    if (email is! bool || phone is! bool || photo is! bool) {
+      throw const AuthFailure('인증 상태 응답이 올바르지 않습니다.');
+    }
+    return VerificationStatus(email: email, phone: phone, photo: photo);
   }
 
   /// 프로필 인증용: 현재 로그인 계정에 전화번호 credential을 연결한다.
@@ -286,7 +367,7 @@ class AuthService {
   Future<UserCredential> _linkCredentialToCurrentUser(
     PhoneAuthCredential credential,
   ) async {
-    final user = _auth.currentUser;
+    final user = _auth?.currentUser;
     if (user == null) {
       throw const AuthFailure('로그인이 필요합니다.');
     }
@@ -310,7 +391,7 @@ class AuthService {
       if (_googleInitialized) {
         await _googleSignIn.signOut();
       }
-      await _auth.signOut();
+      await _firebaseAuth.signOut();
     } catch (_) {
       throw const AuthFailure('로그아웃 중 오류가 발생했습니다.');
     }

@@ -14,6 +14,9 @@ const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 const OpenAI = require('openai');
+const {
+  syncAuthVerificationBadgesCore,
+} = require('./lib/auth_verification_badges');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
@@ -2303,6 +2306,21 @@ exports.generateIdealTypeImageProviderPreview = onCall(
     });
   },
 );
+
+// ============================================================================
+// Phase 0-D: 인증 배지 서버 전용 동기화
+// ============================================================================
+
+exports.syncAuthVerificationBadges = onCall(async (request) => {
+  return syncAuthVerificationBadgesCore({
+    request,
+    auth: admin.auth(),
+    db,
+    HttpsError,
+    serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+    logger: console,
+  });
+});
 
 // ============================================================================
 // M10: 젤리 인앱결제(IAP) 영수증 검증 — 스켈레톤

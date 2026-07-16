@@ -107,7 +107,18 @@ class _HomeScreenState extends State<HomeScreen> {
     UserProfile? synced;
     try {
       final profile = await widget.firestoreService.getUserProfile(uid);
-      synced = profile == null ? null : await _syncEmailVerification(profile);
+      if (profile == null) {
+        synced = null;
+      } else {
+        try {
+          synced = await _syncAuthVerificationBadges(profile);
+        } on AuthFailure catch (e) {
+          if (kDebugMode) {
+            debugPrint('[HomeScreen] 인증 배지 동기화 실패: ${e.message}');
+          }
+          synced = profile;
+        }
+      }
       if (mounted) {
         setState(() {
           _profile = synced;
@@ -258,18 +269,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$prefix 프로필 분위기가 안정적으로 채워져 있어요.';
   }
 
-  Future<UserProfile> _syncEmailVerification(UserProfile profile) async {
+  Future<UserProfile> _syncAuthVerificationBadges(
+    UserProfile profile, {
+    bool force = false,
+  }) async {
     await widget.authService.reloadUser();
-    final syncedVerifications = profile.verifications.copyWith(
-      email: widget.authService.isEmailVerified,
-    );
-    if (syncedVerifications.email != profile.verifications.email) {
-      await widget.firestoreService.updateUserVerifications(
-        profile.uid,
-        syncedVerifications,
-      );
+    final shouldSync =
+        force ||
+        widget.authService.isEmailVerified != profile.verifications.email ||
+        widget.authService.hasPhoneNumber != profile.verifications.phone ||
+        profile.verifications.photo;
+    if (!shouldSync) {
+      return profile;
     }
-    return profile.copyWith(verifications: syncedVerifications);
+    final verifications = await widget.authService.syncAuthVerificationBadges();
+    return profile.copyWith(verifications: verifications);
   }
 
   Future<void> _sendEmailVerification() async {
@@ -290,12 +304,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (profile == null) return;
     setState(() => _verificationLoading = true);
     try {
-      final synced = await _syncEmailVerification(profile);
+      final synced = await _syncAuthVerificationBadges(profile, force: true);
       if (!mounted) return;
       setState(() => _profile = synced);
       _showSnack(
         synced.verifications.email ? '이메일 인증이 확인됐어요.' : '아직 이메일 인증 전이에요.',
       );
+    } on AuthFailure catch (e) {
+      if (mounted) _showSnack(e.message);
     } finally {
       if (mounted) setState(() => _verificationLoading = false);
     }
@@ -303,7 +319,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openPhoneVerification() async {
     final profile = _profile;
-    if (profile == null || profile.verifications.phone) return;
+    if (profile == null ||
+        profile.verifications.phone ||
+        _verificationLoading) {
+      return;
+    }
 
     final completed = await Navigator.push<bool>(
       context,
@@ -324,10 +344,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _markPhoneVerified() async {
     final profile = _profile;
     if (profile == null) return;
-    final synced = profile.verifications.copyWith(phone: true);
-    await widget.firestoreService.updateUserVerifications(profile.uid, synced);
-    if (!mounted) return;
-    setState(() => _profile = profile.copyWith(verifications: synced));
+    if (mounted) setState(() => _verificationLoading = true);
+    try {
+      final synced = await _syncAuthVerificationBadges(profile, force: true);
+      if (!synced.verifications.phone) {
+        throw const AuthFailure('전화 인증 상태를 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
+      }
+      if (!mounted) return;
+      setState(() => _profile = synced);
+    } finally {
+      if (mounted) setState(() => _verificationLoading = false);
+    }
   }
 
   void _showSnack(String message) {

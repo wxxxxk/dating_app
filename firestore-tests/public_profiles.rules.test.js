@@ -60,13 +60,14 @@ function validOwnerProfile(overrides = {}) {
 }
 
 /** owner 필드 + server-managed 필드를 포함한 완전한 기존 공개 문서. */
-function fullExistingPublicDoc() {
+function fullExistingPublicDoc(overrides = {}) {
   return {
     ...validOwnerProfile(),
     verifications: { email: false, phone: false, photo: false },
     rankingBoostUntil: Timestamp.fromDate(new Date('2030-01-01T00:00:00Z')),
     profileUpdatedAt: Timestamp.now(),
     schemaVersion: 1,
+    ...overrides,
   };
 }
 
@@ -220,6 +221,14 @@ test('8. verifications를 포함하면 거부', async () => {
       validOwnerProfile({ verifications: { email: true } }),
     ),
   );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        verifications: { email: false, phone: false, photo: false },
+      }),
+    ),
+  );
 });
 
 test('9. rankingBoostUntil을 포함하면 거부', async () => {
@@ -293,6 +302,40 @@ test('17. 본인이 verifications를 변경하려 하면 거부', async () => {
   await assertFails(
     updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
       verifications: { email: true, phone: true, photo: true },
+    }),
+  );
+});
+
+test('17a. publicProfiles verifications true → false/null/key 변경도 거부', async () => {
+  await seedPublic(
+    OWNER,
+    fullExistingPublicDoc({
+      verifications: { email: true, phone: true, photo: true },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      verifications: { email: false, phone: true, photo: true },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      verifications: null,
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      verifications: { email: true, phone: true },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      verifications: {
+        email: true,
+        phone: true,
+        photo: true,
+        approved: true,
+      },
     }),
   );
 });
@@ -633,16 +676,7 @@ test('54. FCM 토큰 merge write 허용', async () => {
   );
 });
 
-test('54a. users create에서 인증 완료 true 직접 생성 거부', async () => {
-  await assertFails(
-    setDoc(
-      doc(ownerDb(), 'users', OWNER),
-      validUserDoc({ verifications: { email: true, phone: false, photo: false } }),
-    ),
-  );
-});
-
-test('54b. users create에서 비신뢰 false 인증 상태는 허용', async () => {
+test('54a. users create에서 정확한 false 인증 초기값만 허용', async () => {
   await assertSucceeds(
     setDoc(
       doc(ownerDb(), 'users', OWNER),
@@ -651,7 +685,28 @@ test('54b. users create에서 비신뢰 false 인증 상태는 허용', async ()
   );
 });
 
-test('54f. users create에서 token이 있어도 인증 완료 true는 클라이언트 거부', async () => {
+test('54b. users create에서 email/phone/photo true 직접 생성 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: true, phone: false, photo: false } }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: false, phone: true, photo: false } }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: false, phone: false, photo: true } }),
+    ),
+  );
+});
+
+test('54c. users create에서 token이 있어도 인증 완료 true는 클라이언트 거부', async () => {
   await assertFails(
     setDoc(
       doc(emailVerifiedOwnerDb(), 'users', OWNER),
@@ -666,7 +721,25 @@ test('54f. users create에서 token이 있어도 인증 완료 true는 클라이
   );
 });
 
-test('54c. users verifications에 허용되지 않은 key나 photo true 거부', async () => {
+test('54d. users create에서 verification map 누락/null/비-map/키 누락 거부', async () => {
+  const missing = validUserDoc();
+  delete missing.verifications;
+  await assertFails(setDoc(doc(ownerDb(), 'users', OWNER), missing));
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ verifications: null })),
+  );
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ verifications: false })),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: false, phone: false } }),
+    ),
+  );
+});
+
+test('54e. users create에서 verification 추가 key 거부', async () => {
   await assertFails(
     setDoc(
       doc(ownerDb(), 'users', OWNER),
@@ -680,15 +753,9 @@ test('54c. users verifications에 허용되지 않은 key나 photo true 거부',
       }),
     ),
   );
-  await assertFails(
-    setDoc(
-      doc(ownerDb(), 'users', OWNER),
-      validUserDoc({ verifications: { email: false, phone: false, photo: true } }),
-    ),
-  );
 });
 
-test('54d. users update에서 인증 false → true 직접 전환 거부', async () => {
+test('54f. users update에서 인증 false → true 직접 전환 거부', async () => {
   await seedUser(OWNER, existingUserDoc());
   await assertFails(
     updateDoc(doc(ownerDb(), 'users', OWNER), {
@@ -697,11 +764,68 @@ test('54d. users update에서 인증 false → true 직접 전환 거부', async
   );
 });
 
-test('54e. users update에서 false 인증 상태 유지 write 허용', async () => {
+test('54g. users update에서 verification 동일값 no-op은 실질 mutation이 아니다', async () => {
   await seedUser(OWNER, existingUserDoc());
   await assertSucceeds(
     updateDoc(doc(ownerDb(), 'users', OWNER), {
       verifications: { email: false, phone: false, photo: false },
+    }),
+  );
+});
+
+test('54h. users update에서 true → false, delete/null/key 변경 거부', async () => {
+  await seedUser(
+    OWNER,
+    existingUserDoc({
+      verifications: { email: true, phone: true, photo: true },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: { email: false, phone: true, photo: true },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: deleteField(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: null,
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: { email: true, phone: true },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: {
+        email: true,
+        phone: true,
+        photo: true,
+        approved: true,
+      },
+    }),
+  );
+});
+
+test('54i. users update에서 nested verification 변경도 거부', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      'verifications.email': true,
+    }),
+  );
+});
+
+test('54j. users update에서 unrelated owner-editable field는 계속 허용', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      displayName: '수정',
     }),
   );
 });

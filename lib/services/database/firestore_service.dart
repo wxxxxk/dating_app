@@ -270,24 +270,6 @@ class FirestoreService {
     await batch.commit();
   }
 
-  /// 인증 상태를 users/{uid}.verifications에 반영한다.
-  ///
-  /// 프로토타입에서는 클라이언트가 FirebaseAuth.emailVerified를 읽어 동기화한다.
-  /// 실서비스에서는 Cloud Functions/Admin SDK로 서버 검증 후 true를 써야
-  /// 사용자가 임의로 인증 상태를 조작하는 위험을 줄일 수 있다.
-  ///
-  /// Phase 0-B: 아직 `publicProfiles.verifications`에는 복사하지 않는다 —
-  /// 공개 verifications는 향후 Admin backfill/서버 동기화에서 처리한다.
-  Future<void> updateUserVerifications(
-    String uid,
-    VerificationStatus verifications,
-  ) async {
-    if (verifications.hasAny) return;
-    await updateUserProfile(uid, {
-      'verifications': verifications.toFirestore(),
-    });
-  }
-
   /// 디스커버리 필터 설정을 저장한다.
   ///
   /// users/{uid} 본인 write 규칙으로 커버된다. 비공개 원장 전용 필드이므로
