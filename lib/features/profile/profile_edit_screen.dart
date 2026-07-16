@@ -143,7 +143,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         idealTags: _idealTags,
         updatedAt: DateTime.now(),
       );
-      await widget.firestoreService.createUserProfile(updatedProfile);
+      await widget.firestoreService.updateEditableUserProfile(updatedProfile);
 
       if (mounted) {
         // 업데이트된 프로필을 HomeScreen에 전달해 재조회 없이 반영

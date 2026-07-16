@@ -92,6 +92,83 @@ service cloud.firestore {
       }
     }
 
+    // publicProfiles/{uid} (Phase 0-B):
+    // - 다른 인증 사용자에게 공개되는 최소 프로필. 정확 birthDate/정확 위치/
+    //   재화/토큰/AI 캐시는 절대 담기지 않는다(PublicProfile 계약).
+    // - read: 인증 사용자만. 비로그인 거부.
+    // - create/update: 본인만, owner-editable 필드만. server-managed 필드
+    //   (verifications/rankingBoostUntil/profileUpdatedAt/schemaVersion)와
+    //   알 수 없는 key는 클라이언트가 생성·변경할 수 없다(서버/Admin 전용).
+    // - delete: 클라이언트 금지(탈퇴/backfill은 Admin SDK가 규칙을 우회).
+    //
+    // 아직 users/{uid} 타인 read는 닫지 않는다(구버전 앱 호환). 공개 read 전환은
+    // backfill 완료 후 별도 단계에서 진행한다.
+    match /publicProfiles/{uid} {
+      // PublicProfile.ownerEditableKeys와 정확히 일치해야 한다.
+      function ownerEditableKeys() {
+        return [
+          'displayName', 'age', 'gender', 'bio', 'photoUrls', 'height',
+          'religion', 'smoking', 'drinking', 'jobCategory', 'jobTitle',
+          'education', 'mbti', 'interests', 'personalityTags', 'idealTags',
+          'relationshipGoal', 'coarseLocation'
+        ];
+      }
+
+      // 누락 필드에 안전 접근하도록 Map.get / key 존재 검사를 사용한다.
+      function coarseLocationValid(data) {
+        return !('coarseLocation' in data) ||
+          data.coarseLocation == null || (
+            data.coarseLocation is map &&
+            // 세 key가 모두 존재하고 그 외 key는 없어야 한다(불완전/추가 key 거부).
+            // 앱은 CoarseLocation.toMap()으로 항상 lat/lng/updatedAt을 함께 쓴다.
+            data.coarseLocation.keys().hasOnly(['lat', 'lng', 'updatedAt']) &&
+            data.coarseLocation.keys().hasAll(['lat', 'lng', 'updatedAt']) &&
+            data.coarseLocation.lat is number &&
+            data.coarseLocation.lat >= -90 && data.coarseLocation.lat <= 90 &&
+            data.coarseLocation.lng is number &&
+            data.coarseLocation.lng >= -180 && data.coarseLocation.lng <= 180 &&
+            data.coarseLocation.updatedAt is timestamp
+          );
+      }
+
+      // 존재하는 owner 필드만 형식 검증한다(부분 문서 허용).
+      function publicFieldsValid(data) {
+        return (!('age' in data) ||
+            (data.age is int && data.age >= 0 && data.age <= 130)) &&
+          (!('gender' in data) ||
+            data.gender in ['male', 'female', 'other']) &&
+          (!('photoUrls' in data) ||
+            (data.photoUrls is list && data.photoUrls.size() <= 4)) &&
+          (!('interests' in data) ||
+            (data.interests is list && data.interests.size() <= 8)) &&
+          (!('personalityTags' in data) ||
+            (data.personalityTags is list &&
+              data.personalityTags.size() <= 8)) &&
+          (!('idealTags' in data) ||
+            (data.idealTags is list && data.idealTags.size() <= 8)) &&
+          coarseLocationValid(data);
+      }
+
+      allow read: if request.auth != null;
+
+      // create: 전체 문서가 owner-editable 필드의 부분집합이어야 한다 —
+      // server-managed 필드나 알 수 없는 key, uid 본문 저장을 모두 막는다.
+      allow create: if request.auth != null &&
+        request.auth.uid == uid &&
+        request.resource.data.keys().hasOnly(ownerEditableKeys()) &&
+        publicFieldsValid(request.resource.data);
+
+      // update: 이번 write가 건드리는 key가 owner-editable에만 한정.
+      // server-managed 필드를 바꾸려 하면 affectedKeys에 잡혀 거부된다.
+      allow update: if request.auth != null &&
+        request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(ownerEditableKeys()) &&
+        publicFieldsValid(request.resource.data);
+
+      allow delete: if false;
+    }
+
     // matches/{matchId}:
     // - 읽기(get): 매치의 participants 중 한 명인 유저만 가능.
     //   resource == null 이면 문서가 존재하지 않는 것(매치 미성사).

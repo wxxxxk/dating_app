@@ -1,0 +1,13 @@
+{
+  "name": "firestore-rules-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Firestore security rules tests for publicProfiles (Phase 0-B). Emulator-only, no real project access.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-dating-app --config ../firebase.json \"$(command -v node) --test public_profiles.rules.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "firebase": "^10.13.0"
+  }
+}

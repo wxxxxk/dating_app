@@ -66,6 +66,9 @@ ios/.symlinks/
 # Cloud Functions(Node.js) 의존성 — package.json/package-lock.json만 커밋한다.
 functions/node_modules/
 
+# Firestore Rules 테스트(Node.js) 의존성 — package.json/package-lock.json만 커밋한다.
+firestore-tests/node_modules/
+
 # Firebase 연결 설정 파일.
 # flutterfire configure 가 생성하며, 협업/공개 저장소에서는 노출을 줄이기 위해 무시한다.
 # (단, 혼자 쓰는 비공개 저장소라면 커밋해도 무방하다 — 팀 정책에 맞게 결정)
