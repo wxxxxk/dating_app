@@ -22,8 +22,11 @@ const {
   updateDoc,
   deleteDoc,
   deleteField,
+  arrayUnion,
+  serverTimestamp,
   Timestamp,
   setLogLevel,
+  writeBatch,
 } = require('firebase/firestore');
 
 const OWNER = 'ownerUid';
@@ -60,15 +63,69 @@ function validOwnerProfile(overrides = {}) {
 function fullExistingPublicDoc() {
   return {
     ...validOwnerProfile(),
-    verifications: { email: true, phone: false, photo: false },
+    verifications: { email: false, phone: false, photo: false },
     rankingBoostUntil: Timestamp.fromDate(new Date('2030-01-01T00:00:00Z')),
     profileUpdatedAt: Timestamp.now(),
     schemaVersion: 1,
   };
 }
 
+function validUserDoc(overrides = {}) {
+  return {
+    displayName: '지민',
+    birthDate: Timestamp.fromDate(new Date('1995-06-15T00:00:00Z')),
+    gender: 'female',
+    bio: '안녕하세요',
+    photoUrls: ['https://example.com/a.jpg'],
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    height: 165,
+    religion: 'none',
+    smoking: 'non_smoker',
+    drinking: 'socially',
+    jobCategory: 'design',
+    jobTitle: 'UX 디자이너',
+    education: 'university',
+    mbti: 'ENFP',
+    interests: ['coffee'],
+    personalityTags: ['warm'],
+    idealTags: ['kind'],
+    relationshipGoal: 'serious_relationship',
+    verifications: { email: false, phone: false, photo: false },
+    discoveryFilter: {
+      ageMin: 24,
+      ageMax: 38,
+      maxDistanceKm: 20,
+      gender: 'male',
+      relationshipGoal: 'serious_relationship',
+    },
+    ...overrides,
+  };
+}
+
+function existingUserDoc(overrides = {}) {
+  return {
+    ...validUserDoc(),
+    jelly: 50,
+    boostUntil: Timestamp.fromDate(new Date('2030-01-01T00:00:00Z')),
+    likesUnlocked: false,
+    fortuneNarrative: { title: 'cached' },
+    ...overrides,
+  };
+}
+
 function ownerDb() {
   return testEnv.authenticatedContext(OWNER).firestore();
+}
+function emailVerifiedOwnerDb() {
+  return testEnv
+    .authenticatedContext(OWNER, { email_verified: true })
+    .firestore();
+}
+function phoneVerifiedOwnerDb() {
+  return testEnv
+    .authenticatedContext(OWNER, { phone_number: '+821012345678' })
+    .firestore();
 }
 function otherDb() {
   return testEnv.authenticatedContext(OTHER).firestore();
@@ -496,5 +553,429 @@ test('46. 본인 users write 허용', async () => {
   await seedUser(OWNER, { displayName: '지민', bio: 'hi' });
   await assertSucceeds(
     updateDoc(doc(ownerDb(), 'users', OWNER), { bio: '새 소개' }),
+  );
+});
+
+// ── Phase 0-C: users/{uid} write field whitelist ──────────────────────────
+
+test('47. 본인이 정상 users 생성 payload를 create', async () => {
+  await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc()));
+});
+
+test('48. users create에서 허용되지 않은 임의 필드 거부', async () => {
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ unknownKey: true })),
+  );
+});
+
+test('49. users create에서 jelly 생성 거부', async () => {
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ jelly: 999 })),
+  );
+});
+
+test('50. users create에서 관리자/역할 필드 조작 거부', async () => {
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ admin: true })),
+  );
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ role: 'admin' })),
+  );
+});
+
+test('51. 다른 사용자 users create 거부', async () => {
+  await assertFails(setDoc(doc(ownerDb(), 'users', OTHER), validUserDoc()));
+});
+
+test('52. 본인이 허용된 users 프로필 필드 update', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      displayName: '수정',
+      bio: '새 소개',
+      updatedAt: Timestamp.now(),
+    }),
+  );
+});
+
+test('53. 본인이 users 위치와 필터 update', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      location: {
+        lat: 37.5665,
+        lng: 126.978,
+        updatedAt: Timestamp.now(),
+        label: '서울',
+      },
+      discoveryFilter: {
+        ageMin: 20,
+        ageMax: 40,
+        maxDistanceKm: null,
+        gender: 'all',
+        relationshipGoal: null,
+      },
+    }),
+  );
+});
+
+test('54. FCM 토큰 merge write 허용', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      {
+        fcmTokens: arrayUnion('token-1'),
+        fcmTokenUpdatedAt: serverTimestamp(),
+      },
+      { merge: true },
+    ),
+  );
+});
+
+test('54a. users create에서 인증 완료 true 직접 생성 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: true, phone: false, photo: false } }),
+    ),
+  );
+});
+
+test('54b. users create에서 비신뢰 false 인증 상태는 허용', async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: false, phone: false, photo: false } }),
+    ),
+  );
+});
+
+test('54f. users create에서 token이 있어도 인증 완료 true는 클라이언트 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(emailVerifiedOwnerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: true, phone: false, photo: false } }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(phoneVerifiedOwnerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: false, phone: true, photo: false } }),
+    ),
+  );
+});
+
+test('54c. users verifications에 허용되지 않은 key나 photo true 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({
+        verifications: {
+          email: false,
+          phone: false,
+          photo: false,
+          approved: true,
+        },
+      }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ verifications: { email: false, phone: false, photo: true } }),
+    ),
+  );
+});
+
+test('54d. users update에서 인증 false → true 직접 전환 거부', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: { email: true, phone: false, photo: false },
+    }),
+  );
+});
+
+test('54e. users update에서 false 인증 상태 유지 write 허용', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      verifications: { email: false, phone: false, photo: false },
+    }),
+  );
+});
+
+test('55. users update에서 birthDate/createdAt 변경 거부', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      birthDate: Timestamp.fromDate(new Date('2000-01-01T00:00:00Z')),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { createdAt: Timestamp.now() }),
+  );
+});
+
+test('56. users update에서 허용 필드와 금지 필드 혼합 변경 거부', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      bio: '정상 변경',
+      admin: true,
+    }),
+  );
+});
+
+test('57. users update에서 jelly 증액 거부', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 10 }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { jelly: 999 }),
+  );
+});
+
+test('58. users update에서 jelly 차감 패턴은 허용', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 10 }));
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { jelly: 5 }),
+  );
+});
+
+test('58a. users update에서 잘못된 jelly 차감액/음수/비정수 거부', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 10 }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { jelly: 6 }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { jelly: -1 }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { jelly: 5.5 }),
+  );
+});
+
+test('59. users update에서 비용 없는 boostUntil/likesUnlocked 조작 거부', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 50 }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      boostUntil: Timestamp.fromDate(new Date('2099-01-01T00:00:00Z')),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), { likesUnlocked: true }),
+  );
+});
+
+test('59a. users boost는 정확히 30 차감하고 짧은 만료만 허용', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 50 }));
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      jelly: 20,
+      boostUntil: Timestamp.fromDate(new Date(Date.now() + 30 * 60 * 1000)),
+    }),
+  );
+});
+
+test('59b. users boost 장기 만료나 부족 차감은 거부', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 50 }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      jelly: 49,
+      boostUntil: Timestamp.fromDate(new Date('2099-01-01T00:00:00Z')),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      jelly: 20,
+      boostUntil: Timestamp.fromDate(new Date('2099-01-01T00:00:00Z')),
+    }),
+  );
+});
+
+test('59c. users likesUnlocked는 정확히 20 차감할 때만 허용', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 50, likesUnlocked: false }));
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      jelly: 30,
+      likesUnlocked: true,
+    }),
+  );
+});
+
+test('59d. users likesUnlocked 부족 차감이나 재획득은 거부', async () => {
+  await seedUser(OWNER, existingUserDoc({ jelly: 50, likesUnlocked: false }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      jelly: 49,
+      likesUnlocked: true,
+    }),
+  );
+
+  await testEnv.clearFirestore();
+  await seedUser(OWNER, existingUserDoc({ jelly: 50, likesUnlocked: true }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      jelly: 30,
+      likesUnlocked: true,
+    }),
+  );
+});
+
+test('60. users update에서 AI 캐시/운영 필드 조작 거부', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      fortuneNarrative: { title: '위조' },
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      moderationStatus: 'approved',
+    }),
+  );
+});
+
+test('61. users delete는 본인도 거부', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertFails(deleteDoc(doc(ownerDb(), 'users', OWNER)));
+});
+
+// ── Phase 0-C: publicProfiles privacy boundary additions ──────────────────
+
+test('62. 공개 프로필 create에서 birthDate 원본 저장 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        birthDate: Timestamp.fromDate(new Date('1995-06-15T00:00:00Z')),
+      }),
+    ),
+  );
+});
+
+test('63. 공개 프로필 create에서 정밀 location 저장 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        location: { lat: 37.56647, lng: 126.97796, updatedAt: Timestamp.now() },
+      }),
+    ),
+  );
+});
+
+test('64. 공개 프로필 create에서 연락처 저장 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ email: 'owner@example.com' }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ phoneNumber: '+821012345678' }),
+    ),
+  );
+});
+
+test('65. 공개 프로필 update에서 허용 필드와 금지 필드 혼합 변경 거부', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      bio: '정상 변경',
+      rankingBoostUntil: Timestamp.now(),
+    }),
+  );
+});
+
+test('66. 정상 users/publicProfiles dual-write batch 허용', async () => {
+  const db = ownerDb();
+  const userRef = doc(db, 'users', OWNER);
+  const publicRef = doc(db, 'publicProfiles', OWNER);
+  const batch = writeBatch(db);
+  batch.set(userRef, validUserDoc());
+  batch.set(publicRef, validOwnerProfile(), { merge: true });
+  await assertSucceeds(batch.commit());
+});
+
+test('67. jellyTransactions 단독 충전 위조 create 거부', async () => {
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx1'), {
+      type: 'charge',
+      amount: 999,
+      reason: 'jelly_300',
+      createdAt: serverTimestamp(),
+    }),
+  );
+});
+
+test('68. jellyTransactions 소비 내역 create 허용', async () => {
+  await assertSucceeds(
+    setDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx1'), {
+      type: 'spend',
+      amount: -5,
+      reason: 'superlike',
+      createdAt: serverTimestamp(),
+    }),
+  );
+});
+
+test('69. jellyTransactions amount 0/양수/미허용 음수 거부', async () => {
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx1'), {
+      type: 'spend',
+      amount: 0,
+      reason: 'superlike',
+      createdAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx2'), {
+      type: 'spend',
+      amount: 5,
+      reason: 'superlike',
+      createdAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx3'), {
+      type: 'spend',
+      amount: -999,
+      reason: 'superlike',
+      createdAt: serverTimestamp(),
+    }),
+  );
+});
+
+test('70. jellyTransactions unknown field와 update/delete 거부', async () => {
+  await assertFails(
+    setDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx1'), {
+      type: 'spend',
+      amount: -5,
+      reason: 'superlike',
+      createdAt: serverTimestamp(),
+      ownerUid: OWNER,
+    }),
+  );
+
+  await seedUser(OWNER, existingUserDoc());
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'users', OWNER, 'jellyTransactions', 'tx2'), {
+      type: 'spend',
+      amount: -5,
+      reason: 'superlike',
+      createdAt: Timestamp.now(),
+    });
+  });
+
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx2'), {
+      amount: -3,
+    }),
+  );
+  await assertFails(
+    deleteDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx2')),
   );
 });

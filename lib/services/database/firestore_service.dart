@@ -48,6 +48,35 @@ class FirestoreService {
     'updatedAt',
   };
 
+  /// 신규 온보딩 생성 시 클라이언트가 `users/{uid}`에 쓸 수 있는 필드 key 집합.
+  ///
+  /// 재화/부스트/유료 unlock/AI 캐시/권한 필드는 신규 문서에도 클라이언트가
+  /// 직접 만들지 않는다. 읽기 모델은 누락된 재화 필드를 기본값으로 처리한다.
+  static const Set<String> clientCreatableUserKeys = {
+    'displayName',
+    'birthDate',
+    'gender',
+    'bio',
+    'photoUrls',
+    'createdAt',
+    'updatedAt',
+    'height',
+    'religion',
+    'smoking',
+    'drinking',
+    'jobCategory',
+    'jobTitle',
+    'education',
+    'mbti',
+    'interests',
+    'personalityTags',
+    'idealTags',
+    'relationshipGoal',
+    'location',
+    'verifications',
+    'discoveryFilter',
+  };
+
   /// users 컬렉션 참조. withConverter로 모델 ↔ Map 변환을 자동화한다.
   ///
   /// withConverter를 쓰면 get()/snapshots() 결과가 곧바로 UserProfile로 나와서
@@ -101,6 +130,35 @@ class FirestoreService {
     };
   }
 
+  static Map<String, dynamic> buildClientCreatableUserFields(
+    UserProfile profile,
+  ) {
+    return {
+      'displayName': profile.displayName,
+      'birthDate': Timestamp.fromDate(profile.birthDate),
+      'gender': profile.gender,
+      'bio': profile.bio,
+      'photoUrls': profile.photoUrls,
+      'createdAt': Timestamp.fromDate(profile.createdAt),
+      'updatedAt': Timestamp.fromDate(profile.updatedAt),
+      'height': profile.height,
+      'religion': profile.religion,
+      'smoking': profile.smoking,
+      'drinking': profile.drinking,
+      'jobCategory': profile.jobCategory,
+      'jobTitle': profile.jobTitle,
+      'education': profile.education,
+      'mbti': profile.mbti,
+      'interests': profile.interests,
+      'personalityTags': profile.personalityTags,
+      'idealTags': profile.idealTags,
+      'relationshipGoal': profile.relationshipGoal,
+      if (profile.location != null) 'location': profile.location!.toFirestore(),
+      'verifications': const VerificationStatus().toFirestore(),
+      'discoveryFilter': profile.discoveryFilter.toFirestore(),
+    };
+  }
+
   /// 클라이언트가 `publicProfiles/{uid}`에 쓸 수 있는 owner-editable payload.
   ///
   /// server-managed 필드([toServerManagedFirestore]/[toBackfillFirestore])는
@@ -116,8 +174,11 @@ class FirestoreService {
   Future<void> createUserProfile(UserProfile profile) async {
     final batch = _db.batch();
 
-    // users/{uid}: 비공개 원장 전체 신규 생성(기존 앱·Functions 호환 유지).
-    batch.set(_users.doc(profile.uid), profile);
+    // users/{uid}: 클라이언트 생성 허용 필드만 저장한다.
+    batch.set(
+      _db.collection(AppConstants.usersCollection).doc(profile.uid),
+      buildClientCreatableUserFields(profile),
+    );
 
     // publicProfiles/{uid}: owner-editable 필드만. server-managed 필드 미포함.
     batch.set(
@@ -221,6 +282,7 @@ class FirestoreService {
     String uid,
     VerificationStatus verifications,
   ) async {
+    if (verifications.hasAny) return;
     await updateUserProfile(uid, {
       'verifications': verifications.toFirestore(),
     });

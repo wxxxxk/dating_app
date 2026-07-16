@@ -86,6 +86,60 @@ UserProfile buildUserProfile({
 }
 
 void main() {
+  group('신규 생성 payload (users/{uid})', () {
+    test('key 집합이 clientCreatableUserKeys와 정확히 같다', () {
+      final payload = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(
+          location: UserLocation(
+            lat: 37.56647,
+            lng: 126.97796,
+            updatedAt: DateTime(2026, 6, 1),
+            label: '서울',
+          ),
+        ),
+      );
+      expect(payload.keys.toSet(), FirestoreService.clientCreatableUserKeys);
+    });
+
+    test('재화·토큰·AI 캐시·권한성 필드가 없다', () {
+      final payload = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(boostUntil: DateTime(2030, 1, 1)),
+      );
+      for (final forbidden in const {
+        'jelly',
+        'boostUntil',
+        'likesUnlocked',
+        'fcmTokens',
+        'fcmTokenUpdatedAt',
+        'fortuneNarrative',
+        'charmReport',
+        'profileInsight',
+        'idealTypeImage',
+        'idealTypeImageProviderPreview',
+        'admin',
+        'role',
+        'moderationStatus',
+      }) {
+        expect(
+          payload.containsKey(forbidden),
+          isFalse,
+          reason: '$forbidden 이(가) 신규 생성 payload에 포함됨',
+        );
+      }
+    });
+
+    test('인증 완료 true를 신규 생성 payload에 싣지 않는다', () {
+      final payload = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(),
+      );
+      expect(payload['verifications'], {
+        'email': false,
+        'phone': false,
+        'photo': false,
+      });
+    });
+  });
+
   group('레거시 편집 payload (users/{uid} 부분 갱신)', () {
     test('key 집합이 legacyEditableUserKeys와 정확히 같다', () {
       final payload = FirestoreService.buildLegacyEditableUserFields(
