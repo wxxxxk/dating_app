@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../dev/dummy_data_service.dart'; // 개발용 — 출시 전 제거
 import '../../models/match_model.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
@@ -480,22 +479,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     return location != null;
   }
 
-  // ── 더미 유저 생성 (개발용 — 출시 전 제거) ────────────────────────────────
-
-  Future<void> _generateDummies() async {
-    final uid = widget.authService.currentUser?.uid;
-    if (uid == null) return;
-    final service = DummyDataService(firestoreService: widget.firestoreService);
-    final count = await service.generateDummies(currentUid: uid);
-    if (!mounted) return;
-    if (count == 0) {
-      _showSnack('더미 유저가 이미 존재해요.');
-    } else {
-      _showSnack('$count명 생성 완료. dummy_001·003·006에게 like하면 즉시 매칭!');
-    }
-    await _loadDiscovery();
-  }
-
   void _showSnack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -577,9 +560,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       case 'refresh':
         if (!_loading) _loadDiscovery();
         return;
-      case 'dummies':
-        _generateDummies();
-        return;
     }
   }
 
@@ -639,18 +619,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                   ],
                 ),
               ),
-              // 개발용 — 출시 전 제거
-              if (kDebugMode)
-                const PopupMenuItem(
-                  value: 'dummies',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_add_rounded, size: 20),
-                      SizedBox(width: 10),
-                      Text('더미 유저 생성'),
-                    ],
-                  ),
-                ),
             ],
           ),
         ],
@@ -845,7 +813,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
               Text(
                 _filter.hasActiveFilters
                     ? '나이·거리·성별 조건을 조금 완화해보세요.'
-                    : '나중에 다시 확인하거나\n더미 유저를 생성해보세요.',
+                    : '잠시 후 다시 확인하면\n새로운 인연이 나타날 수 있어요.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,

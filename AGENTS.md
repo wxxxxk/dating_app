@@ -369,12 +369,12 @@ test/
 
 `rg "RELEASE-BLOCKER|verifyWith|dummy_|firebase-admin|firebase-functions" firestore.rules functions/index.js functions/package.json` 기준 실제 확인 사항이다.
 
-1. **dummy rule 제거**
-   - `firestore.rules`에 `uid.matches('dummy_.*')` write 예외 2곳:
-     - `users/{uid}` 문서 write
-     - `users/{uid}/swipes/{targetUid}` write
-   - 출시 전 반드시 제거하고 `firebase deploy --only firestore:rules`.
-   - 제거하면 더미 생성/역방향 스와이프 데모는 실패하거나 즉시 매칭 데모 효과가 사라질 수 있음.
+1. **dummy rule 제거** — ✅ 해결됨 (Phase 0-A, 2026-07-16).
+   - `firestore.rules`의 `uid.matches('dummy_.*')` write 예외 2곳(`users/{uid}` 문서 write, `users/{uid}/swipes/{targetUid}` write)을 모두 제거했다.
+   - 이제 일반 인증 클라이언트는 타인 또는 `dummy_*` 사용자 명의로 사용자 문서·스와이프를 생성/수정할 수 없다. 본인(`request.auth.uid == uid`) 문서·스와이프 쓰기만 허용된다.
+   - 신규 더미 생성 기능(`DummyDataService`, Discovery 더미 생성 메뉴)은 제거했다. 별도 seed 인프라(Emulator/Admin SDK)를 새로 만들 계획은 현재 없다.
+   - 기존에 생성돼 있는 `dummy_*` 문서는 당분간 삭제하지 않으며, 일반 읽기/표시 경로로는 계속 노출될 수 있다.
+   - **배포 필요**: 이 규칙 변경은 커밋 후 `firebase deploy --only firestore:rules` 로 반영해야 실제 적용된다.
 
 2. **users/{uid} 전체 write 허용**
    - 현재 `allow write: if request.auth != null && request.auth.uid == uid;`가 `users/{uid}` 전체 필드를 열어둔다.
@@ -407,8 +407,7 @@ test/
    - `functions/index.js`(fal.ai provider, fortune sanitize), `firestore.rules`(unmatch/celebration 규칙) 모두 커밋 후 각각 `firebase deploy --only functions` / `firebase deploy --only firestore:rules` 별도 배포가 필요하다.
 
 8. **개발용 코드**
-   - `lib/dev/dummy_data_service.dart`
-   - Discovery의 더미 생성 버튼
+   - ~~`lib/dev/dummy_data_service.dart`~~ / ~~Discovery의 더미 생성 버튼~~ — Phase 0-A(2026-07-16)에서 제거 완료.
    - Fortune History의 `kDebugMode` 최근 7일 채우기
    - 출시 전 노출 여부 점검 필요
 
