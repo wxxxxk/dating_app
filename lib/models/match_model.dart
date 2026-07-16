@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'user_profile.dart';
+import 'public_profile.dart';
 
 /// matches/{matchId}.lastMessage 필드 (채팅 미리보기용).
 ///
@@ -128,12 +128,12 @@ class MatchModel {
   }
 }
 
-/// MatchModel + 상대방 UserProfile을 묶은 뷰 모델.
+/// MatchModel + 상대방 PublicProfile을 묶은 뷰 모델.
 ///
 /// MatchesScreen 리스트 렌더링과 축하 오버레이에서 모두 사용한다.
 class MatchWithProfile {
   final MatchModel match;
-  final UserProfile otherProfile;
+  final PublicProfile otherProfile;
 
   const MatchWithProfile({required this.match, required this.otherProfile});
 }

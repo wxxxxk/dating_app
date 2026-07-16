@@ -2,14 +2,14 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../models/user_profile.dart';
+import '../../models/public_profile.dart';
 import '../database/firestore_service.dart';
 import '../safety/safety_service.dart';
 
 /// 나를 좋아요한 사람 목록용 뷰 모델.
 class ReceivedLike {
   final String uid;
-  final UserProfile profile;
+  final PublicProfile profile;
   final DateTime? likedAt;
   final String action;
 
@@ -69,7 +69,7 @@ class LikesService {
               return null;
             }
 
-            final profile = await _firestoreService.getUserProfile(actorUid);
+            final profile = await _firestoreService.getPublicProfile(actorUid);
             if (profile == null) return null;
             final ts = data['timestamp'] as Timestamp?;
             final action = data['action'] as String? ?? 'like';

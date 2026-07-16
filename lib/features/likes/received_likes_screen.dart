@@ -7,6 +7,7 @@ import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
@@ -17,7 +18,6 @@ import '../../services/jelly/jelly_service.dart';
 import '../../services/likes/likes_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
-import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
@@ -41,7 +41,6 @@ class ReceivedLikesScreen extends StatefulWidget {
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
-  final ProfileInsightService profileInsightService;
 
   const ReceivedLikesScreen({
     super.key,
@@ -56,7 +55,6 @@ class ReceivedLikesScreen extends StatefulWidget {
     required this.jellyService,
     required this.jellyPurchaseService,
     required this.safetyService,
-    required this.profileInsightService,
   });
 
   @override
@@ -154,7 +152,7 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
     );
   }
 
-  void _openProfile(UserProfile profile) {
+  void _openProfile(PublicProfile profile) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => UserProfileScreen(
@@ -163,7 +161,6 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
           currentLocation: widget.currentProfile?.location,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
-          profileInsightService: widget.profileInsightService,
         ),
       ),
     );
@@ -329,9 +326,9 @@ class _ReceivedLikeTile extends StatelessWidget {
     final photoUrl = profile.photoUrls.isNotEmpty
         ? profile.photoUrls.first
         : null;
-    final distanceKm = LocationService.distanceBetween(
+    final distanceKm = LocationService.distanceToCoarse(
       currentLocation,
-      profile.location,
+      profile.coarseLocation,
     );
     final distanceLabel = distanceKm == null
         ? null
@@ -401,9 +398,7 @@ class _ReceivedLikeTile extends StatelessWidget {
                   ],
                   if (profile.verifications.hasAny) ...[
                     const SizedBox(height: 6),
-                    VerificationBadges(
-                      verifications: profile.verifications,
-                    ),
+                    VerificationBadges(verifications: profile.verifications),
                   ],
                   const SizedBox(height: 4),
                   Text(
@@ -455,9 +450,7 @@ class _ReceivedLikeTile extends StatelessWidget {
                           label: const Text('패스'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppColors.textSecondary,
-                            side: const BorderSide(
-                              color: AppColors.border,
-                            ),
+                            side: const BorderSide(color: AppColors.border),
                             visualDensity: VisualDensity.compact,
                           ),
                         ),

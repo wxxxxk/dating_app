@@ -475,21 +475,24 @@ test('42. coarseLocation: null 허용', async () => {
   );
 });
 
-// ── 기존 users/{uid} 전환 규칙 회귀 ──────────────────────────────────────────
-// TRANSITIONAL: Phase 0-B read 전환 및 backfill 완료 전까지만 유지.
-// 구버전 앱 호환을 위해 users/{uid} 타인 read를 아직 닫지 않는다.
+// ── users/{uid} private read 규칙 회귀 ───────────────────────────────────────
 
-test('TRANSITIONAL: 인증된 다른 사용자의 users read 허용', async () => {
+test('43. 인증된 다른 사용자의 users read 거부', async () => {
   await seedUser(OWNER, { displayName: '지민', bio: 'hi' });
-  await assertSucceeds(getDoc(doc(otherDb(), 'users', OWNER)));
+  await assertFails(getDoc(doc(otherDb(), 'users', OWNER)));
 });
 
-test('TRANSITIONAL: 비로그인 users read 거부', async () => {
+test('44. 비로그인 users read 거부', async () => {
   await seedUser(OWNER, { displayName: '지민', bio: 'hi' });
   await assertFails(getDoc(doc(anonDb(), 'users', OWNER)));
 });
 
-test('TRANSITIONAL: 본인 users write 허용', async () => {
+test('45. 본인 users read 허용', async () => {
+  await seedUser(OWNER, { displayName: '지민', bio: 'hi' });
+  await assertSucceeds(getDoc(doc(ownerDb(), 'users', OWNER)));
+});
+
+test('46. 본인 users write 허용', async () => {
   await seedUser(OWNER, { displayName: '지민', bio: 'hi' });
   await assertSucceeds(
     updateDoc(doc(ownerDb(), 'users', OWNER), { bio: '새 소개' }),

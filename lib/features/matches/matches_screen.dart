@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/match_model.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/chat/chat_service.dart';
@@ -13,12 +14,9 @@ import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/likes/likes_service.dart';
 import '../../services/matches/matches_service.dart';
-import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
-import '../fortune/fortune_route_names.dart';
-import '../fortune/match_fortune_screen.dart';
 import '../likes/received_likes_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
@@ -27,7 +25,7 @@ import 'widgets/match_celebration_overlay.dart';
 /// 매칭 목록 화면 (하단 탭 1번).
 ///
 /// matches 컬렉션을 실시간 구독하고 각 매치 상대방의 프로필과 함께 표시한다.
-/// 궁합/채팅 버튼을 분리해 의도한 화면만 네비게이션 스택에 쌓이게 한다.
+/// 프로필 상세와 채팅 진입을 분리해 의도한 화면만 네비게이션 스택에 쌓이게 한다.
 ///
 /// StatefulWidget인 이유:
 ///   initState에서 _stream을 한 번만 생성해 재사용한다.
@@ -44,7 +42,6 @@ class MatchesScreen extends StatefulWidget {
   final DiscoveryService discoveryService;
   final LikesService likesService;
   final SafetyService safetyService;
-  final ProfileInsightService profileInsightService;
 
   const MatchesScreen({
     super.key,
@@ -58,7 +55,6 @@ class MatchesScreen extends StatefulWidget {
     required this.discoveryService,
     required this.likesService,
     required this.safetyService,
-    required this.profileInsightService,
   });
 
   @override
@@ -214,27 +210,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
     }
   }
 
-  void _openFortune(MatchWithProfile mwp) {
-    final uid = _currentUid;
-    if (uid == null) return;
-    // 루트 위에 남은 사주 상세 라우트를 정리한 뒤 궁합만 올린다.
-    // 뒤로가기 전환 중 내 사주 화면이 잠깐 보이는 스택을 방지한다.
-    Navigator.of(context).pushAndRemoveUntil<void>(
-      MaterialPageRoute<void>(
-        settings: const RouteSettings(name: FortuneRouteNames.match),
-        builder: (_) => MatchFortuneScreen(
-          matchId: mwp.match.matchId,
-          currentUid: uid,
-          otherProfile: mwp.otherProfile,
-          firestoreService: widget.firestoreService,
-          fortuneService: widget.fortuneService,
-        ),
-      ),
-      (route) => route.isFirst,
-    );
-  }
-
-  void _openProfile(UserProfile profile) {
+  void _openProfile(PublicProfile profile) {
     final uid = _currentUid;
     if (uid == null) return;
     Navigator.of(context).push(
@@ -245,7 +221,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
           currentLocation: _currentProfile?.location,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
-          profileInsightService: widget.profileInsightService,
         ),
       ),
     );
@@ -268,7 +243,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
           jellyService: widget.jellyService,
           jellyPurchaseService: widget.jellyPurchaseService,
           safetyService: widget.safetyService,
-          profileInsightService: widget.profileInsightService,
         ),
       ),
     );
@@ -330,7 +304,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
                       onProfileTap: () =>
                           _openProfile(entry.value.otherProfile),
                       onChatTap: () => _openChat(entry.value),
-                      onFortuneTap: () => _openFortune(entry.value),
                       onUnmatchRequested: () => _confirmUnmatch(entry.value),
                     ),
                   ),
@@ -520,14 +493,12 @@ class _MatchTile extends StatelessWidget {
   final String currentUid;
   final VoidCallback onProfileTap;
   final VoidCallback onChatTap;
-  final VoidCallback onFortuneTap;
   final VoidCallback onUnmatchRequested;
   const _MatchTile({
     required this.mwp,
     required this.currentUid,
     required this.onProfileTap,
     required this.onChatTap,
-    required this.onFortuneTap,
     required this.onUnmatchRequested,
   });
 
@@ -619,56 +590,22 @@ class _MatchTile extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: onFortuneTap,
-                              icon: const Icon(
-                                Icons.auto_awesome_rounded,
-                                size: 16,
-                              ),
-                              label: const Text(
-                                '궁합',
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.textPrimary,
-                                side: const BorderSide(
-                                  color: AppColors.border,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                              ),
-                            ),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: onChatTap,
+                          icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                          label: const Text(
+                            '대화',
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: onChatTap,
-                              icon: const Icon(
-                                Icons.chat_bubble_rounded,
-                                size: 16,
-                              ),
-                              label: const Text(
-                                '대화',
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                              ),
-                            ),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),

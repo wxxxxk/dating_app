@@ -59,8 +59,17 @@ class FirestoreService {
         toFirestore: (profile, _) => profile.toFirestore(),
       );
 
-  /// 공개 프로필 컬렉션 참조(원시 Map). owner-editable payload만 쓴다.
-  CollectionReference<Map<String, dynamic>> get _publicProfiles =>
+  /// 공개 프로필 컬렉션 참조(읽기용).
+  CollectionReference<PublicProfile> get _publicProfiles => _db
+      .collection(AppConstants.publicProfilesCollection)
+      .withConverter<PublicProfile>(
+        fromFirestore: (snap, _) =>
+            PublicProfile.fromMap(uid: snap.id, data: snap.data() ?? {}),
+        toFirestore: (profile, _) => profile.toOwnerEditableFirestore(),
+      );
+
+  /// 공개 프로필 컬렉션 원시 참조(쓰기용). owner-editable payload만 쓴다.
+  CollectionReference<Map<String, dynamic>> get _publicProfileMaps =>
       _db.collection(AppConstants.publicProfilesCollection);
 
   /// 프로필 편집으로 `users/{uid}`에 부분 갱신할 필드 Map을 만든다.
@@ -112,7 +121,7 @@ class FirestoreService {
 
     // publicProfiles/{uid}: owner-editable 필드만. server-managed 필드 미포함.
     batch.set(
-      _publicProfiles.doc(profile.uid),
+      _publicProfileMaps.doc(profile.uid),
       _publicOwnerPayload(profile),
       SetOptions(merge: true),
     );
@@ -124,6 +133,22 @@ class FirestoreService {
   Future<UserProfile?> getUserProfile(String uid) async {
     final snapshot = await _users.doc(uid).get();
     return snapshot.data();
+  }
+
+  /// uid로 공개 프로필 조회. 없으면 null.
+  ///
+  /// 다른 사용자 표시 정보는 이 경로만 사용한다. `publicProfiles`가 없을 때
+  /// `users`로 fallback하지 않는다.
+  Future<PublicProfile?> getPublicProfile(String uid) async {
+    final snapshot = await _publicProfiles.doc(uid).get();
+    return snapshot.data();
+  }
+
+  /// uid로 공개 프로필을 실시간 구독한다. 없으면 null.
+  Stream<PublicProfile?> watchPublicProfile(String uid) {
+    return _publicProfiles.doc(uid).snapshots().map((snapshot) {
+      return snapshot.data();
+    });
   }
 
   /// 프로필 편집 저장(부분 갱신).
@@ -143,7 +168,7 @@ class FirestoreService {
     );
 
     batch.set(
-      _publicProfiles.doc(profile.uid),
+      _publicProfileMaps.doc(profile.uid),
       _publicOwnerPayload(profile),
       SetOptions(merge: true),
     );
@@ -177,7 +202,7 @@ class FirestoreService {
       'location': location.toFirestore(),
     });
 
-    batch.set(_publicProfiles.doc(uid), {
+    batch.set(_publicProfileMaps.doc(uid), {
       'coarseLocation': CoarseLocation.fromUserLocation(location).toMap(),
     }, SetOptions(merge: true));
 

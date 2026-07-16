@@ -293,6 +293,25 @@ void main() {
       expect(public.profileUpdatedAt, DateTime(2026, 7, 1));
       expect(public.coarseLocation!.lat, 37.57);
     });
+
+    test('잘못된 optional/server-managed 타입도 예외 없이 기본값으로 처리한다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: const {
+          'displayName': 123,
+          'height': '170',
+          'rankingBoostUntil': '2030-01-01',
+          'profileUpdatedAt': 123,
+          'schemaVersion': '1',
+        },
+      );
+
+      expect(public.displayName, '');
+      expect(public.height, isNull);
+      expect(public.rankingBoostUntil, isNull);
+      expect(public.profileUpdatedAt, isNull);
+      expect(public.schemaVersion, PublicProfile.currentSchemaVersion);
+    });
   });
 
   group('불변성 방어', () {

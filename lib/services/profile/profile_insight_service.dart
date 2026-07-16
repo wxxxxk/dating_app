@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:crypto/crypto.dart';
 
@@ -9,33 +8,18 @@ import '../../models/profile_insight_model.dart';
 import '../../models/user_profile.dart';
 
 class ProfileInsightService {
-  ProfileInsightService({
-    FirebaseFirestore? firestore,
-    FirebaseFunctions? functions,
-  }) : _db = firestore ?? FirebaseFirestore.instance,
-       _functions =
-           functions ??
-           FirebaseFunctions.instanceFor(region: AppConstants.functionsRegion);
+  // TODO(Phase 0-B follow-up): move profile insight cache/read behavior behind an authenticated server API that accepts targetUid without exposing target users/{uid} reads to clients.
+  ProfileInsightService({FirebaseFunctions? functions})
+    : _functions =
+          functions ??
+          FirebaseFunctions.instanceFor(region: AppConstants.functionsRegion);
 
-  final FirebaseFirestore _db;
   final FirebaseFunctions _functions;
 
   Future<ProfileInsight> getProfileInsight({
     required UserProfile profile,
     bool refresh = false,
   }) async {
-    final inputHash = inputHashForProfile(profile);
-    if (!refresh) {
-      final snap = await _db.collection('users').doc(profile.uid).get();
-      final cached = snap.data()?['profileInsight'] as Map<String, dynamic>?;
-      if (cached != null) {
-        final insight = ProfileInsight.fromMap(cached);
-        if (insight.inputHash == inputHash && insight.isComplete) {
-          return insight;
-        }
-      }
-    }
-
     final callable = _functions.httpsCallable('generateProfileInsight');
     final result = await callable.call({
       'targetUid': profile.uid,

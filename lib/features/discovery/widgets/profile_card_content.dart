@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/profile_options.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/text_sanitizer.dart';
+import '../../../models/public_profile.dart';
 import '../../../models/user_profile.dart';
-import '../../../services/fortune/fortune_calculator.dart';
 import '../../../services/location/location_service.dart';
 import '../../profile/widgets/verification_badge.dart';
 
@@ -13,15 +13,13 @@ import '../../profile/widgets/verification_badge.dart';
 /// 사진, 이름/나이/MBTI, 소개글, 관심사 칩을 렌더링한다.
 /// [SwipeCard]의 child로 사용된다.
 class ProfileCardContent extends StatefulWidget {
-  final UserProfile profile;
-  final DateTime? currentUserBirthDate;
+  final PublicProfile profile;
   final UserLocation? currentUserLocation;
   final VoidCallback? onProfileTap;
 
   const ProfileCardContent({
     super.key,
     required this.profile,
-    this.currentUserBirthDate,
     this.currentUserLocation,
     this.onProfileTap,
   });
@@ -35,8 +33,7 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
   final PageController _pageController = PageController();
   bool _precached = false;
 
-  UserProfile get profile => widget.profile;
-  DateTime? get currentUserBirthDate => widget.currentUserBirthDate;
+  PublicProfile get profile => widget.profile;
   UserLocation? get currentUserLocation => widget.currentUserLocation;
 
   @override
@@ -185,15 +182,9 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
       ProfileOptions.interests,
       profile.interests,
     ).take(4).toList();
-    final compatibilityHint = currentUserBirthDate == null
-        ? null
-        : FortuneCalculator.getCompatibilityHint(
-            currentUserBirthDate!,
-            profile.birthDate,
-          );
-    final distanceKm = LocationService.distanceBetween(
+    final distanceKm = LocationService.distanceToCoarse(
       currentUserLocation,
-      profile.location,
+      profile.coarseLocation,
     );
     final distanceLabel = distanceKm == null
         ? null
@@ -239,15 +230,12 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
                 ],
               ),
 
-              if (compatibilityHint != null ||
-                  profile.relationshipGoal != null) ...[
+              if (profile.relationshipGoal != null) ...[
                 const SizedBox(height: 7),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    if (compatibilityHint != null)
-                      _CompatibilityChip(hint: compatibilityHint),
                     if (profile.relationshipGoal != null)
                       _RelationshipGoalChip(goalKey: profile.relationshipGoal!),
                   ],
@@ -538,35 +526,6 @@ class _DistanceChip extends StatelessWidget {
         label,
         style: const TextStyle(
           color: AppColors.textOnDark,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          height: 1,
-        ),
-      ),
-    );
-  }
-}
-
-class _CompatibilityChip extends StatelessWidget {
-  final CompatibilityHint hint;
-  const _CompatibilityChip({required this.hint});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.mint.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(
-          color: AppColors.mint.withValues(alpha: 0.42),
-          width: 0.6,
-        ),
-      ),
-      child: Text(
-        hint.shortLabel,
-        style: const TextStyle(
-          color: AppColors.mint,
           fontSize: 12,
           fontWeight: FontWeight.w700,
           height: 1,

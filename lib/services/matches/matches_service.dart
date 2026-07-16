@@ -54,7 +54,7 @@ class MatchesService {
             if (match.isUnmatched) return null;
             final otherUid = match.otherUid(currentUid);
             if (blockedUids.contains(otherUid)) return null;
-            final profile = await _firestoreService.getUserProfile(otherUid);
+            final profile = await _firestoreService.getPublicProfile(otherUid);
             if (profile == null) return null;
             return MatchWithProfile(match: match, otherProfile: profile);
           });
@@ -75,7 +75,7 @@ class MatchesService {
     final doc = await _db.collection('matches').doc(matchId).get();
     if (!doc.exists) return null;
     final match = MatchModel.fromFirestore(doc);
-    final profile = await _firestoreService.getUserProfile(targetUid);
+    final profile = await _firestoreService.getPublicProfile(targetUid);
     if (profile == null) return null;
     final isBlocked = await _safetyService.isBlockedBetween(
       currentUid: currentUid,

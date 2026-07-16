@@ -22,6 +22,19 @@ List<String> _stringList(dynamic value) {
   return const <String>[];
 }
 
+DateTime? _timestampDate(dynamic value) {
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  return null;
+}
+
+int? _intOrNull(dynamic value) {
+  if (value is num) return value.toInt();
+  return null;
+}
+
+String? _stringOrNull(dynamic value) => value is String ? value : null;
+
 /// 공개 프로필의 근사 위치.
 ///
 /// 정확한 [UserLocation]의 위도·경도를 소수점 둘째 자리로 양자화해 저장한다.
@@ -266,23 +279,23 @@ class PublicProfile {
   }) {
     return PublicProfile(
       uid: uid,
-      displayName: data['displayName'] as String? ?? '',
+      displayName: _stringOrNull(data['displayName']) ?? '',
       age: _parseAge(data['age']),
-      gender: data['gender'] as String? ?? 'other',
-      bio: data['bio'] as String? ?? '',
+      gender: _stringOrNull(data['gender']) ?? 'other',
+      bio: _stringOrNull(data['bio']) ?? '',
       photoUrls: _stringList(data['photoUrls']),
-      height: (data['height'] as num?)?.toInt(),
-      religion: data['religion'] as String?,
-      smoking: data['smoking'] as String?,
-      drinking: data['drinking'] as String?,
-      jobCategory: data['jobCategory'] as String?,
-      jobTitle: data['jobTitle'] as String?,
-      education: data['education'] as String?,
-      mbti: data['mbti'] as String?,
+      height: _intOrNull(data['height']),
+      religion: _stringOrNull(data['religion']),
+      smoking: _stringOrNull(data['smoking']),
+      drinking: _stringOrNull(data['drinking']),
+      jobCategory: _stringOrNull(data['jobCategory']),
+      jobTitle: _stringOrNull(data['jobTitle']),
+      education: _stringOrNull(data['education']),
+      mbti: _stringOrNull(data['mbti']),
       interests: _stringList(data['interests']),
       personalityTags: _stringList(data['personalityTags']),
       idealTags: _stringList(data['idealTags']),
-      relationshipGoal: data['relationshipGoal'] as String?,
+      relationshipGoal: _stringOrNull(data['relationshipGoal']),
       coarseLocation: CoarseLocation.fromMap(
         data['coarseLocation'] is Map
             ? Map<String, dynamic>.from(data['coarseLocation'] as Map)
@@ -293,10 +306,9 @@ class PublicProfile {
             ? Map<String, dynamic>.from(data['verifications'] as Map)
             : null,
       ),
-      rankingBoostUntil: (data['rankingBoostUntil'] as Timestamp?)?.toDate(),
-      profileUpdatedAt: (data['profileUpdatedAt'] as Timestamp?)?.toDate(),
-      schemaVersion:
-          (data['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      rankingBoostUntil: _timestampDate(data['rankingBoostUntil']),
+      profileUpdatedAt: _timestampDate(data['profileUpdatedAt']),
+      schemaVersion: _intOrNull(data['schemaVersion']) ?? currentSchemaVersion,
     );
   }
 

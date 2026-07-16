@@ -2,7 +2,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../models/user_profile.dart';
+import '../../models/public_profile.dart';
 import '../database/firestore_service.dart';
 
 /// 신고 사유 key와 사용자 표시 라벨.
@@ -17,7 +17,7 @@ const reportReasonLabels = {
 /// 차단 목록 화면에서 쓸 차단 사용자 뷰 모델.
 class BlockedUser {
   final String uid;
-  final UserProfile? profile;
+  final PublicProfile? profile;
   final DateTime? createdAt;
 
   const BlockedUser({
@@ -143,7 +143,7 @@ class SafetyService {
         .asyncMap((snap) async {
           final futures = snap.docs.map((doc) async {
             final data = doc.data();
-            final profile = await _firestoreService.getUserProfile(doc.id);
+            final profile = await _firestoreService.getPublicProfile(doc.id);
             final ts = data['createdAt'] as Timestamp?;
             return BlockedUser(
               uid: doc.id,

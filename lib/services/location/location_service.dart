@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../database/firestore_service.dart';
 
@@ -35,6 +36,16 @@ class LocationService {
   }
 
   static double? distanceBetween(UserLocation? from, UserLocation? to) {
+    if (from == null || to == null) return null;
+    return distanceKm(
+      fromLat: from.lat,
+      fromLng: from.lng,
+      toLat: to.lat,
+      toLng: to.lng,
+    );
+  }
+
+  static double? distanceToCoarse(UserLocation? from, CoarseLocation? to) {
     if (from == null || to == null) return null;
     return distanceKm(
       fromLat: from.lat,

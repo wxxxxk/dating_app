@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
 import '../../models/message_model.dart';
-import '../../models/user_profile.dart';
+import '../../models/public_profile.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/fortune/fortune_service.dart';
 import '../../services/matches/matches_service.dart';
@@ -19,7 +19,7 @@ import '../safety/report_sheet.dart';
 /// 새 메시지가 도착하면 즉시 리스트에 반영하고 하단으로 자동 스크롤한다.
 class ChatScreen extends StatefulWidget {
   final String matchId;
-  final UserProfile otherProfile;
+  final PublicProfile otherProfile;
   final String currentUid;
   final ChatService chatService;
   final FortuneService fortuneService;

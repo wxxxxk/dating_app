@@ -20,7 +20,6 @@ import 'services/jelly/jelly_service.dart';
 import 'services/likes/likes_service.dart';
 import 'services/matches/matches_service.dart';
 import 'services/notifications/notification_service.dart';
-import 'services/profile/profile_insight_service.dart';
 import 'services/safety/safety_service.dart';
 import 'services/storage/storage_service.dart';
 import 'shared/state/auth_state.dart';
@@ -51,7 +50,6 @@ class _MyAppState extends State<MyApp> {
   late final JellyPurchaseService _jellyPurchaseService;
   late final LikesService _likesService;
   late final SafetyService _safetyService;
-  late final ProfileInsightService _profileInsightService;
   late final NotificationService _notificationService;
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _mainTabRequest = ValueNotifier<int?>(null);
@@ -70,7 +68,6 @@ class _MyAppState extends State<MyApp> {
     _jellyService = JellyService();
     _jellyPurchaseService = JellyPurchaseService();
     _safetyService = SafetyService(firestoreService: _firestoreService);
-    _profileInsightService = ProfileInsightService();
     // NotificationService보다 먼저 만들어야 한다 — 알림 탭으로 채팅방을 열 때
     // ChatScreen에 matchesService(매칭 해제용)를 넘겨줘야 하기 때문이다.
     _matchesService = MatchesService(
@@ -123,7 +120,6 @@ class _MyAppState extends State<MyApp> {
         jellyPurchaseService: _jellyPurchaseService,
         likesService: _likesService,
         safetyService: _safetyService,
-        profileInsightService: _profileInsightService,
         notificationService: _notificationService,
         mainTabRequest: _mainTabRequest,
       ),
@@ -151,7 +147,6 @@ class _MyAppState extends State<MyApp> {
                 jellyPurchaseService: _jellyPurchaseService,
                 likesService: _likesService,
                 safetyService: _safetyService,
-                profileInsightService: _profileInsightService,
                 mainTabRequest: _mainTabRequest,
               ),
               settings: settings,
@@ -193,7 +188,6 @@ class _AuthGate extends StatefulWidget {
   final JellyPurchaseService jellyPurchaseService;
   final LikesService likesService;
   final SafetyService safetyService;
-  final ProfileInsightService profileInsightService;
   final NotificationService notificationService;
   final ValueNotifier<int?> mainTabRequest;
 
@@ -211,7 +205,6 @@ class _AuthGate extends StatefulWidget {
     required this.jellyPurchaseService,
     required this.likesService,
     required this.safetyService,
-    required this.profileInsightService,
     required this.notificationService,
     required this.mainTabRequest,
   });
@@ -336,7 +329,6 @@ class _AuthGateState extends State<_AuthGate> {
       jellyPurchaseService: widget.jellyPurchaseService,
       likesService: widget.likesService,
       safetyService: widget.safetyService,
-      profileInsightService: widget.profileInsightService,
       mainTabRequest: widget.mainTabRequest,
     );
   }

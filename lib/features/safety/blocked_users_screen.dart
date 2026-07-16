@@ -82,7 +82,7 @@ class BlockedUsersScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            profile?.displayName ?? blocked.uid,
+                            profile?.displayName ?? '프로필을 불러올 수 없음',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

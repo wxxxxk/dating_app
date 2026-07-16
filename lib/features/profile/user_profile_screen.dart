@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
-import '../../models/profile_insight_model.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/location/location_service.dart';
-import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../safety/report_sheet.dart';
@@ -19,11 +18,10 @@ import 'widgets/verification_badge.dart';
 /// 정확한 위치 좌표는 노출하지 않고 거리/프로필 정보만 보여준다.
 class UserProfileScreen extends StatefulWidget {
   final String currentUid;
-  final UserProfile initialProfile;
+  final PublicProfile initialProfile;
   final UserLocation? currentLocation;
   final FirestoreService firestoreService;
   final SafetyService safetyService;
-  final ProfileInsightService profileInsightService;
 
   const UserProfileScreen({
     super.key,
@@ -32,7 +30,6 @@ class UserProfileScreen extends StatefulWidget {
     required this.currentLocation,
     required this.firestoreService,
     required this.safetyService,
-    required this.profileInsightService,
   });
 
   @override
@@ -40,47 +37,33 @@ class UserProfileScreen extends StatefulWidget {
 }
 
 class _UserProfileScreenState extends State<UserProfileScreen> {
-  late UserProfile _profile = widget.initialProfile;
+  late PublicProfile _profile = widget.initialProfile;
   bool _loading = false;
   bool _blocked = false;
-  Future<ProfileInsight>? _profileInsightFuture;
-  String? _profileInsightKey;
 
   @override
   void initState() {
     super.initState();
-    _loadProfileInsight(_profile);
     _refreshProfile();
   }
 
   Future<void> _refreshProfile() async {
     setState(() => _loading = true);
     try {
-      final latest = await widget.firestoreService.getUserProfile(
+      final latest = await widget.firestoreService.getPublicProfile(
         widget.initialProfile.uid,
       );
       if (latest != null && mounted) {
         setState(() => _profile = latest);
-        _loadProfileInsight(latest);
+      } else if (mounted) {
+        _showSnack('프로필을 불러올 수 없어요.');
       }
+    } catch (e) {
+      _debugLog('[Profile] 공개 프로필 새로고침 실패: $e');
+      if (mounted) _showSnack('프로필을 불러올 수 없어요.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _loadProfileInsight(UserProfile profile, {bool refresh = false}) {
-    final inputHash = widget.profileInsightService.inputHashForProfile(profile);
-    final key = refresh
-        ? '${profile.uid}:$inputHash:${DateTime.now().microsecondsSinceEpoch}'
-        : '${profile.uid}:$inputHash';
-    if (!refresh && _profileInsightKey == key) return;
-    setState(() {
-      _profileInsightKey = key;
-      _profileInsightFuture = widget.profileInsightService.getProfileInsight(
-        profile: profile,
-        refresh: refresh,
-      );
-    });
   }
 
   Future<void> _reportUser() async {
@@ -160,13 +143,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final distance = LocationService.distanceBetween(
+    final coarseDistance = LocationService.distanceToCoarse(
       widget.currentLocation,
-      _profile.location,
+      _profile.coarseLocation,
     );
-    final distanceLabel = distance == null
+    final distanceLabel = coarseDistance == null
         ? null
-        : LocationService.formatDistance(distance);
+        : LocationService.formatDistance(coarseDistance);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -267,10 +250,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         ],
                       ),
                     ),
-                  _ProfileInsightSection(
-                    future: _profileInsightFuture,
-                    onRetry: () => _loadProfileInsight(_profile, refresh: true),
-                  ),
                 ],
               ),
             ),
@@ -281,223 +260,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 }
 
-class _ProfileInsightSection extends StatelessWidget {
-  final Future<ProfileInsight>? future;
-  final VoidCallback onRetry;
-
-  const _ProfileInsightSection({required this.future, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final currentFuture = future;
-    if (currentFuture == null) return const SizedBox.shrink();
-
-    return FutureBuilder<ProfileInsight>(
-      future: currentFuture,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const _ProfileInsightShell(child: _ProfileInsightLoading());
-        }
-        final insight = snap.data;
-        if (snap.hasError || insight == null || !insight.isComplete) {
-          return _ProfileInsightShell(
-            child: _ProfileInsightError(onRetry: onRetry),
-          );
-        }
-        return _ProfileInsightShell(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _InsightItem(
-                icon: Icons.auto_awesome_rounded,
-                label: '첫인상',
-                text: insight.firstImpression,
-              ),
-              const SizedBox(height: 14),
-              _InsightItem(
-                icon: Icons.chat_bubble_rounded,
-                label: '대화 스타일',
-                text: insight.conversationStyle,
-              ),
-              const SizedBox(height: 14),
-              _InsightItem(
-                icon: Icons.spa_rounded,
-                label: '분위기',
-                text: insight.atmosphere,
-              ),
-              const SizedBox(height: 14),
-              _InsightItem(
-                icon: Icons.favorite_rounded,
-                label: '잘 맞는 사람',
-                text: insight.goodMatchType,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ProfileInsightShell extends StatelessWidget {
-  final Widget child;
-
-  const _ProfileInsightShell({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _ProfileInsightHeader(),
-            const SizedBox(height: 14),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileInsightHeader extends StatelessWidget {
-  const _ProfileInsightHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.premiumSoft,
-            borderRadius: BorderRadius.circular(AppRadius.chip),
-            border: Border.all(color: AppColors.premiumBorder),
-          ),
-          child: const Text(
-            'AI PROFILE INSIGHT',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-              color: AppColors.matchPrimary,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileInsightLoading extends StatelessWidget {
-  const _ProfileInsightLoading();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            '프로필 분위기를 분석하고 있어요',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileInsightError extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _ProfileInsightError({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '지금은 분석을 불러올 수 없어요',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
-      ],
-    );
-  }
-}
-
-class _InsightItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String text;
-
-  const _InsightItem({
-    required this.icon,
-    required this.label,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 24,
-          child: Icon(icon, size: 17, color: AppColors.matchPrimary),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.45,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _PhotoGallery extends StatefulWidget {
-  final UserProfile profile;
+  final PublicProfile profile;
   final String? distanceLabel;
   final bool blocked;
   final bool loading;
@@ -770,7 +534,7 @@ class _PhotoSegmentIndicator extends StatelessWidget {
 }
 
 class _DetailGrid extends StatelessWidget {
-  final UserProfile profile;
+  final PublicProfile profile;
 
   const _DetailGrid({required this.profile});
 
@@ -835,7 +599,7 @@ class _DetailGrid extends StatelessWidget {
     );
   }
 
-  static String _jobText(UserProfile profile) {
+  static String _jobText(PublicProfile profile) {
     final category = profile.jobCategory == null
         ? null
         : ProfileOptions.keyToLabel(

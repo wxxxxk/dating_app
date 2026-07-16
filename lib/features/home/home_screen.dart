@@ -5,18 +5,17 @@ import '../../core/constants/profile_options.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/charm/charm_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/discovery/discovery_service.dart';
-import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
 import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/likes/likes_service.dart';
 import '../../services/matches/matches_service.dart';
-import '../../services/profile/profile_insight_service.dart';
 import '../../services/ideal_type/ideal_type_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
@@ -53,7 +52,6 @@ class HomeScreen extends StatefulWidget {
   final JellyPurchaseService jellyPurchaseService;
   final LikesService likesService;
   final SafetyService safetyService;
-  final ProfileInsightService profileInsightService;
   final VoidCallback? onOpenDiscovery;
 
   const HomeScreen({
@@ -69,7 +67,6 @@ class HomeScreen extends StatefulWidget {
     required this.jellyPurchaseService,
     required this.likesService,
     required this.safetyService,
-    required this.profileInsightService,
     this.onOpenDiscovery,
   });
 
@@ -189,7 +186,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .timeout(const Duration(seconds: 5));
     if (discoveryProfiles.isEmpty) return null;
     return _buildDailyPick(
-      myProfile: myProfile,
       otherProfile: discoveryProfiles.first,
       source: _DailyPickSource.discovery,
     );
@@ -219,7 +215,6 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
         return _buildDailyPick(
-          myProfile: myProfile,
           otherProfile: match.otherProfile,
           source: _DailyPickSource.match,
           cachedReason: cachedReason,
@@ -231,56 +226,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   _DailyPick _buildDailyPick({
-    required UserProfile myProfile,
-    required UserProfile otherProfile,
+    required PublicProfile otherProfile,
     required _DailyPickSource source,
     String? cachedReason,
   }) {
-    final hint = FortuneCalculator.getCompatibilityHint(
-      myProfile.birthDate,
-      otherProfile.birthDate,
-    );
     final hasCachedReason = cachedReason != null && cachedReason.isNotEmpty;
-    final score = (_scoreForHint(hint) + (hasCachedReason ? 2 : 0)).clamp(
-      72,
-      96,
-    );
+    final score =
+        (source == _DailyPickSource.match ? 88 : 82) +
+        (hasCachedReason ? 4 : 0);
     return _DailyPick(
       profile: otherProfile,
       score: score,
-      reason: hasCachedReason ? cachedReason : _fallbackReason(hint, source),
+      reason: hasCachedReason
+          ? cachedReason
+          : _fallbackReason(otherProfile, source),
     );
   }
 
-  int _scoreForHint(CompatibilityHint hint) {
-    switch (hint.level) {
-      case '상생':
-        return 94;
-      case '조화':
-        return 89;
-      case '균형':
-        return 84;
-      case '보완':
-        return 80;
-      default:
-        return 78;
-    }
-  }
-
-  String _fallbackReason(CompatibilityHint hint, _DailyPickSource source) {
+  String _fallbackReason(PublicProfile profile, _DailyPickSource source) {
     final prefix = source == _DailyPickSource.match
         ? '이미 이어진 인연이라'
         : '오늘 먼저 대화해보기 좋은';
-    switch (hint.level) {
-      case '상생':
-        return '$prefix 상생 흐름이 강해 대화가 자연스럽게 이어질 가능성이 높아요.';
-      case '조화':
-        return '$prefix 편안한 조화가 보여 서로의 템포를 맞추기 좋아요.';
-      case '보완':
-        return '$prefix 서로 다른 매력이 부족한 부분을 채워줄 수 있어요.';
-      default:
-        return '$prefix 균형 있는 흐름이라 가볍게 말을 걸기 좋아요.';
-    }
+    final goal = profile.relationshipGoal == null
+        ? null
+        : ProfileOptions.keyToLabel(
+            ProfileOptions.relationshipGoals,
+            profile.relationshipGoal!,
+          );
+    if (goal != null) return '$prefix 관계 방향이 잘 드러나는 프로필이에요.';
+    if (profile.interests.isNotEmpty) return '$prefix 공통 대화 소재를 찾기 쉬운 프로필이에요.';
+    return '$prefix 프로필 분위기가 안정적으로 채워져 있어요.';
   }
 
   Future<UserProfile> _syncEmailVerification(UserProfile profile) async {
@@ -447,7 +422,6 @@ class _HomeScreenState extends State<HomeScreen> {
           currentLocation: current.location,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
-          profileInsightService: widget.profileInsightService,
         ),
       ),
     );
@@ -739,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
 enum _DailyPickSource { match, discovery }
 
 class _DailyPick {
-  final UserProfile profile;
+  final PublicProfile profile;
   final int score;
   final String reason;
 
@@ -902,7 +876,7 @@ class _ScorePill extends StatelessWidget {
         ),
       ),
       child: Text(
-        '궁합 $score%',
+        '추천 $score%',
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w800,
@@ -919,8 +893,12 @@ class _DailyPickLoadingBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Text(
-      '기존 궁합 캐시와 프로필 흐름을 바탕으로 오늘 먼저 보면 좋은 인연을 찾는 중이에요.',
-      style: TextStyle(fontSize: 15, height: 1.55, color: AppColors.textPrimary),
+      '기존 매칭 흐름과 공개 프로필을 바탕으로 오늘 먼저 보면 좋은 인연을 찾는 중이에요.',
+      style: TextStyle(
+        fontSize: 15,
+        height: 1.55,
+        color: AppColors.textPrimary,
+      ),
     );
   }
 }
@@ -990,7 +968,7 @@ class _DailyPickSuccessBody extends StatelessWidget {
 }
 
 class _DailyPickAvatar extends StatelessWidget {
-  final UserProfile profile;
+  final PublicProfile profile;
 
   const _DailyPickAvatar({required this.profile});
 

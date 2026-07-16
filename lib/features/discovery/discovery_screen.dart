@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/match_model.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/chat/chat_service.dart';
@@ -15,7 +16,6 @@ import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
-import '../../services/profile/profile_insight_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
@@ -47,7 +47,6 @@ class DiscoveryScreen extends StatefulWidget {
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
-  final ProfileInsightService profileInsightService;
 
   const DiscoveryScreen({
     super.key,
@@ -60,7 +59,6 @@ class DiscoveryScreen extends StatefulWidget {
     required this.jellyService,
     required this.jellyPurchaseService,
     required this.safetyService,
-    required this.profileInsightService,
   });
 
   @override
@@ -68,7 +66,7 @@ class DiscoveryScreen extends StatefulWidget {
 }
 
 class _DiscoveryScreenState extends State<DiscoveryScreen> {
-  List<UserProfile> _profiles = [];
+  List<PublicProfile> _profiles = [];
   int _currentIndex = 0;
   bool _loading = true;
   String? _error;
@@ -293,7 +291,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     );
   }
 
-  Future<void> _reportProfile(UserProfile profile) async {
+  Future<void> _reportProfile(PublicProfile profile) async {
     final uid = widget.authService.currentUser?.uid;
     if (uid == null) return;
     final submission = await showReportSheet(context);
@@ -321,7 +319,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     }
   }
 
-  Future<void> _blockProfile(UserProfile profile) async {
+  Future<void> _blockProfile(PublicProfile profile) async {
     final uid = widget.authService.currentUser?.uid;
     if (uid == null) return;
     final confirmed = await showDialog<bool>(
@@ -369,7 +367,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
     setState(() => _currentIndex++);
   }
 
-  void _openProfile(UserProfile profile) {
+  void _openProfile(PublicProfile profile) {
     final uid = widget.authService.currentUser?.uid;
     if (uid == null) return;
     Navigator.of(context).push(
@@ -380,7 +378,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           currentLocation: _currentUserLocation,
           firestoreService: widget.firestoreService,
           safetyService: widget.safetyService,
-          profileInsightService: widget.profileInsightService,
         ),
       ),
     );
@@ -668,7 +665,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                   child: PremiumProfileImageCard(
                     child: ProfileCardContent(
                       profile: _profiles[_currentIndex + 1],
-                      currentUserBirthDate: _currentUserProfile?.birthDate,
                       currentUserLocation: _currentUserLocation,
                     ),
                   ),
@@ -707,7 +703,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
                     children: [
                       ProfileCardContent(
                         profile: _profiles[_currentIndex],
-                        currentUserBirthDate: _currentUserProfile?.birthDate,
                         currentUserLocation: _currentUserLocation,
                         onProfileTap: () =>
                             _openProfile(_profiles[_currentIndex]),
@@ -918,7 +913,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
 }
 
 class _RewindCandidate {
-  final UserProfile profile;
+  final PublicProfile profile;
   final int previousIndex;
   final String action;
 

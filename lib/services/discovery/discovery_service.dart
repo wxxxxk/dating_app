@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/constants/app_constants.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../location/location_service.dart';
 
@@ -26,7 +28,7 @@ class DiscoveryService {
   ///
   /// 현재는 전체 유저를 클라이언트에서 필터링한다.
   /// 유저가 많아지면 서버사이드 페이지네이션 + cursor 방식으로 전환 필요.
-  Future<List<UserProfile>> getDiscoveryProfiles({
+  Future<List<PublicProfile>> getDiscoveryProfiles({
     required String currentUid,
     UserLocation? currentLocation,
     DiscoveryFilter filter = const DiscoveryFilter(),
@@ -51,16 +53,17 @@ class DiscoveryService {
       }
     }
 
-    // 전체 유저 조회
-    final usersSnap = await _db
-        .collection('users')
-        .withConverter<UserProfile>(
-          fromFirestore: (snap, _) => UserProfile.fromFirestore(snap),
-          toFirestore: (p, _) => p.toFirestore(),
+    // 공개 프로필 조회. 누락 시 users/{uid} fallback은 하지 않는다.
+    final publicSnap = await _db
+        .collection(AppConstants.publicProfilesCollection)
+        .withConverter<PublicProfile>(
+          fromFirestore: (snap, _) =>
+              PublicProfile.fromMap(uid: snap.id, data: snap.data() ?? {}),
+          toFirestore: (p, _) => p.toOwnerEditableFirestore(),
         )
         .get();
 
-    final candidates = usersSnap.docs
+    final candidates = publicSnap.docs
         .map((d) => d.data())
         .where(
           (p) =>
@@ -82,7 +85,7 @@ class DiscoveryService {
   }
 
   bool _matchesFilter(
-    UserProfile profile,
+    PublicProfile profile,
     DiscoveryFilter filter,
     UserLocation? currentLocation,
   ) {
@@ -100,9 +103,9 @@ class DiscoveryService {
 
     final maxDistance = filter.maxDistanceKm;
     if (maxDistance != null && currentLocation != null) {
-      final distance = LocationService.distanceBetween(
+      final distance = LocationService.distanceToCoarse(
         currentLocation,
-        profile.location,
+        profile.coarseLocation,
       );
       if (distance == null || distance > maxDistance) return false;
     }
@@ -139,11 +142,11 @@ class DiscoveryService {
   ///
   /// 부스트 활성 유저를 먼저 보여준 뒤, 내 위치가 있으면 가까운 순으로 보여준다.
   /// 위치 없는 유저는 뒤로 보내고, 내 위치가 없으면 부스트 그룹 안/밖에서 셔플한다.
-  List<UserProfile> _rankProfiles(
-    List<UserProfile> profiles, {
+  List<PublicProfile> _rankProfiles(
+    List<PublicProfile> profiles, {
     required UserLocation? currentLocation,
   }) {
-    final result = List<UserProfile>.from(profiles);
+    final result = List<PublicProfile>.from(profiles);
     if (currentLocation == null) {
       final boosted = result.where(_isBoostActive).toList()..shuffle();
       final normal = result.where((p) => !_isBoostActive(p)).toList()
@@ -156,13 +159,13 @@ class DiscoveryService {
       final bBoosted = _isBoostActive(b);
       if (aBoosted != bBoosted) return aBoosted ? -1 : 1;
 
-      final aDistance = LocationService.distanceBetween(
+      final aDistance = LocationService.distanceToCoarse(
         currentLocation,
-        a.location,
+        a.coarseLocation,
       );
-      final bDistance = LocationService.distanceBetween(
+      final bDistance = LocationService.distanceToCoarse(
         currentLocation,
-        b.location,
+        b.coarseLocation,
       );
       if (aDistance == null && bDistance == null) return 0;
       if (aDistance == null) return 1;
@@ -172,8 +175,8 @@ class DiscoveryService {
     return result;
   }
 
-  bool _isBoostActive(UserProfile profile) {
-    final boostUntil = profile.boostUntil;
+  bool _isBoostActive(PublicProfile profile) {
+    final boostUntil = profile.rankingBoostUntil;
     return boostUntil != null && boostUntil.isAfter(DateTime.now());
   }
 }

@@ -211,7 +211,7 @@ class NotificationService {
     }
 
     try {
-      final otherProfile = await _firestoreService.getUserProfile(senderUid);
+      final otherProfile = await _firestoreService.getPublicProfile(senderUid);
       final navigator = _navigatorKey.currentState;
       if (otherProfile == null || navigator == null) return false;
       navigator.push(
