@@ -3,7 +3,10 @@
   "description": "Cloud Functions for Firebase — cvr-dating-app",
   "scripts": {
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "backfill:public-profiles:dry-run": "node scripts/public_profile_backfill_dry_run.js",
+    "backfill:public-profiles:apply": "node scripts/public_profile_backfill_apply.js",
+    "test:public-profile-backfill": "node --test test/public_profile_backfill.test.js test/public_profile_backfill_apply.test.js"
   },
   "engines": {
     "node": "20"
