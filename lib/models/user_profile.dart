@@ -291,16 +291,24 @@ class UserProfile {
     return ((filled / total) * 100).round().clamp(0, 100);
   }
 
-  /// 생년월일로 현재 나이를 계산한다. 생일이 아직 안 지났으면 1을 뺀다.
-  int get age {
-    final today = DateTime.now();
-    int years = today.year - birthDate.year;
+  /// 기준일([referenceDate]) 시점의 만 나이를 계산한다.
+  ///
+  /// 생일이 아직 지나지 않았으면 1을 뺀다. 월/일 비교만 하므로 새 DateTime을
+  /// 만들지 않고, 2월 29일 생일도 예외 없이 처리된다(비윤년에는 3월 1일부터
+  /// 생일이 지난 것으로 본다). 테스트에서 기준일을 주입할 수 있도록
+  /// [age] getter와 분리했다.
+  int ageAt(DateTime referenceDate) {
+    int years = referenceDate.year - birthDate.year;
     final hadBirthday =
-        (today.month > birthDate.month) ||
-        (today.month == birthDate.month && today.day >= birthDate.day);
+        (referenceDate.month > birthDate.month) ||
+        (referenceDate.month == birthDate.month &&
+            referenceDate.day >= birthDate.day);
     if (!hadBirthday) years--;
     return years;
   }
+
+  /// 생년월일로 현재 나이를 계산한다. 생일이 아직 안 지났으면 1을 뺀다.
+  int get age => ageAt(DateTime.now());
 
   /// Firestore 문서 → UserProfile.
   ///
