@@ -48,6 +48,75 @@ const IDEAL_TYPE_IMAGE_USAGE_POLICY = Object.freeze({
   dayMs: 24 * 60 * 60 * 1000,
 });
 
+function createUsagePolicy({
+  functionName,
+  hourlyLimit,
+  dailyLimit,
+  cooldownMs,
+  leaseTtlMs,
+  refreshCooldownMs = 24 * 60 * 60 * 1000,
+}) {
+  return Object.freeze({
+    functionName,
+    hourlyLimit,
+    dailyLimit,
+    cooldownMs,
+    refreshCooldownMs,
+    leaseTtlMs,
+    hourMs: 60 * 60 * 1000,
+    dayMs: 24 * 60 * 60 * 1000,
+  });
+}
+
+const MATCH_TEXT_AI_USAGE_POLICIES = Object.freeze({
+  generateMatchNarrative: createUsagePolicy({
+    functionName: 'generateMatchNarrative',
+    hourlyLimit: 12,
+    dailyLimit: 40,
+    cooldownMs: 10 * 1000,
+    leaseTtlMs: 90 * 1000,
+  }),
+  generateIcebreakers: createUsagePolicy({
+    functionName: 'generateIcebreakers',
+    hourlyLimit: 12,
+    dailyLimit: 40,
+    cooldownMs: 10 * 1000,
+    leaseTtlMs: 90 * 1000,
+  }),
+  generateConversationTips: createUsagePolicy({
+    functionName: 'generateConversationTips',
+    hourlyLimit: 12,
+    dailyLimit: 40,
+    cooldownMs: 10 * 1000,
+    leaseTtlMs: 90 * 1000,
+  }),
+});
+
+const SELF_TEXT_AI_USAGE_POLICIES = Object.freeze({
+  generateFortuneNarrative: createUsagePolicy({
+    functionName: 'generateFortuneNarrative',
+    hourlyLimit: 10,
+    dailyLimit: 20,
+    cooldownMs: 10 * 1000,
+    leaseTtlMs: 90 * 1000,
+  }),
+  generateDailyFortune: createUsagePolicy({
+    functionName: 'generateDailyFortune',
+    hourlyLimit: 10,
+    dailyLimit: 20,
+    cooldownMs: 10 * 1000,
+    leaseTtlMs: 90 * 1000,
+  }),
+});
+
+const CHARM_REPORT_USAGE_POLICY = createUsagePolicy({
+  functionName: 'generateCharmReport',
+  hourlyLimit: 6,
+  dailyLimit: 15,
+  cooldownMs: 20 * 1000,
+  leaseTtlMs: 90 * 1000,
+});
+
 const SLOT_DECISION = Object.freeze({
   ALLOW: 'ALLOW', // 새 외부 AI 호출 허용 (quota 소비됨)
   RETURN_CACHE: 'RETURN_CACHE', // refresh cooldown 미충족 — 캐시로
@@ -337,6 +406,9 @@ function createAiUsageGuard({
 module.exports = {
   PROFILE_INSIGHT_USAGE_POLICY,
   IDEAL_TYPE_IMAGE_USAGE_POLICY,
+  MATCH_TEXT_AI_USAGE_POLICIES,
+  SELF_TEXT_AI_USAGE_POLICIES,
+  CHARM_REPORT_USAGE_POLICY,
   SLOT_DECISION,
   SLOT_OUTCOME,
   sanitizeCount,

@@ -21,6 +21,9 @@ const {
   createAiUsageGuard,
   PROFILE_INSIGHT_USAGE_POLICY,
   IDEAL_TYPE_IMAGE_USAGE_POLICY,
+  MATCH_TEXT_AI_USAGE_POLICIES,
+  SELF_TEXT_AI_USAGE_POLICIES,
+  CHARM_REPORT_USAGE_POLICY,
 } = require('./lib/ai_usage_guard');
 const {
   assertProfileInsightAccess,
@@ -50,6 +53,39 @@ const idealTypeImageUsageGuard = createAiUsageGuard({
   db,
   policy: IDEAL_TYPE_IMAGE_USAGE_POLICY,
   logger: console,
+});
+
+const textAiUsageGuards = Object.freeze({
+  generateFortuneNarrative: createAiUsageGuard({
+    db,
+    policy: SELF_TEXT_AI_USAGE_POLICIES.generateFortuneNarrative,
+    logger: console,
+  }),
+  generateMatchNarrative: createAiUsageGuard({
+    db,
+    policy: MATCH_TEXT_AI_USAGE_POLICIES.generateMatchNarrative,
+    logger: console,
+  }),
+  generateIcebreakers: createAiUsageGuard({
+    db,
+    policy: MATCH_TEXT_AI_USAGE_POLICIES.generateIcebreakers,
+    logger: console,
+  }),
+  generateConversationTips: createAiUsageGuard({
+    db,
+    policy: MATCH_TEXT_AI_USAGE_POLICIES.generateConversationTips,
+    logger: console,
+  }),
+  generateDailyFortune: createAiUsageGuard({
+    db,
+    policy: SELF_TEXT_AI_USAGE_POLICIES.generateDailyFortune,
+    logger: console,
+  }),
+  generateCharmReport: createAiUsageGuard({
+    db,
+    policy: CHARM_REPORT_USAGE_POLICY,
+    logger: console,
+  }),
 });
 
 const INVALID_FCM_TOKEN_CODES = new Set([
@@ -403,6 +439,112 @@ async function callOpenAiForNarrative({ systemPrompt, userPayload }) {
   }
 }
 
+const TEXT_AI_RATE_LIMIT_MESSAGE = '요청이 잠시 많습니다. 잠시 후 다시 시도해 주세요.';
+
+function textAiInputHash(value) {
+  return stableHash(value);
+}
+
+function safeMatchHash(matchId) {
+  return safeUidHash(matchId);
+}
+
+function logTextAiEvent(level, fn, category, fields = {}) {
+  const payload = JSON.stringify({ fn, category, ...fields });
+  if (level === 'warn') console.warn(payload);
+  else if (level === 'error') console.error(payload);
+  else console.log(payload);
+}
+
+function isUnmatchedMatchData(matchData) {
+  return Array.isArray(matchData?.unmatchedBy) && matchData.unmatchedBy.length > 0;
+}
+
+function assertActiveMatchParticipant({ fn, matchId, matchData, callerUid }) {
+  const participants = Array.isArray(matchData?.participants)
+    ? matchData.participants
+    : [];
+  if (!participants.includes(callerUid)) {
+    throw new HttpsError('permission-denied', '이 매치에 접근할 권한이 없습니다.');
+  }
+  if (isUnmatchedMatchData(matchData)) {
+    logTextAiEvent('warn', fn, 'inactive_match', {
+      callerHash: safeUidHash(callerUid),
+      matchHash: safeMatchHash(matchId),
+      retryable: false,
+    });
+    throw new HttpsError('failed-precondition', '이미 종료된 매치입니다.');
+  }
+  return participants;
+}
+
+async function acquireTextAiGenerationSlot({
+  fn,
+  guard,
+  callerUid,
+  matchId = null,
+  inputHash,
+  isRefresh = false,
+  cacheValid = false,
+  cachedValue = null,
+}) {
+  let slot;
+  try {
+    slot = await guard.acquireGenerationSlot({
+      callerUid,
+      targetUid: matchId,
+      inputHash,
+      isRefresh,
+      cacheValid,
+    });
+  } catch {
+    logTextAiEvent('error', fn, 'usage_guard_failed', {
+      callerHash: safeUidHash(callerUid),
+      matchHash: matchId ? safeMatchHash(matchId) : null,
+      retryable: true,
+    });
+    throw new HttpsError('internal', 'AI 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+
+  if (slot.outcome === 'RETURN_CACHE') {
+    return { shouldGenerate: false, cachedValue };
+  }
+  if (slot.outcome !== 'GENERATE') {
+    logTextAiEvent('warn', fn, 'usage_rejected', {
+      callerHash: safeUidHash(callerUid),
+      matchHash: matchId ? safeMatchHash(matchId) : null,
+      decision: slot.decision,
+      retryable: true,
+    });
+    throw new HttpsError('resource-exhausted', TEXT_AI_RATE_LIMIT_MESSAGE);
+  }
+  return { shouldGenerate: true };
+}
+
+async function releaseTextAiGenerationSlot({
+  fn,
+  guard,
+  callerUid,
+  matchId = null,
+  inputHash,
+  success,
+}) {
+  try {
+    await guard.releaseGenerationSlot({
+      callerUid,
+      targetUid: matchId,
+      inputHash,
+      success,
+    });
+  } catch {
+    logTextAiEvent('warn', fn, 'lease_release_failed', {
+      callerHash: safeUidHash(callerUid),
+      matchHash: matchId ? safeMatchHash(matchId) : null,
+      retryable: false,
+    });
+  }
+}
+
 /**
  * 내 사주 서사 생성 (callable).
  *
@@ -425,22 +567,42 @@ exports.generateFortuneNarrative = onCall(
     const cached = snap.data()?.fortuneNarrative;
     if (isValidNarrative(cached)) return cached;
 
-    const rawNarrative = await callOpenAiForNarrative({
-      systemPrompt: fortuneSystemPrompt(),
-      userPayload: { 속성: attrs },
+    const inputHash = textAiInputHash({ attrs });
+    await acquireTextAiGenerationSlot({
+      fn: 'generateFortuneNarrative',
+      guard: textAiUsageGuards.generateFortuneNarrative,
+      callerUid: request.auth.uid,
+      inputHash,
+      cacheValid: false,
     });
-    const narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
-
-    if (!isValidNarrative(narrative)) {
-      console.error('[generateFortuneNarrative] GPT 응답 검증 실패', {
-        raw: rawNarrative,
-        sanitized: narrative,
+    let success = false;
+    try {
+      const rawNarrative = await callOpenAiForNarrative({
+        systemPrompt: fortuneSystemPrompt(),
+        userPayload: { 속성: attrs },
       });
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
-    }
+      const narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
 
-    await userRef.set({ fortuneNarrative: narrative }, { merge: true });
-    return narrative;
+      if (!isValidNarrative(narrative)) {
+        logTextAiEvent('error', 'generateFortuneNarrative', 'invalid_response', {
+          callerHash: safeUidHash(request.auth.uid),
+          retryable: true,
+        });
+        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+      }
+
+      await userRef.set({ fortuneNarrative: narrative }, { merge: true });
+      success = true;
+      return narrative;
+    } finally {
+      await releaseTextAiGenerationSlot({
+        fn: 'generateFortuneNarrative',
+        guard: textAiUsageGuards.generateFortuneNarrative,
+        callerUid: request.auth.uid,
+        inputHash,
+        success,
+      });
+    }
   },
 );
 
@@ -467,30 +629,56 @@ exports.generateMatchNarrative = onCall(
     if (!matchSnap.exists) {
       throw new HttpsError('not-found', '매치를 찾을 수 없습니다.');
     }
-    const participants = matchSnap.data()?.participants || [];
-    if (!participants.includes(request.auth.uid)) {
-      throw new HttpsError('permission-denied', '이 매치에 접근할 권한이 없습니다.');
-    }
+    const matchData = matchSnap.data() || {};
+    assertActiveMatchParticipant({
+      fn: 'generateMatchNarrative',
+      matchId,
+      matchData,
+      callerUid: request.auth.uid,
+    });
 
-    const cached = matchSnap.data()?.fortuneMatch;
+    const cached = matchData.fortuneMatch;
     if (isValidNarrative(cached)) return cached;
 
-    const rawNarrative = await callOpenAiForNarrative({
-      systemPrompt: matchSystemPrompt(),
-      userPayload: { 속성A: userA, 속성B: userB },
+    const inputHash = textAiInputHash({ matchId, userA, userB });
+    await acquireTextAiGenerationSlot({
+      fn: 'generateMatchNarrative',
+      guard: textAiUsageGuards.generateMatchNarrative,
+      callerUid: request.auth.uid,
+      matchId,
+      inputHash,
+      cacheValid: false,
     });
-    const narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
-
-    if (!isValidNarrative(narrative) || typeof narrative.relationshipStory !== 'string') {
-      console.error('[generateMatchNarrative] GPT 응답 검증 실패', {
-        raw: rawNarrative,
-        sanitized: narrative,
+    let success = false;
+    try {
+      const rawNarrative = await callOpenAiForNarrative({
+        systemPrompt: matchSystemPrompt(),
+        userPayload: { 속성A: userA, 속성B: userB },
       });
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
-    }
+      const narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
 
-    await matchRef.set({ fortuneMatch: narrative }, { merge: true });
-    return narrative;
+      if (!isValidNarrative(narrative) || typeof narrative.relationshipStory !== 'string') {
+        logTextAiEvent('error', 'generateMatchNarrative', 'invalid_response', {
+          callerHash: safeUidHash(request.auth.uid),
+          matchHash: safeMatchHash(matchId),
+          retryable: true,
+        });
+        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+      }
+
+      await matchRef.set({ fortuneMatch: narrative }, { merge: true });
+      success = true;
+      return narrative;
+    } finally {
+      await releaseTextAiGenerationSlot({
+        fn: 'generateMatchNarrative',
+        guard: textAiUsageGuards.generateMatchNarrative,
+        callerUid: request.auth.uid,
+        matchId,
+        inputHash,
+        success,
+      });
+    }
   },
 );
 
@@ -750,7 +938,10 @@ function icebreakerProfileFromSnap(uid, snap) {
   const data = snap.data() || {};
   const parts = datePartsInSeoul(data.birthDate);
   if (!parts || !parts.year || !parts.month || !parts.day) {
-    console.warn('[generateIcebreakers] birthDate missing', { uid });
+    logTextAiEvent('warn', 'textAiProfileInput', 'birth_date_missing', {
+      callerHash: safeUidHash(uid),
+      retryable: false,
+    });
     throw new HttpsError('failed-precondition', '프로필 생년월일이 필요합니다.');
   }
 
@@ -785,9 +976,10 @@ exports.generateIcebreakers = onCall(
     if (typeof matchId !== 'string' || !matchId.trim()) {
       throw new HttpsError('invalid-argument', '매치 ID가 올바르지 않습니다.');
     }
-    console.log('[generateIcebreakers] start', {
-      matchId,
-      uid: request.auth.uid,
+    logTextAiEvent('info', 'generateIcebreakers', 'start', {
+      callerHash: safeUidHash(request.auth.uid),
+      matchHash: safeMatchHash(matchId),
+      retryable: false,
     });
 
     const matchRef = db.collection('matches').doc(matchId);
@@ -797,20 +989,28 @@ exports.generateIcebreakers = onCall(
     }
 
     const matchData = matchSnap.data() || {};
-    const participants = matchData.participants || [];
-    if (!participants.includes(request.auth.uid)) {
-      throw new HttpsError('permission-denied', '이 매치에 접근할 권한이 없습니다.');
-    }
+    const participants = assertActiveMatchParticipant({
+      fn: 'generateIcebreakers',
+      matchId,
+      matchData,
+      callerUid: request.auth.uid,
+    });
 
     const cached = matchData.icebreakers;
     if (isValidIcebreakerList(cached)) {
-      console.log('[generateIcebreakers] cache hit', {
-        matchId,
+      logTextAiEvent('info', 'generateIcebreakers', 'cache_hit', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
         count: cached.length,
+        retryable: false,
       });
       return { icebreakers: cached };
     }
-    console.log('[generateIcebreakers] cache miss', { matchId });
+    logTextAiEvent('info', 'generateIcebreakers', 'cache_miss', {
+      callerHash: safeUidHash(request.auth.uid),
+      matchHash: safeMatchHash(matchId),
+      retryable: true,
+    });
 
     const [uidA, uidB] = participants;
     if (!uidA || !uidB) {
@@ -822,10 +1022,12 @@ exports.generateIcebreakers = onCall(
       db.collection('users').doc(uidB).get(),
     ]);
     if (!snapA.exists || !snapB.exists) {
-      console.warn('[generateIcebreakers] profile missing', {
-        matchId,
+      logTextAiEvent('warn', 'generateIcebreakers', 'profile_missing', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
         uidAExists: snapA.exists,
         uidBExists: snapB.exists,
+        retryable: false,
       });
       throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
     }
@@ -837,30 +1039,61 @@ exports.generateIcebreakers = onCall(
       userBInterestKeys.has(key),
     );
 
-    const result = await callOpenAiForNarrative({
-      systemPrompt: icebreakerSystemPrompt(),
-      userPayload: {
-        사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
-        사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
-        공통관심사: tagLabels(commonInterestKeys),
-      },
-    });
-
-    const icebreakers = sanitizeIcebreakers(result);
-    if (!isValidIcebreakerList(icebreakers)) {
-      console.warn('[generateIcebreakers] invalid response', {
-        matchId,
-        count: icebreakers.length,
-      });
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
-    }
-
-    await matchRef.set({ icebreakers }, { merge: true });
-    console.log('[generateIcebreakers] generated', {
+    const inputHash = textAiInputHash({
       matchId,
-      count: icebreakers.length,
+      userA: { attrs: userA.attrs, profileTags: userA.profileTags },
+      userB: { attrs: userB.attrs, profileTags: userB.profileTags },
+      commonInterestKeys: commonInterestKeys.map(String).sort(),
     });
-    return { icebreakers };
+    await acquireTextAiGenerationSlot({
+      fn: 'generateIcebreakers',
+      guard: textAiUsageGuards.generateIcebreakers,
+      callerUid: request.auth.uid,
+      matchId,
+      inputHash,
+      cacheValid: false,
+    });
+    let success = false;
+    try {
+      const result = await callOpenAiForNarrative({
+        systemPrompt: icebreakerSystemPrompt(),
+        userPayload: {
+          사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
+          사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
+          공통관심사: tagLabels(commonInterestKeys),
+        },
+      });
+
+      const icebreakers = sanitizeIcebreakers(result);
+      if (!isValidIcebreakerList(icebreakers)) {
+        logTextAiEvent('warn', 'generateIcebreakers', 'invalid_response', {
+          callerHash: safeUidHash(request.auth.uid),
+          matchHash: safeMatchHash(matchId),
+          count: icebreakers.length,
+          retryable: true,
+        });
+        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+      }
+
+      await matchRef.set({ icebreakers }, { merge: true });
+      success = true;
+      logTextAiEvent('info', 'generateIcebreakers', 'generated', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
+        count: icebreakers.length,
+        retryable: false,
+      });
+      return { icebreakers };
+    } finally {
+      await releaseTextAiGenerationSlot({
+        fn: 'generateIcebreakers',
+        guard: textAiUsageGuards.generateIcebreakers,
+        callerUid: request.auth.uid,
+        matchId,
+        inputHash,
+        success,
+      });
+    }
   },
 );
 
@@ -883,9 +1116,10 @@ exports.generateConversationTips = onCall(
     if (typeof matchId !== 'string' || !matchId.trim()) {
       throw new HttpsError('invalid-argument', '매치 ID가 올바르지 않습니다.');
     }
-    console.log('[generateConversationTips] start', {
-      matchId,
-      uid: request.auth.uid,
+    logTextAiEvent('info', 'generateConversationTips', 'start', {
+      callerHash: safeUidHash(request.auth.uid),
+      matchHash: safeMatchHash(matchId),
+      retryable: false,
     });
 
     const matchRef = db.collection('matches').doc(matchId);
@@ -895,10 +1129,12 @@ exports.generateConversationTips = onCall(
     }
 
     const matchData = matchSnap.data() || {};
-    const participants = matchData.participants || [];
-    if (!participants.includes(request.auth.uid)) {
-      throw new HttpsError('permission-denied', '이 매치에 접근할 권한이 없습니다.');
-    }
+    const participants = assertActiveMatchParticipant({
+      fn: 'generateConversationTips',
+      matchId,
+      matchData,
+      callerUid: request.auth.uid,
+    });
 
     const [uidA, uidB] = participants;
     if (!uidA || !uidB) {
@@ -920,16 +1156,18 @@ exports.generateConversationTips = onCall(
       cached?.lastMessageId === latestMessageId &&
       isValidConversationSuggestions(cached?.suggestions)
     ) {
-      console.log('[generateConversationTips] cache hit', {
-        matchId,
-        lastMessageId: latestMessageId,
+      logTextAiEvent('info', 'generateConversationTips', 'cache_hit', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
         count: cached.suggestions.length,
+        retryable: false,
       });
       return { suggestions: cached.suggestions };
     }
-    console.log('[generateConversationTips] cache miss', {
-      matchId,
-      lastMessageId: latestMessageId,
+    logTextAiEvent('info', 'generateConversationTips', 'cache_miss', {
+      callerHash: safeUidHash(request.auth.uid),
+      matchHash: safeMatchHash(matchId),
+      retryable: true,
     });
 
     const [snapA, snapB] = await Promise.all([
@@ -937,10 +1175,12 @@ exports.generateConversationTips = onCall(
       db.collection('users').doc(uidB).get(),
     ]);
     if (!snapA.exists || !snapB.exists) {
-      console.warn('[generateConversationTips] profile missing', {
-        matchId,
+      logTextAiEvent('warn', 'generateConversationTips', 'profile_missing', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
         uidAExists: snapA.exists,
         uidBExists: snapB.exists,
+        retryable: false,
       });
       throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
     }
@@ -963,41 +1203,73 @@ exports.generateConversationTips = onCall(
       })
       .filter((message) => message.text);
 
-    const result = await callOpenAiForNarrative({
-      systemPrompt: conversationTipsSystemPrompt(),
-      userPayload: {
-        사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
-        사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
-        공통관심사: tagLabels(commonInterestKeys),
-        최근대화: recentMessages,
-      },
-    });
-
-    const suggestions = sanitizeConversationSuggestions(result);
-    if (!isValidConversationSuggestions(suggestions)) {
-      console.warn('[generateConversationTips] invalid response', {
-        matchId,
-        count: suggestions.length,
-      });
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
-    }
-
-    await matchRef.set(
-      {
-        conversationTips: {
-          lastMessageId: latestMessageId,
-          suggestions,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-      },
-      { merge: true },
-    );
-    console.log('[generateConversationTips] generated', {
+    const inputHash = textAiInputHash({
       matchId,
-      lastMessageId: latestMessageId,
-      count: suggestions.length,
+      latestMessageId,
+      userA: { attrs: userA.attrs, profileTags: userA.profileTags },
+      userB: { attrs: userB.attrs, profileTags: userB.profileTags },
+      commonInterestKeys: commonInterestKeys.map(String).sort(),
+      recentMessages,
     });
-    return { suggestions };
+    await acquireTextAiGenerationSlot({
+      fn: 'generateConversationTips',
+      guard: textAiUsageGuards.generateConversationTips,
+      callerUid: request.auth.uid,
+      matchId,
+      inputHash,
+      cacheValid: false,
+    });
+    let success = false;
+    try {
+      const result = await callOpenAiForNarrative({
+        systemPrompt: conversationTipsSystemPrompt(),
+        userPayload: {
+          사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
+          사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
+          공통관심사: tagLabels(commonInterestKeys),
+          최근대화: recentMessages,
+        },
+      });
+
+      const suggestions = sanitizeConversationSuggestions(result);
+      if (!isValidConversationSuggestions(suggestions)) {
+        logTextAiEvent('warn', 'generateConversationTips', 'invalid_response', {
+          callerHash: safeUidHash(request.auth.uid),
+          matchHash: safeMatchHash(matchId),
+          count: suggestions.length,
+          retryable: true,
+        });
+        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+      }
+
+      await matchRef.set(
+        {
+          conversationTips: {
+            lastMessageId: latestMessageId,
+            suggestions,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true },
+      );
+      success = true;
+      logTextAiEvent('info', 'generateConversationTips', 'generated', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
+        count: suggestions.length,
+        retryable: false,
+      });
+      return { suggestions };
+    } finally {
+      await releaseTextAiGenerationSlot({
+        fn: 'generateConversationTips',
+        guard: textAiUsageGuards.generateConversationTips,
+        callerUid: request.auth.uid,
+        matchId,
+        inputHash,
+        success,
+      });
+    }
   },
 );
 
@@ -1083,22 +1355,42 @@ exports.generateDailyFortune = onCall(
     const snap = await dailyRef.get();
     if (isValidDailyFortune(snap.data())) return snap.data();
 
-    const rawFortune = await callOpenAiForNarrative({
-      systemPrompt: dailyFortuneSystemPrompt(),
-      userPayload: { 날짜: date, 속성: attrs },
+    const inputHash = textAiInputHash({ date, attrs });
+    await acquireTextAiGenerationSlot({
+      fn: 'generateDailyFortune',
+      guard: textAiUsageGuards.generateDailyFortune,
+      callerUid: request.auth.uid,
+      inputHash,
+      cacheValid: false,
     });
-    const fortune = sanitizeDailyFortune(rawFortune);
-
-    if (!isValidDailyFortune(fortune)) {
-      console.error('[generateDailyFortune] GPT 응답 검증 실패', {
-        raw: rawFortune,
-        sanitized: fortune,
+    let success = false;
+    try {
+      const rawFortune = await callOpenAiForNarrative({
+        systemPrompt: dailyFortuneSystemPrompt(),
+        userPayload: { 날짜: date, 속성: attrs },
       });
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
-    }
+      const fortune = sanitizeDailyFortune(rawFortune);
 
-    await dailyRef.set(fortune);
-    return fortune;
+      if (!isValidDailyFortune(fortune)) {
+        logTextAiEvent('error', 'generateDailyFortune', 'invalid_response', {
+          callerHash: safeUidHash(request.auth.uid),
+          retryable: true,
+        });
+        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+      }
+
+      await dailyRef.set(fortune);
+      success = true;
+      return fortune;
+    } finally {
+      await releaseTextAiGenerationSlot({
+        fn: 'generateDailyFortune',
+        guard: textAiUsageGuards.generateDailyFortune,
+        callerUid: request.auth.uid,
+        inputHash,
+        success,
+      });
+    }
   },
 );
 
@@ -1216,23 +1508,54 @@ exports.generateCharmReport = onCall(
       );
     }
 
-    const raw = await callOpenAiForNarrative({
-      systemPrompt: charmReportSystemPrompt(),
-      userPayload: { 프로필: profile },
+    const cacheValid = isValidCharmReport(cached);
+    const inputHash = textAiInputHash({ profile });
+    const slot = await acquireTextAiGenerationSlot({
+      fn: 'generateCharmReport',
+      guard: textAiUsageGuards.generateCharmReport,
+      callerUid: request.auth.uid,
+      inputHash,
+      isRefresh: refresh,
+      cacheValid,
+      cachedValue: cached,
     });
-    const report = sanitizeCharmReport(raw);
-    if (!isValidCharmReport(report)) {
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+    if (!slot.shouldGenerate) {
+      return slot.cachedValue;
     }
 
-    await userRef.set(
-      {
-        charmReport: report,
-        charmReportUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    return report;
+    let success = false;
+    try {
+      const raw = await callOpenAiForNarrative({
+        systemPrompt: charmReportSystemPrompt(),
+        userPayload: { 프로필: profile },
+      });
+      const report = sanitizeCharmReport(raw);
+      if (!isValidCharmReport(report)) {
+        logTextAiEvent('warn', 'generateCharmReport', 'invalid_response', {
+          callerHash: safeUidHash(request.auth.uid),
+          retryable: true,
+        });
+        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+      }
+
+      await userRef.set(
+        {
+          charmReport: report,
+          charmReportUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      success = true;
+      return report;
+    } finally {
+      await releaseTextAiGenerationSlot({
+        fn: 'generateCharmReport',
+        guard: textAiUsageGuards.generateCharmReport,
+        callerUid: request.auth.uid,
+        inputHash,
+        success,
+      });
+    }
   },
 );
 
