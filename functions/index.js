@@ -17,11 +17,29 @@ const OpenAI = require('openai');
 const {
   syncAuthVerificationBadgesCore,
 } = require('./lib/auth_verification_badges');
+const {
+  createAiUsageGuard,
+  PROFILE_INSIGHT_USAGE_POLICY,
+} = require('./lib/ai_usage_guard');
+const {
+  assertProfileInsightAccess,
+  buildInsightSourceData,
+  INSIGHT_USER_FIELD_MASK,
+  safeUidHash,
+} = require('./lib/profile_insight_access');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
 admin.initializeApp();
 const db = admin.firestore();
+
+// generateProfileInsight 외부 AI(GPT-4o Vision) 호출 남용 방지용 서버 가드.
+// rate limit + refresh cooldown + 동시 중복 생성 lease를 담당한다.
+const profileInsightUsageGuard = createAiUsageGuard({
+  db,
+  policy: PROFILE_INSIGHT_USAGE_POLICY,
+  logger: console,
+});
 
 const INVALID_FCM_TOKEN_CODES = new Set([
   'messaging/invalid-registration-token',
@@ -1349,11 +1367,50 @@ async function callOpenAiForProfileInsight({ systemPrompt, userPayload, imageUrl
   }
 }
 
+/** 캐시된 profileInsight를 callable 응답 형태로 변환한다(외부 AI 미호출). */
+function profileInsightCacheResponse(cached) {
+  return {
+    inputHash: cached.inputHash,
+    firstImpression: cached.firstImpression,
+    conversationStyle: cached.conversationStyle,
+    atmosphere: cached.atmosphere,
+    goodMatchType: cached.goodMatchType,
+    model: cached.model || PROFILE_INSIGHT_MODEL,
+    updatedAt: null,
+  };
+}
+
+/**
+ * profile insight 전용 sanitized 로그. 원문 error.message / OpenAI 응답 /
+ * URL / uid / 이메일 / 전화 / birthDate / prompt / token / stack 은 절대 남기지
+ * 않는다. 허용: 함수명, 내부 category, caller/target uidHash, decision, retryable,
+ * 안전한 HTTP status(number).
+ */
+function logInsightEvent(level, category, fields = {}) {
+  const line = { fn: 'generateProfileInsight', category, ...fields };
+  const payload = JSON.stringify(line);
+  if (level === 'warn') console.warn(payload);
+  else if (level === 'error') console.error(payload);
+  else console.log(payload);
+}
+
 /**
  * 상대 프로필 비외모 인사이트 생성 (callable).
  *
  * 입력: { targetUid: string, refresh?: boolean }
  * 캐싱: users/{targetUid}.profileInsight.inputHash가 같으면 그대로 반환한다.
+ *
+ * 접근 계약(Phase 0-E-2B): caller 자신 또는 caller가 participant인 활성 match의
+ * 상대방만 허용한다(그 외 permission-denied). 클라이언트 matchId는 신뢰하지 않고
+ * 서버가 caller/target 쌍으로 matchId를 파생해 확인한다. 양방향 block, orphan
+ * (Firebase Auth 미존재)도 차단한다. 이 검증은 users private 문서를 읽기 전에
+ * 끝낸다. 검증 통과 후에도 공개 필드는 publicProfiles 를 쓰고, users 에서는 사주
+ * 파생용 birthDate 와 캐시 필드만 최소로 읽는다. 원문 birthDate 는 프롬프트에
+ * 넣지 않는다(파생 사주값만).
+ *
+ * 남용 방지(Phase 0-E-2): 외부 GPT-4o Vision 호출은 caller UID 기준 rate
+ * limit(시간당/일일 quota + cooldown)과 동시 중복 생성 lease를 통과할 때만
+ * 이뤄진다. cache hit 은 quota를 소비하지 않는다.
  */
 exports.generateProfileInsight = onCall(
   { secrets: [OPENAI_API_KEY] },
@@ -1362,91 +1419,189 @@ exports.generateProfileInsight = onCall(
       throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     }
 
+    const callerUid = request.auth.uid;
     const targetUid = String(request.data?.targetUid || '').trim();
     if (!targetUid) {
       throw new HttpsError('invalid-argument', '대상 유저 ID가 올바르지 않습니다.');
     }
 
     const refresh = request.data?.refresh === true;
-    const userRef = db.collection('users').doc(targetUid);
-    const snap = await userRef.get();
-    if (!snap.exists) {
-      throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
-    }
 
-    const data = snap.data() || {};
-    const inputHash = profileInsightHash(data);
-    const cached = data.profileInsight;
-    if (
-      !refresh &&
-      cached &&
-      cached.inputHash === inputHash &&
-      isValidProfileInsight(cached)
-    ) {
-      return {
-        inputHash: cached.inputHash,
-        firstImpression: cached.firstImpression,
-        conversationStyle: cached.conversationStyle,
-        atmosphere: cached.atmosphere,
-        goodMatchType: cached.goodMatchType,
-        model: cached.model || PROFILE_INSIGHT_MODEL,
-        updatedAt: null,
-      };
-    }
-
-    const profile = profileInsightInputFromData(data);
-    const hasProfileSignal =
-      !!profile.대표사진있음 ||
-      !!profile.한줄소개 ||
-      profile.관심사.length > 0 ||
-      profile.성향.length > 0 ||
-      !!profile.mbti;
-    if (!hasProfileSignal) {
-      throw new HttpsError(
-        'failed-precondition',
-        '프로필 인사이트 생성을 위해 소개나 태그를 먼저 채워주세요.',
-      );
-    }
-
-    const imageUrl = Array.isArray(data.photoUrls) && data.photoUrls[0]
-      ? String(data.photoUrls[0])
-      : null;
-    let raw;
     try {
-      raw = await callOpenAiForProfileInsight({
-        systemPrompt: profileInsightSystemPrompt(),
-        userPayload: { 프로필: profile },
-        imageUrl,
+      // 1) 접근 계약 — users private 문서를 읽기 전에 통과해야 한다.
+      //    self 또는 활성 match 상대 + block 없음 + Auth 존재.
+      await assertProfileInsightAccess({
+        callerUid,
+        targetUid,
+        HttpsError,
+        getMatchDoc: (matchId) => db.collection('matches').doc(matchId).get(),
+        blockExists: async (ownerUid, blockedUid) => {
+          const blockSnap = await db
+            .collection('users')
+            .doc(ownerUid)
+            .collection('blocks')
+            .doc(blockedUid)
+            .get();
+          return blockSnap.exists;
+        },
+        // self 는 정의상 Auth 에 존재하므로 orphan 조회를 생략한다.
+        getAuthUser:
+          callerUid === targetUid
+            ? async () => ({ uid: targetUid })
+            : (uid) => admin.auth().getUser(uid),
+        logger: console,
       });
-    } catch (error) {
-      console.error('[generateProfileInsight] OpenAI profile insight error', {
-        status: error?.status,
-        code: error?.code,
-        message: error?.message,
+
+      // 2) 검증 통과 후에만 데이터 읽기. 공개 필드는 publicProfiles,
+      //    users 는 fieldMask(birthDate + profileInsight 캐시)로 최소 읽기.
+      const userRef = db.collection('users').doc(targetUid);
+      const [publicSnap, userMaskedSnap] = await Promise.all([
+        db.collection('publicProfiles').doc(targetUid).get(),
+        db.getAll(userRef, { fieldMask: INSIGHT_USER_FIELD_MASK }).then((docs) => docs[0]),
+      ]);
+
+      const publicData = publicSnap.exists ? publicSnap.data() || {} : {};
+      const userMasked = userMaskedSnap && userMaskedSnap.exists
+        ? userMaskedSnap.data() || {}
+        : {};
+      const cached = userMasked.profileInsight;
+
+      // 공개 필드(publicProfiles) + birthDate(users 최소) 로 AI 입력 소스 조립.
+      // 필드/타입이 기존 users 기반과 동일해 프롬프트/해시가 기존과 같다.
+      const sourceData = buildInsightSourceData({
+        publicData,
+        birthDate: userMasked.birthDate,
       });
-      if (error instanceof HttpsError) throw error;
-      throw new HttpsError(
-        'internal',
-        '프로필 인사이트 생성에 실패했습니다.',
+
+      const inputHash = profileInsightHash(sourceData);
+      const cacheValid = !!(
+        cached &&
+        cached.inputHash === inputHash &&
+        isValidProfileInsight(cached)
       );
-    }
 
-    const insight = sanitizeProfileInsight(raw, inputHash);
-    if (!isValidProfileInsight(insight)) {
-      throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
-    }
+      // 유효 캐시 + refresh 아님 → 외부 AI/quota 소비 없이 즉시 캐시 반환.
+      if (cacheValid && !refresh) {
+        return profileInsightCacheResponse(cached);
+      }
 
-    const result = {
-      ...insight,
-      model: PROFILE_INSIGHT_MODEL,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-    await userRef.set({ profileInsight: result }, { merge: true });
-    return {
-      ...insight,
-      model: PROFILE_INSIGHT_MODEL,
-      updatedAt: null,
-    };
+      const profile = profileInsightInputFromData(sourceData);
+      const hasProfileSignal =
+        !!profile.대표사진있음 ||
+        !!profile.한줄소개 ||
+        profile.관심사.length > 0 ||
+        profile.성향.length > 0 ||
+        !!profile.mbti;
+      if (!hasProfileSignal) {
+        throw new HttpsError(
+          'failed-precondition',
+          '프로필 인사이트 생성을 위해 소개나 태그를 먼저 채워주세요.',
+        );
+      }
+
+      // 외부 AI 호출 직전 서버측 원자적 슬롯 확보(rate limit + refresh cooldown +
+      // 동시 중복 생성 lease). guard 자체 오류는 유효 캐시로 폴백한다.
+      let slot;
+      try {
+        slot = await profileInsightUsageGuard.acquireGenerationSlot({
+          callerUid,
+          targetUid,
+          inputHash,
+          isRefresh: refresh,
+          cacheValid,
+        });
+      } catch (error) {
+        logInsightEvent('error', 'usage_guard_failed', {
+          callerHash: safeUidHash(callerUid),
+          targetHash: safeUidHash(targetUid),
+          retryable: true,
+        });
+        if (cacheValid) return profileInsightCacheResponse(cached);
+        throw new HttpsError('internal', '프로필 인사이트 생성에 실패했습니다.');
+      }
+
+      if (slot.outcome !== 'GENERATE') {
+        // RETURN_CACHE(refresh cooldown/진행 중) 또는 REJECT(quota/cooldown 초과).
+        if (cacheValid) return profileInsightCacheResponse(cached);
+        throw new HttpsError(
+          'resource-exhausted',
+          '요청이 잠시 많습니다. 잠시 후 다시 시도해 주세요.',
+        );
+      }
+
+      // 슬롯 확보됨 — 이 attempt는 성공/실패와 무관하게 이미 quota에 반영되었다.
+      const imageUrl = Array.isArray(sourceData.photoUrls) && sourceData.photoUrls[0]
+        ? String(sourceData.photoUrls[0])
+        : null;
+      let generationSucceeded = false;
+      try {
+        let raw;
+        try {
+          raw = await callOpenAiForProfileInsight({
+            systemPrompt: profileInsightSystemPrompt(),
+            userPayload: { 프로필: profile },
+            imageUrl,
+          });
+        } catch (error) {
+          // 외부 API 원문 message/응답은 남기지 않는다. status(number)만 안전 로그.
+          logInsightEvent('warn', 'openai_call_failed', {
+            callerHash: safeUidHash(callerUid),
+            targetHash: safeUidHash(targetUid),
+            status: typeof error?.status === 'number' ? error.status : null,
+            retryable: true,
+          });
+          if (error instanceof HttpsError) throw error;
+          throw new HttpsError(
+            'internal',
+            '프로필 인사이트 생성에 실패했습니다.',
+          );
+        }
+
+        const insight = sanitizeProfileInsight(raw, inputHash);
+        if (!isValidProfileInsight(insight)) {
+          throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+        }
+
+        const result = {
+          ...insight,
+          model: PROFILE_INSIGHT_MODEL,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        await userRef.set({ profileInsight: result }, { merge: true });
+        generationSucceeded = true;
+        return {
+          ...insight,
+          model: PROFILE_INSIGHT_MODEL,
+          updatedAt: null,
+        };
+      } finally {
+        // lease 해제(성공 시 lastGeneratedAt 기록 → refresh cooldown 시작).
+        try {
+          await profileInsightUsageGuard.releaseGenerationSlot({
+            callerUid,
+            targetUid,
+            inputHash,
+            success: generationSucceeded,
+          });
+        } catch (releaseError) {
+          logInsightEvent('warn', 'lease_release_failed', {
+            callerHash: safeUidHash(callerUid),
+            targetHash: safeUidHash(targetUid),
+            retryable: false,
+          });
+        }
+      }
+    } catch (error) {
+      // 예상된 HttpsError 는 이미 안전한 문구/카테고리 → 그대로 전달.
+      if (error instanceof HttpsError) throw error;
+      // 알 수 없는 오류는 고정된 internal category 만 기록(원문/스택 미노출).
+      logInsightEvent('error', 'internal_unexpected', {
+        callerHash: safeUidHash(callerUid),
+        targetHash: safeUidHash(targetUid),
+        retryable: true,
+      });
+      throw new HttpsError('internal', '프로필 인사이트 생성에 실패했습니다.');
+    }
   },
 );
 
