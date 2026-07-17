@@ -35,6 +35,19 @@ const PROFILE_INSIGHT_USAGE_POLICY = Object.freeze({
   dayMs: 24 * 60 * 60 * 1000,
 });
 
+const IDEAL_TYPE_IMAGE_USAGE_POLICY = Object.freeze({
+  functionName: 'generateIdealTypeImage',
+  hourlyLimit: 6,
+  dailyLimit: 15,
+  cooldownMs: 20 * 1000, // 연속 호출 최소 간격
+  // 이 함수는 refresh/force 파라미터가 없다(입력이 바뀌어야만 신규 생성). 따라서
+  // refresh cooldown 경로는 실행되지 않지만 정책 shape 일관성을 위해 둔다(inert).
+  refreshCooldownMs: 24 * 60 * 60 * 1000,
+  leaseTtlMs: 180 * 1000, // 이미지 생성은 오래 걸림 — 진행 중 lease를 길게
+  hourMs: 60 * 60 * 1000,
+  dayMs: 24 * 60 * 60 * 1000,
+});
+
 const SLOT_DECISION = Object.freeze({
   ALLOW: 'ALLOW', // 새 외부 AI 호출 허용 (quota 소비됨)
   RETURN_CACHE: 'RETURN_CACHE', // refresh cooldown 미충족 — 캐시로
@@ -69,11 +82,21 @@ function safeUidHash(uid) {
 /**
  * lease 문서 ID. raw uid/targetUid를 경로에 그대로 넣지 않도록 deterministic
  * 해시를 쓴다. 같은 (function, caller, target, inputHash)면 항상 같은 ID.
+ *
+ * 각 파트를 공백으로 잇지 않고 JSON 배열로 직렬화해 결합 모호성을 없앤다
+ * (예: uid에 공백이 있어도 서로 다른 tuple이 같은 문자열로 뭉개지지 않음).
+ * targetUid가 없는(self 전용) 함수는 null로 정규화해 안정적으로 인코딩한다.
  */
 function buildLeaseId(functionName, callerUid, targetUid, inputHash) {
+  const parts = [
+    String(functionName),
+    String(callerUid),
+    targetUid == null ? null : String(targetUid),
+    String(inputHash),
+  ];
   return crypto
     .createHash('sha256')
-    .update(`${functionName} ${callerUid} ${targetUid} ${inputHash}`)
+    .update(JSON.stringify(parts))
     .digest('hex');
 }
 
@@ -313,6 +336,7 @@ function createAiUsageGuard({
 
 module.exports = {
   PROFILE_INSIGHT_USAGE_POLICY,
+  IDEAL_TYPE_IMAGE_USAGE_POLICY,
   SLOT_DECISION,
   SLOT_OUTCOME,
   sanitizeCount,

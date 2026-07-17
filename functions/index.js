@@ -20,6 +20,7 @@ const {
 const {
   createAiUsageGuard,
   PROFILE_INSIGHT_USAGE_POLICY,
+  IDEAL_TYPE_IMAGE_USAGE_POLICY,
 } = require('./lib/ai_usage_guard');
 const {
   assertProfileInsightAccess,
@@ -38,6 +39,16 @@ const db = admin.firestore();
 const profileInsightUsageGuard = createAiUsageGuard({
   db,
   policy: PROFILE_INSIGHT_USAGE_POLICY,
+  logger: console,
+});
+
+// generateIdealTypeImage 외부 이미지 provider(fal.ai) 호출 남용 방지용 서버 가드.
+// caller UID 기준 rate limit + 동시 중복 생성 lease. 이미지 생성은 오래/비싸므로
+// profile insight 보다 낮은 quota(시간당 6/일일 15)와 긴 lease(180s)를 쓴다.
+// generateIdealTypeImageProviderPreview(개발자 전용)에는 적용하지 않는다.
+const idealTypeImageUsageGuard = createAiUsageGuard({
+  db,
+  policy: IDEAL_TYPE_IMAGE_USAGE_POLICY,
   logger: console,
 });
 
@@ -2031,7 +2042,6 @@ async function generateIdealTypeImageWithOpenAI({ prompt }) {
     console.error('[generateIdealTypeImage] OpenAI image error', {
       status: error?.status,
       code: error?.code,
-      message: error?.message,
     });
     throw new HttpsError(
       'failed-precondition',
@@ -2049,7 +2059,6 @@ async function generateIdealTypeImageWithOpenAI({ prompt }) {
     }
   } catch (error) {
     console.error('[generateIdealTypeImage] image download/parse error', {
-      message: error?.message,
     });
     throw new HttpsError(
       'internal',
@@ -2114,7 +2123,6 @@ async function callFalFluxRun({ prompt, falKey }) {
       model: FAL_FLUX_MODEL,
       stage: 'request',
       timeout: isTimeout,
-      message: error?.message,
     });
     throw new HttpsError(
       isTimeout ? 'deadline-exceeded' : 'unavailable',
@@ -2141,7 +2149,6 @@ async function callFalFluxRun({ prompt, falKey }) {
       provider: IDEAL_IMAGE_PROVIDERS.FAL_FLUX,
       model: FAL_FLUX_MODEL,
       stage: 'parse',
-      message: error?.message,
     });
     throw new HttpsError('internal', falFluxUserMessage());
   }
@@ -2187,7 +2194,6 @@ async function generateIdealTypeImageWithFalFlux({ prompt }) {
       model: FAL_FLUX_MODEL,
       stage: 'image_fetch',
       contentType: image.content_type || null,
-      message: error?.message,
     });
     throw new HttpsError('internal', falFluxUserMessage());
   }
@@ -2306,19 +2312,37 @@ function normalizeIdealImageProvider(value) {
   throw new HttpsError('invalid-argument', '지원하지 않는 provider입니다.');
 }
 
+/**
+ * generateIdealTypeImage 전용 sanitized 로그. prompt/refinementText/이미지 URL/
+ * UID/옵션 원문/외부 API 응답/error.message/API key/token/stack 은 절대 남기지
+ * 않는다. 허용: 함수명, callerHash, 내부 category, decision, retryable, 안전한
+ * status(number). provider/model 은 고정 식별자라 남겨도 민감정보가 아니다.
+ */
+function logIdealImageEvent(level, category, fields = {}) {
+  const line = { fn: 'generateIdealTypeImage', category, ...fields };
+  const payload = JSON.stringify(line);
+  if (level === 'warn') console.warn(payload);
+  else if (level === 'error') console.error(payload);
+  else console.log(payload);
+}
+
 async function generateIdealTypeImageResult({
   uid,
   data,
   provider,
   cacheField = 'idealTypeImage',
+  // 일반 사용자용 generateIdealTypeImage 만 guard 를 주입한다. 개발자 전용
+  // generateIdealTypeImageProviderPreview 는 주입하지 않아 동작이 변하지 않는다.
+  usageGuard = null,
 }) {
   const input = normalizeIdealImageInput(data || {});
   if (input.refinementBlocked) {
     // 원문은 로그에 남기지 않는다 — 어떤 요청이 막혔는지가 아니라 막혔다는
     // 사실만 남긴다.
-    console.warn('[generateIdealTypeImage] refinementText blocked', {
+    logIdealImageEvent('warn', 'refinement_blocked', {
+      callerHash: safeUidHash(uid),
       provider,
-      stage: 'refinement_validation',
+      retryable: false,
     });
     throw new HttpsError(
       'invalid-argument',
@@ -2342,70 +2366,127 @@ async function generateIdealTypeImageResult({
       provider,
     })
   ) {
+    // 유효 캐시 재사용 — 외부 provider 미호출, quota/cooldown 미소비.
     return cached;
   }
 
-  const prompt = buildPromptForProvider(provider, input);
-  const generation = await generateIdealTypeImageWithProvider(provider, { prompt });
+  // 외부 이미지 provider 호출 직전 서버측 원자적 슬롯 확보(rate limit +
+  // 동시 중복 생성 lease). self 전용이라 targetUid 는 없다(null). guard 자체
+  // 오류는 내부 오류로 처리한다(캐시가 없으므로 폴백 없음).
+  if (usageGuard) {
+    let slot;
+    try {
+      slot = await usageGuard.acquireGenerationSlot({
+        callerUid: uid,
+        targetUid: null,
+        inputHash,
+        isRefresh: false,
+        cacheValid: false,
+      });
+    } catch (error) {
+      logIdealImageEvent('error', 'usage_guard_failed', {
+        callerHash: safeUidHash(uid),
+        provider,
+        retryable: true,
+      });
+      throw new HttpsError(
+        'internal',
+        'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.',
+      );
+    }
+    if (slot.outcome !== 'GENERATE') {
+      // quota/cooldown 초과 또는 동일 요청 진행 중. 캐시가 없으므로 재시도 안내.
+      throw new HttpsError(
+        'resource-exhausted',
+        '이미지 생성 요청이 잠시 많아요. 잠시 후 다시 시도해주세요.',
+      );
+    }
+  }
 
-  let uploaded;
+  // 슬롯 확보됨 — 이 attempt 는 성공/실패와 무관하게 이미 quota 에 반영되었다.
+  let generationSucceeded = false;
   try {
-    uploaded = await uploadIdealImage({
-      uid,
+    const prompt = buildPromptForProvider(provider, input);
+    const generation = await generateIdealTypeImageWithProvider(provider, { prompt });
+
+    let uploaded;
+    try {
+      uploaded = await uploadIdealImage({
+        uid,
+        inputHash,
+        imageBuffer: generation.imageBuffer,
+      });
+    } catch (error) {
+      // Storage 업로드 실패 — 성공 캐시/응답을 만들지 않는다. 원문 미노출.
+      logIdealImageEvent('warn', 'storage_upload_failed', {
+        callerHash: safeUidHash(uid),
+        provider,
+        model: generation.model,
+        retryable: true,
+      });
+      throw new HttpsError('internal', 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.');
+    }
+    const result = {
       inputHash,
-      imageBuffer: generation.imageBuffer,
-    });
-  } catch (error) {
-    console.error('[generateIdealTypeImage] storage upload error', {
+      imageUrl: uploaded.url,
+      storagePath: uploaded.path,
+      summary: idealImageSummary(input),
+      safetyLabel: 'AI가 생성한 가상의 이미지입니다. 실제 앱 사용자가 아닙니다.',
+      options: {
+        gender: input.gender,
+        idealTags: input.idealTags,
+        mood: input.mood.key,
+        style: input.style.key,
+        hair: input.hair.key,
+        impression: input.impression.key,
+        background: input.background.key,
+      },
+      revisedPrompt: generation.revisedPrompt,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       provider,
       model: generation.model,
-      stage: 'storage_upload',
-      cacheField,
-      message: error?.message,
-    });
-    throw new HttpsError('internal', 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.');
-  }
-  const result = {
-    inputHash,
-    imageUrl: uploaded.url,
-    storagePath: uploaded.path,
-    summary: idealImageSummary(input),
-    safetyLabel: 'AI가 생성한 가상의 이미지입니다. 실제 앱 사용자가 아닙니다.',
-    options: {
-      gender: input.gender,
-      idealTags: input.idealTags,
-      mood: input.mood.key,
-      style: input.style.key,
-      hair: input.hair.key,
-      impression: input.impression.key,
-      background: input.background.key,
-    },
-    revisedPrompt: generation.revisedPrompt,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    provider,
-    model: generation.model,
-    promptVersion,
-    safetyPolicyVersion: promptVersion,
-    imageCount: 1,
-    syntheticHuman: true,
-  };
+      promptVersion,
+      safetyPolicyVersion: promptVersion,
+      imageCount: 1,
+      syntheticHuman: true,
+    };
 
-  try {
-    await userRef.set({ [cacheField]: result }, { merge: true });
-  } catch (error) {
-    console.error('[generateIdealTypeImage] storage metadata write error', {
-      provider,
-      model: generation.model,
-      stage: 'firestore_write',
-      cacheField,
-      message: error?.message,
-    });
-    throw new HttpsError('internal', 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.');
+    try {
+      await userRef.set({ [cacheField]: result }, { merge: true });
+    } catch (error) {
+      // 캐시 write 실패 — 성공 응답을 반환하지 않는다. 원문 미노출.
+      logIdealImageEvent('warn', 'firestore_write_failed', {
+        callerHash: safeUidHash(uid),
+        provider,
+        model: generation.model,
+        retryable: true,
+      });
+      throw new HttpsError('internal', 'AI 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.');
+    }
+    generationSucceeded = true;
+    return {
+      ...result,
+      createdAt: null,
+    };
+  } finally {
+    // lease 해제(성공 여부와 무관). 성공 시 캐시가 이미 저장돼 재생성이 안 일어난다.
+    if (usageGuard) {
+      try {
+        await usageGuard.releaseGenerationSlot({
+          callerUid: uid,
+          targetUid: null,
+          inputHash,
+          success: generationSucceeded,
+        });
+      } catch (releaseError) {
+        logIdealImageEvent('warn', 'lease_release_failed', {
+          callerHash: safeUidHash(uid),
+          provider,
+          retryable: false,
+        });
+      }
+    }
   }
-  return {
-    ...result,
-    createdAt: null,
-  };
 }
 
 /**
@@ -2428,6 +2509,7 @@ exports.generateIdealTypeImage = onCall(
       data: request.data || {},
       provider: ACTIVE_IDEAL_IMAGE_PROVIDER,
       cacheField: 'idealTypeImage',
+      usageGuard: idealTypeImageUsageGuard,
     });
   },
 );
