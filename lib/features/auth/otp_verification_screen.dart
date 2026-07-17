@@ -186,8 +186,15 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       body: Stack(
         children: [
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 16, 28, 32),
+            child: SingleChildScrollView(
+              // 소프트 키보드가 올라오면 body 높이가 줄어든다. 스크롤 뷰로 감싸
+              // bottom overflow를 막고, 포커스된 입력칸이 가려지지 않게 한다.
+              padding: EdgeInsets.fromLTRB(
+                28,
+                16,
+                28,
+                32 + MediaQuery.of(context).viewInsets.bottom,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
