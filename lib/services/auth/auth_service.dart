@@ -268,13 +268,13 @@ class AuthService {
                 : await _firebaseAuth.signInWithCredential(credential);
             onVerified(userCredential);
           } on FirebaseAuthException catch (e) {
-            onFailed(_firebaseAuthMessage(e));
+            onFailed(_firebaseAuthMessage(e, phone: true));
           } on AuthFailure catch (e) {
             onFailed(e.message);
           }
         },
         verificationFailed: (FirebaseAuthException e) {
-          onFailed(_firebaseAuthMessage(e));
+          onFailed(_firebaseAuthMessage(e, phone: true));
         },
         codeSent: (String verificationId, int? resendToken) {
           onCodeSent(verificationId);
@@ -286,7 +286,7 @@ class AuthService {
         },
       );
     } on FirebaseAuthException catch (e) {
-      onFailed(_firebaseAuthMessage(e));
+      onFailed(_firebaseAuthMessage(e, phone: true));
     } catch (_) {
       onFailed('인증코드 발송 중 알 수 없는 오류가 발생했습니다.');
     }
@@ -309,7 +309,7 @@ class AuthService {
           ? await _linkCredentialToCurrentUser(credential)
           : await _firebaseAuth.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
-      throw AuthFailure(_firebaseAuthMessage(e));
+      throw AuthFailure(_firebaseAuthMessage(e, phone: true));
     }
   }
 
@@ -331,7 +331,7 @@ class AuthService {
     } on FirebaseFunctionsException catch (e) {
       if (kDebugMode) {
         debugPrint(
-          '[AuthService] syncAuthVerificationBadges failed code="${e.code}" message="${e.message}"',
+          '[AuthService] syncAuthVerificationBadges failed code=${e.code}',
         );
       }
       throw const AuthFailure('인증 상태를 확인하지 못했어요. 잠시 후 다시 시도해주세요.');
@@ -402,63 +402,121 @@ class AuthService {
   // ===========================================================================
 
   /// FirebaseAuthException 코드를 사용자용 한국어 메시지로 변환.
-  String _firebaseAuthMessage(FirebaseAuthException e) {
-    // 진단용 로그 — 실제 Firebase 에러 코드를 터미널에서 확인할 수 있다.
-    // kDebugMode로 감싸 release 빌드에서는 출력되지 않게 한다.
+  ///
+  /// [phone]이 true면 전화/SMS 인증 문맥의 메시지를 우선 사용한다. 같은
+  /// 코드(예: operation-not-allowed)라도 이메일 로그인과 전화 인증에서
+  /// 원인이 다르므로, 화면에 맞는 안내가 나가도록 문맥을 구분한다.
+  String _firebaseAuthMessage(FirebaseAuthException e, {bool phone = false}) {
+    // 진단용 로그 — 안정적인 code와 문맥만 남긴다.
+    // 주의: e.message에는 전화번호/이메일/내부 요청 정보가 섞일 수 있으므로
+    // debug 빌드에서도 출력하지 않는다. UID/OTP/verificationId/token 등도 금지.
     if (kDebugMode) {
       debugPrint(
-        '[AuthService] FirebaseAuthException code="${e.code}" message="${e.message}"',
+        '[AuthService] FirebaseAuthException '
+        'context=${phone ? 'phone' : 'default'} code=${e.code}',
       );
     }
-    switch (e.code) {
-      // ── 이메일/비밀번호 ──────────────────────────────────────────────────
-      case 'weak-password':
-        return '비밀번호는 6자 이상이어야 합니다.';
-      case 'email-already-in-use':
-        return '이미 사용 중인 이메일이에요.\n구글로 가입한 이메일이라면 구글로 로그인해주세요.';
-      case 'invalid-email':
-        return '올바른 이메일 형식이 아닙니다.';
-      case 'user-not-found':
-        return '등록되지 않은 이메일입니다.';
-      case 'wrong-password':
-        return '비밀번호가 올바르지 않습니다.';
-      case 'invalid-credential':
-        return '이메일 또는 비밀번호가 올바르지 않습니다.';
-      case 'too-many-requests':
-        return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
-      // ── 제공업체 설정 ────────────────────────────────────────────────────
-      // Firebase Console에서 해당 로그인 방식이 비활성화된 경우.
-      case 'operation-not-allowed':
-        return '이메일/비밀번호 로그인이 활성화되지 않았습니다.\n'
-            'Firebase 콘솔 → Authentication → Sign-in method에서 활성화해주세요.';
-      // ── 소셜/공통 ────────────────────────────────────────────────────────
-      case 'account-exists-with-different-credential':
-        return '이미 다른 방식으로 가입된 이메일입니다. 구글로 로그인해주세요.';
-      case 'user-disabled':
-        return '비활성화된 계정입니다. 고객센터에 문의해주세요.';
-      case 'invalid-verification-code':
-        return '인증번호가 올바르지 않습니다.';
-      case 'session-expired':
-        return '인증 시간이 만료되었습니다. 다시 시도해주세요.';
-      case 'network-request-failed':
-        return '네트워크 연결을 확인해주세요.';
-      // ── 전화번호 인증 ────────────────────────────────────────────────────
-      case 'invalid-phone-number':
-        return '올바른 전화번호 형식이 아닙니다.';
-      case 'missing-phone-number':
-        return '전화번호를 입력해주세요.';
-      case 'quota-exceeded':
-        return 'SMS 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
-      case 'captcha-check-failed':
-        return '보안 확인에 실패했습니다. 다시 시도해주세요.';
-      case 'invalid-verification-id':
-        return '인증 세션이 유효하지 않습니다. 인증코드를 다시 받아주세요.';
-      case 'credential-already-in-use':
-        return '이미 다른 계정에 연결된 전화번호입니다.';
-      case 'provider-already-linked':
-        return '이미 전화번호 인증이 완료된 계정입니다.';
-      default:
-        return '인증에 실패했습니다. 잠시 후 다시 시도해주세요.';
-    }
+    return authFailureMessageForCode(e.code, phone: phone);
+  }
+}
+
+/// FirebaseAuthException 코드 → 사용자용 한국어 메시지 순수 변환 함수.
+///
+/// 왜 top-level 순수 함수로 분리했나:
+/// - 문맥(이메일 vs 전화) 분기 로직을 FirebaseAuthException 인스턴스 없이
+///   코드 문자열만으로 테스트할 수 있도록 하기 위함이다.
+/// - 원문 Firebase message 문자열에 의존해 원인을 확정 파싱하지 않는다.
+///   오직 안정적인 `code` 값만으로 분기한다(예: SMS region policy를 영어
+///   message로 추측해 단정하지 않는다).
+@visibleForTesting
+String authFailureMessageForCode(String code, {bool phone = false}) {
+  // 전화 인증 문맥에서만 의미가 다른 코드는 먼저 전용 매핑을 시도한다.
+  // null이면 공용 매핑으로 폴백한다(전화에서도 동일한 안내면 중복을 피함).
+  if (phone) {
+    final phoneMessage = _phoneAuthMessageForCode(code);
+    if (phoneMessage != null) return phoneMessage;
+  }
+  switch (code) {
+    // ── 이메일/비밀번호 ──────────────────────────────────────────────────
+    case 'weak-password':
+      return '비밀번호는 6자 이상이어야 합니다.';
+    case 'email-already-in-use':
+      return '이미 사용 중인 이메일이에요.\n구글로 가입한 이메일이라면 구글로 로그인해주세요.';
+    case 'invalid-email':
+      return '올바른 이메일 형식이 아닙니다.';
+    case 'user-not-found':
+      return '등록되지 않은 이메일입니다.';
+    case 'wrong-password':
+      return '비밀번호가 올바르지 않습니다.';
+    case 'invalid-credential':
+      return '이메일 또는 비밀번호가 올바르지 않습니다.';
+    case 'too-many-requests':
+      return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+    // ── 제공업체 설정 ────────────────────────────────────────────────────
+    // Firebase Console에서 해당 로그인 방식이 비활성화된 경우.
+    // (전화 인증 문맥은 위 _phoneAuthMessageForCode에서 먼저 처리된다.)
+    case 'operation-not-allowed':
+      return '이메일/비밀번호 로그인이 활성화되지 않았습니다.\n'
+          'Firebase 콘솔 → Authentication → Sign-in method에서 활성화해주세요.';
+    // ── 소셜/공통 ────────────────────────────────────────────────────────
+    case 'account-exists-with-different-credential':
+      return '이미 다른 방식으로 가입된 이메일입니다. 구글로 로그인해주세요.';
+    case 'user-disabled':
+      return '비활성화된 계정입니다. 고객센터에 문의해주세요.';
+    case 'invalid-verification-code':
+      return '인증번호가 올바르지 않습니다.';
+    case 'session-expired':
+      return '인증 시간이 만료되었습니다. 다시 시도해주세요.';
+    case 'network-request-failed':
+      return '네트워크 연결을 확인해주세요.';
+    // ── 전화번호 인증 ────────────────────────────────────────────────────
+    case 'invalid-phone-number':
+      return '올바른 전화번호 형식이 아닙니다.';
+    case 'missing-phone-number':
+      return '전화번호를 입력해주세요.';
+    case 'quota-exceeded':
+      return 'SMS 발송 한도를 초과했습니다. 잠시 후 다시 시도해주세요.';
+    case 'captcha-check-failed':
+      return '보안 확인에 실패했습니다. 다시 시도해주세요.';
+    case 'invalid-verification-id':
+      return '인증 세션이 유효하지 않습니다. 인증코드를 다시 받아주세요.';
+    case 'credential-already-in-use':
+      return '이미 다른 계정에 연결된 전화번호입니다.';
+    case 'provider-already-linked':
+      return '이미 전화번호 인증이 완료된 계정입니다.';
+    default:
+      return '인증에 실패했습니다. 잠시 후 다시 시도해주세요.';
+  }
+}
+
+/// 전화/SMS 인증 문맥 전용 메시지.
+///
+/// 공용 매핑과 안내가 달라야 하는 코드만 여기서 처리하고, 동일하면 null을
+/// 반환해 공용 매핑으로 폴백한다. 원인을 영어 message로 추측하지 않고 코드만
+/// 사용한다(특히 operation-not-allowed는 SMS 허용 지역/제공업체 설정 문제가
+/// 흔하므로 그 방향으로 안내한다).
+String? _phoneAuthMessageForCode(String code) {
+  switch (code) {
+    case 'operation-not-allowed':
+      // 출시용 사용자 문구: 콘솔 설정을 사용자에게 요구하지 않는다.
+      // 실제 원인(제공업체/SMS 허용 지역 등)은 safe debug log의
+      // context=phone code=operation-not-allowed로만 진단한다.
+      return '현재 전화 인증을 사용할 수 없습니다.\n'
+          '잠시 후 다시 시도해 주세요.';
+    case 'invalid-credential':
+      return '인증 정보가 유효하지 않습니다.\n'
+          '인증코드를 다시 받아 시도해주세요.';
+    case 'too-many-requests':
+      return '인증 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+    case 'session-expired':
+      return '인증 시간이 만료되었습니다. 인증코드를 다시 받아주세요.';
+    case 'invalid-app-credential':
+      return '앱 인증에 실패했습니다. 앱을 다시 실행한 뒤 시도해주세요.';
+    case 'app-not-authorized':
+      return '이 앱은 전화 인증을 사용할 권한이 없습니다.\n앱 설정을 확인해 주세요.';
+    default:
+      // invalid-phone-number / invalid-verification-code / quota-exceeded /
+      // network-request-failed 등은 공용 매핑 문구를 그대로 사용한다.
+      return null;
   }
 }
