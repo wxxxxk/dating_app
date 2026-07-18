@@ -15,7 +15,7 @@
     "test:public-profile-backfill": "node --test test/public_profile_backfill.test.js test/public_profile_backfill_apply.test.js"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
