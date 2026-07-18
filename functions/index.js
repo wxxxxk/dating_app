@@ -35,6 +35,10 @@ const {
   toHttpsError,
   verifyJellyPurchaseCore,
 } = require('./lib/jelly_purchase_verification');
+const {
+  deleteMyAccountCore,
+  toHttpsError: toAccountDeletionHttpsError,
+} = require('./lib/account_deletion');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
@@ -2902,3 +2906,26 @@ exports.verifyJellyPurchase = onCall(async (request) => {
     throw toHttpsError(error, HttpsError);
   }
 });
+
+// ============================================================================
+// Phase 0-G-2B: 회원 탈퇴 서버 처리
+// ============================================================================
+
+exports.deleteMyAccount = onCall(
+  { timeoutSeconds: 540, memory: '1GiB', maxInstances: 5 },
+  async (request) => {
+    try {
+      return await deleteMyAccountCore({
+        request,
+        db,
+        auth: admin.auth(),
+        storageBucket: admin.storage().bucket(),
+        serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+        fieldDelete: admin.firestore.FieldValue.delete,
+        logger: console,
+      });
+    } catch (error) {
+      throw toAccountDeletionHttpsError(error, HttpsError);
+    }
+  },
+);

@@ -7,6 +7,7 @@ import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
+import '../../services/auth/account_deletion_service.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/charm/charm_service.dart';
 import '../../services/database/firestore_service.dart';
@@ -24,6 +25,7 @@ import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
+import 'account_deletion_screen.dart';
 import '../ideal_type/ideal_type_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../profile/profile_edit_screen.dart';
@@ -53,6 +55,7 @@ class HomeScreen extends StatefulWidget {
   final LikesService likesService;
   final SafetyService safetyService;
   final VoidCallback? onOpenDiscovery;
+  final AccountDeletionService? accountDeletionService;
 
   const HomeScreen({
     super.key,
@@ -68,6 +71,7 @@ class HomeScreen extends StatefulWidget {
     required this.likesService,
     required this.safetyService,
     this.onOpenDiscovery,
+    this.accountDeletionService,
   });
 
   @override
@@ -371,6 +375,16 @@ class _HomeScreenState extends State<HomeScreen> {
         _showSnack(e.message);
       }
     }
+  }
+
+  Future<void> _openAccountDeletion() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            AccountDeletionScreen(service: widget.accountDeletionService),
+      ),
+    );
   }
 
   /// 프로필 편집 화면으로 이동하고, 돌아올 때 최신 프로필을 반영한다.
@@ -699,6 +713,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: '차단 목록 관리',
                     outlined: true,
                     onPressed: _openBlockedUsers,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      key: const Key('open-account-deletion'),
+                      onPressed: _openAccountDeletion,
+                      icon: const Icon(Icons.delete_forever_rounded, size: 20),
+                      label: const Text('회원 탈퇴'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: BorderSide(
+                          color: AppColors.error.withValues(alpha: 0.45),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   PrimaryButton(

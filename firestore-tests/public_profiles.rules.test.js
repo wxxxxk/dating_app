@@ -1103,3 +1103,86 @@ test('70. jellyTransactions unknown field와 update/delete 거부', async () => 
     deleteDoc(doc(ownerDb(), 'users', OWNER, 'jellyTransactions', 'tx2')),
   );
 });
+
+test('71. 서버 전용 deletion job/audit/purchase/usage 컬렉션은 본인도 접근 불가', async () => {
+  const db = ownerDb();
+  const blockedRefs = [
+    doc(db, '_accountDeletionJobs', 'hash1'),
+    doc(db, '_deletedAccountAudit', 'hash1'),
+    doc(db, '_deletedAccountAudit', 'hash1', 'jellyTransactions', 'txhash'),
+    doc(db, '_purchaseReceipts', 'receipthash'),
+    doc(db, '_purchaseVerificationUsage', OWNER),
+    doc(db, '_internalAiUsage', OWNER),
+    doc(db, '_internalAiUsage', OWNER, 'functions', 'generateDailyFortune'),
+    doc(db, '_internalAiLeases', 'lease1'),
+  ];
+
+  for (const ref of blockedRefs) {
+    await assertFails(getDoc(ref));
+    await assertFails(setDoc(ref, { ownerUid: OWNER, status: 'client-write' }));
+  }
+});
+
+test('72. reports 생성 시 서버 전용 감사 필드를 끼워 넣을 수 없다', async () => {
+  await assertSucceeds(
+    setDoc(doc(ownerDb(), 'reports', 'report1'), {
+      reporterUid: OWNER,
+      reportedUid: OTHER,
+      reason: 'spam_scam',
+      detail: '반복 홍보',
+      createdAt: serverTimestamp(),
+    }),
+  );
+
+  await assertFails(
+    setDoc(doc(ownerDb(), 'reports', 'report2'), {
+      reporterUid: OWNER,
+      reportedUid: OTHER,
+      reason: 'spam_scam',
+      deletedSubjectHash: 'hash',
+    }),
+  );
+  await assertFails(
+    setDoc(doc(ownerDb(), 'reports', 'report3'), {
+      reporterUid: OWNER,
+      reportedUid: OTHER,
+      reason: 'spam_scam',
+      reporterDeleted: true,
+    }),
+  );
+});
+
+test('73. hidden match에는 신규 메시지를 만들 수 없고 다른 match는 영향 없다', async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const adminDb = ctx.firestore();
+    await setDoc(doc(adminDb, 'matches', 'hidden'), {
+      participants: [OWNER, OTHER],
+      uid1: OWNER,
+      uid2: OTHER,
+      matchedAt: Timestamp.now(),
+      unmatchedBy: ['deleted:abc123'],
+    });
+    await setDoc(doc(adminDb, 'matches', 'active'), {
+      participants: [OWNER, OTHER],
+      uid1: OWNER,
+      uid2: OTHER,
+      matchedAt: Timestamp.now(),
+      unmatchedBy: [],
+    });
+  });
+
+  await assertFails(
+    setDoc(doc(ownerDb(), 'matches', 'hidden', 'messages', 'm1'), {
+      senderId: OWNER,
+      text: '보내면 안 됨',
+      createdAt: serverTimestamp(),
+    }),
+  );
+  await assertSucceeds(
+    setDoc(doc(ownerDb(), 'matches', 'active', 'messages', 'm1'), {
+      senderId: OWNER,
+      text: '안녕하세요',
+      createdAt: serverTimestamp(),
+    }),
+  );
+});

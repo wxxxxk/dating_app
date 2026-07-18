@@ -410,6 +410,45 @@ test('다른 UID의 token 재사용 차단', async () => {
   assert.equal(db.store.get('users/user-2').jelly, 10);
 });
 
+test('탈퇴 후 익명화된 receipt는 provider 호출 없이 전 사용자 재사용 차단', async () => {
+  const hash = receiptHashForAndroid('token-1');
+  const db = createFakeDb({
+    'users/user-2': { jelly: 10 },
+    [`_purchaseReceipts/${hash}`]: {
+      deletedSubjectHash: 'deleted-subject-hash',
+      receiptHash: hash,
+      productId: 'jelly_30',
+      platform: 'android',
+      grantedJellyAmount: 30,
+      status: 'granted',
+    },
+  });
+  let providerCalls = 0;
+
+  await assertRejectsWithCode(
+    callCore({
+      db,
+      req: request({ uid: 'user-2' }),
+      verifier: async () => {
+        providerCalls += 1;
+        return providerResult({ obfuscatedExternalAccountId: buildObfuscatedExternalAccountId('user-2') });
+      },
+    }),
+    'permission-denied',
+  );
+
+  assert.equal(providerCalls, 0);
+  assert.equal(db.store.get('users/user-2').jelly, 10);
+  assert.deepEqual(db.store.get(`_purchaseReceipts/${hash}`), {
+    deletedSubjectHash: 'deleted-subject-hash',
+    receiptHash: hash,
+    productId: 'jelly_30',
+    platform: 'android',
+    grantedJellyAmount: 30,
+    status: 'granted',
+  });
+});
+
 test('다른 정상 token은 각각 지급', async () => {
   const db = createFakeDb({ 'users/user-1': { jelly: 0 } });
   let clock = 10_000_000;

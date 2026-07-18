@@ -524,6 +524,22 @@ async function verifyJellyPurchaseCore({
   const existingReceiptSnap = await receiptRef.get();
   if (existingReceiptSnap.exists) {
     const receipt = existingReceiptSnap.data() || {};
+    if (receipt.deletedSubjectHash) {
+      logPurchaseDecision(logger, 'rejected', {
+        callerHash,
+        receiptHashPrefix,
+        platform,
+        productId,
+        providerCategory: 'receipt_deleted_subject',
+        retryable: false,
+      });
+      fail('permission-denied', {
+        platform,
+        productId,
+        providerCategory: 'receipt_deleted_subject',
+        retryable: false,
+      });
+    }
     if (receipt.uid !== uid) {
       logPurchaseDecision(logger, 'rejected', {
         callerHash,
@@ -612,6 +628,14 @@ async function verifyJellyPurchaseCore({
 
     if (receiptSnap.exists) {
       const receipt = receiptSnap.data() || {};
+      if (receipt.deletedSubjectHash) {
+        fail('permission-denied', {
+          platform,
+          productId,
+          providerCategory: 'receipt_deleted_subject',
+          retryable: false,
+        });
+      }
       if (receipt.uid === uid) {
         return {
           balance: current,

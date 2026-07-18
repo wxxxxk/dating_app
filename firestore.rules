@@ -465,6 +465,13 @@ service cloud.firestore {
     // 운영자 검토 화면은 별도 관리자 권한 또는 Admin SDK로 붙이는 전제다.
     match /reports/{reportId} {
       allow create: if request.auth != null &&
+        request.resource.data.keys().hasOnly([
+          'reporterUid',
+          'reportedUid',
+          'reason',
+          'detail',
+          'createdAt'
+        ]) &&
         request.resource.data.reporterUid == request.auth.uid &&
         request.resource.data.reportedUid is string &&
         request.resource.data.reason in [
