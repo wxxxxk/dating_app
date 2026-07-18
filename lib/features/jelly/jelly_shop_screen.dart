@@ -40,6 +40,10 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
   // 결제 진행 중에는 화면을 잠가 중복 탭/중복 구매를 막는다.
   bool _processing = false;
 
+  bool get _realPurchaseDisabled =>
+      !kJellyMockPurchases &&
+      !widget.jellyPurchaseService.canLaunchStorePurchase;
+
   @override
   void initState() {
     super.initState();
@@ -82,6 +86,7 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
 
   Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
+      var shouldCompletePurchase = false;
       switch (purchase.status) {
         case PurchaseStatus.pending:
           if (mounted) setState(() => _processing = true);
@@ -101,6 +106,7 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
             final balance = await widget.jellyPurchaseService.verifyAndCredit(
               purchase,
             );
+            shouldCompletePurchase = true;
             if (mounted) {
               setState(() => _processing = false);
               _showSnack('젤리 충전 완료! 현재 보유: $balance개');
@@ -108,13 +114,19 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
           } catch (e) {
             if (mounted) {
               setState(() => _processing = false);
-              _showSnack('영수증 검증 실패: $e');
+              _showSnack('구매 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.');
             }
           }
           break;
       }
-      if (purchase.pendingCompletePurchase) {
-        await widget.jellyPurchaseService.completePurchase(purchase);
+      if (shouldCompletePurchase) {
+        try {
+          await widget.jellyPurchaseService.finishPurchaseAfterGrant(purchase);
+        } catch (_) {
+          if (mounted) {
+            _showSnack('젤리는 지급됐지만 구매 완료 처리를 다시 시도해야 합니다.');
+          }
+        }
       }
     }
   }
@@ -167,6 +179,10 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
   }
 
   Future<void> _startRealPurchase(JellyProduct product) async {
+    if (_realPurchaseDisabled) {
+      _showSnack('iOS 결제는 준비 중입니다.');
+      return;
+    }
     setState(() => _processing = true);
     try {
       final available = await widget.jellyPurchaseService.isAvailable();
@@ -177,7 +193,7 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
       if (details == null) {
         throw Exception('스토어에서 상품을 찾을 수 없습니다(상품 등록 필요).');
       }
-      await widget.jellyPurchaseService.buy(details);
+      await widget.jellyPurchaseService.buy(details, uid: widget.currentUid);
       // 이후 진행 상황은 purchaseStream 구독(_handlePurchaseUpdates)이 처리한다.
     } catch (e) {
       if (mounted) {
@@ -243,6 +259,8 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
               Text(
                 kJellyMockPurchases
                     ? '지금은 테스트 모드예요. 실제 결제는 발생하지 않아요.'
+                    : _realPurchaseDisabled
+                    ? 'iOS 결제는 준비 중입니다.'
                     : '실제 스토어 결제가 진행됩니다.',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
@@ -258,7 +276,9 @@ class _JellyShopScreenState extends State<JellyShopScreen> {
                     priceLabel:
                         _storeDetails[product.productId]?.price ??
                         product.mockPriceLabel,
-                    onTap: _processing ? null : () => _onProductTap(product),
+                    onTap: _processing || _realPurchaseDisabled
+                        ? null
+                        : () => _onProductTap(product),
                   ),
                 ),
               ),
@@ -334,7 +354,10 @@ class _BenefitRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
           Text(

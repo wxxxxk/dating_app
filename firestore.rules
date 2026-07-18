@@ -243,23 +243,9 @@ service cloud.firestore {
       }
 
       // users/{uid}/jellyTransactions/{txId}:
-      // 목업 결제/소모 내역. 프로토타입에서는 클라이언트 트랜잭션으로 쓰지만,
-      // 실서비스에서는 Functions에서 IAP 검증 후 Admin SDK로만 써야 한다.
-      //
-      // ⚠️ RELEASE-BLOCKER — 프로덕션 배포 전 반드시 점검할 것.
-      // 지금은 클라이언트가 이 서브컬렉션에 자유롭게 쓸 수 있다. 위
-      // users/{uid}의 jelly 필드 블랭킷 쓰기 허용과 합쳐지면, 클라이언트가
-      // 실제 결제 없이 jelly 잔액을 올리고 이 문서에 "charge" 내역을
-      // 위조해 남길 수 있다 — 실제 서버 검증(functions/index.js의
-      // verifyJellyPurchase, 현재 스켈레톤 상태) 없이 배포하면 무한 충전
-      // 취약점이 된다.
-      //
-      // 실서비스: 이 서브컬렉션 쓰기는 Cloud Functions(admin SDK)에서 IAP
-      // 영수증 검증 후에만 하도록 좁히고, 클라이언트는 read만 허용해야 한다.
-      //
-      // 배포 직전 체크리스트: 이 저장소에서 "RELEASE-BLOCKER"를 검색해
-      // verifyJellyPurchase가 실제 스토어 검증으로 교체됐는지 확인한 뒤에만
-      // 이 규칙의 client write를 제거할 것.
+      // 결제 지급 기록은 verifyJellyPurchase가 영수증 검증 후 Admin SDK로만
+      // 생성한다. 클라이언트는 기존 젤리 사용(spend) 내역만 제한적으로 만들 수
+      // 있고, charge/receipt 성격의 지급 기록은 직접 만들거나 고칠 수 없다.
       match /jellyTransactions/{txId} {
         allow read: if request.auth != null && request.auth.uid == uid;
         allow create: if request.auth != null &&

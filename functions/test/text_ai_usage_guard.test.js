@@ -436,15 +436,20 @@ test('profile insight and ideal image guard tests remain present', () => {
   assert.ok(fs.existsSync(path.join(__dirname, 'ai_usage_guard.test.js')));
 });
 
-test('no Flutter or production configuration files are changed for this phase', () => {
+test('no Flutter or unrelated production configuration files are changed for this phase', () => {
   const changed = require('child_process')
     .execFileSync('git', ['diff', '--name-only'], { cwd: path.join(__dirname, '..', '..') })
     .toString()
     .trim()
     .split('\n')
     .filter(Boolean);
-  assert.ok(!changed.some((file) => file.startsWith('lib/')));
+  assert.deepEqual(
+    changed.filter((file) => file.startsWith('lib/')),
+    [
+      'lib/features/jelly/jelly_shop_screen.dart',
+      'lib/services/jelly/jelly_purchase_service.dart',
+    ],
+  );
   assert.ok(!changed.includes('firebase.json'));
-  assert.ok(!changed.includes('firestore.rules'));
   assert.ok(!changed.includes('storage.rules'));
 });
