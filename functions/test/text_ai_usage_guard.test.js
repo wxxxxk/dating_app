@@ -445,10 +445,7 @@ test('no Flutter or unrelated production configuration files are changed for thi
     .filter(Boolean);
   assert.deepEqual(
     changed.filter((file) => file.startsWith('lib/')),
-    [
-      'lib/features/jelly/jelly_shop_screen.dart',
-      'lib/services/jelly/jelly_purchase_service.dart',
-    ],
+    [],
   );
   assert.ok(!changed.includes('firebase.json'));
   assert.ok(!changed.includes('storage.rules'));

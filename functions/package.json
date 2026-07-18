@@ -8,6 +8,8 @@
     "backfill:public-profiles:apply": "node scripts/public_profile_backfill_apply.js",
     "audit:auth-verification-badges": "node scripts/auth_verification_badge_dry_run.js",
     "audit:auth-verification-badge-blockers": "node scripts/auth_verification_badge_blocker_audit.js",
+    "audit:orphan-accounts": "node scripts/audit_orphan_accounts.js",
+    "cleanup:orphan-accounts": "node scripts/cleanup_orphan_accounts.js",
     "migrate:auth-verification-badges:apply": "node scripts/auth_verification_badge_apply.js",
     "test": "node --test test/*.test.js",
     "test:public-profile-backfill": "node --test test/public_profile_backfill.test.js test/public_profile_backfill_apply.test.js"
