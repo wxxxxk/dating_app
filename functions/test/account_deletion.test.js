@@ -54,6 +54,11 @@ class FakeDocRef {
   }
 
   async get() {
+    if (this.db.failGetPaths.has(this.path)) {
+      const error = new Error('raw get failure should not leak');
+      error.code = 'unavailable';
+      throw error;
+    }
     return new FakeSnapshot(this, this.db.docs.get(this.path));
   }
 
@@ -162,6 +167,17 @@ class FakeQuery {
   }
 
   async get() {
+    const signature = [
+      this.collectionGroup ? 'group' : 'collection',
+      this.path,
+      this.filters.map(({ field, op }) => `${field}${op}`).join('&'),
+    ].join(':');
+    const pathKey = `${this.collectionGroup ? 'group' : 'collection'}:${this.path}`;
+    if (this.db.failQuerySignatures.has(signature) || this.db.failQueryPaths.has(pathKey)) {
+      const error = new Error('raw query failure should not leak');
+      error.code = 'unavailable';
+      throw error;
+    }
     const docs = [];
     for (const [docPath, data] of this.db.docs.entries()) {
       if (!this._matchesPath(docPath)) continue;
@@ -199,6 +215,9 @@ class FakeFirestore {
     this.docs = new Map(Object.entries(seed).map(([key, value]) => [key, clone(value)]));
     this.operations = [];
     this.failCreatePaths = new Set();
+    this.failGetPaths = new Set();
+    this.failQueryPaths = new Set();
+    this.failQuerySignatures = new Set();
     this.failSetPaths = new Set();
     this._transactionQueue = Promise.resolve();
   }
@@ -262,10 +281,16 @@ class FakeBucket {
     this.files = new Map(files.map((name) => [name, { name, deleted: false }]));
     this.operations = options.operations || [];
     this.failDelete = options.failDelete || false;
+    this.failList = options.failList || false;
     this.pageSize = options.pageSize || 2;
   }
 
   async getFiles(query) {
+    if (this.failList) {
+      const error = new Error('raw storage list failure should not leak');
+      error.code = 403;
+      throw error;
+    }
     const prefix = query.prefix;
     const pageToken = Number(query.pageToken || 0);
     const names = [...this.files.keys()].filter((name) => name.startsWith(prefix));
@@ -409,13 +434,22 @@ function seed() {
 function context(options = {}) {
   const operations = [];
   const db = new FakeFirestore(options.seed || seed());
+  for (const docPath of options.failGetPaths || []) db.failGetPaths.add(docPath);
+  for (const queryPath of options.failQueryPaths || []) db.failQueryPaths.add(queryPath);
+  for (const querySignature of options.failQuerySignatures || []) {
+    db.failQuerySignatures.add(querySignature);
+  }
   const bucket = new FakeBucket(
     options.files || [
       `users/${UID}/profile/a.jpg`,
       `users/${UID}/idealType/b.png`,
       `users/${UID}2/not-owned.jpg`,
     ],
-    { operations, failDelete: options.failStorage === true },
+    {
+      operations,
+      failDelete: options.failStorage === true,
+      failList: options.failStorageList === true,
+    },
   );
   const auth = new FakeAuth();
   const ctx = {
@@ -458,6 +492,21 @@ async function runDelete(options = {}) {
 
 async function assertRejectsCode(fn, code) {
   await assert.rejects(fn, (error) => error.code === code);
+}
+
+async function assertInventoryFailureCategory(options, expectedCategory) {
+  const ctx = context(options);
+  await assertRejectsCode(() => ctx.call(), 'internal');
+  const job = ctx.db.docs.get(`_accountDeletionJobs/${UID_HASH}`);
+  assert.equal(job.status, JOB_STATUS.FAILED_RETRYABLE);
+  assert.equal(job.failedStep, 'inventory');
+  assert.equal(job.failureCategory, expectedCategory);
+  assert.equal(job.retryable, true);
+  assert.equal(ctx.db.docs.has(`users/${UID}`), true);
+  assert.deepEqual(ctx.auth.deleted, []);
+  const serialized = JSON.stringify(ctx.loggerRecords);
+  assert.equal(serialized.includes(UID), false);
+  assert.equal(serialized.includes('raw'), false);
 }
 
 test('1. unauthenticated 차단', async () => {
@@ -553,6 +602,71 @@ test('10. Storage 실패 시 이후 단계 중단', async () => {
   assert.equal(ctx.db.docs.has(`users/${UID}`), true);
   assert.deepEqual(ctx.auth.deleted, []);
   assert.equal(ctx.db.docs.get(`_accountDeletionJobs/${UID_HASH}`).status, JOB_STATUS.FAILED_RETRYABLE);
+});
+
+test('10a. inventory substep 실패 category를 안전하게 기록한다', async () => {
+  const cases = [
+    [
+      { failGetPaths: [`users/${UID}`] },
+      'inventory_user_failed',
+    ],
+    [
+      { failGetPaths: [`publicProfiles/${UID}`] },
+      'inventory_public_profile_failed',
+    ],
+    [
+      { failQuerySignatures: [`collection:users/${UID}/dailyFortune:`] },
+      'inventory_daily_fortune_failed',
+    ],
+    [
+      { failQuerySignatures: [`collection:users/${UID}/swipes:`] },
+      'inventory_outbound_swipes_failed',
+    ],
+    [
+      { failQuerySignatures: [`collection:users/${UID}/blocks:`] },
+      'inventory_outbound_blocks_failed',
+    ],
+    [
+      { failQuerySignatures: [`collection:users/${UID}/jellyTransactions:`] },
+      'inventory_jelly_transactions_failed',
+    ],
+    [
+      { failQuerySignatures: ['group:swipes:targetUid=='] },
+      'inventory_inbound_swipes_failed',
+    ],
+    [
+      { failQuerySignatures: ['group:blocks:blockedUid=='] },
+      'inventory_inbound_blocks_failed',
+    ],
+    [
+      { failQuerySignatures: ['collection:matches:participantsarray-contains'] },
+      'inventory_matches_failed',
+    ],
+    [
+      { failQuerySignatures: ['collection:reports:reporterUid=='] },
+      'inventory_reports_reporter_failed',
+    ],
+    [
+      { failQuerySignatures: ['collection:reports:reportedUid=='] },
+      'inventory_reports_reported_failed',
+    ],
+    [
+      { failQuerySignatures: ['collection:_purchaseReceipts:uid=='] },
+      'inventory_receipts_failed',
+    ],
+    [
+      { failStorageList: true },
+      'inventory_storage_list_failed',
+    ],
+    [
+      { failQuerySignatures: ['collection:matches/m1/messages:senderId=='] },
+      'inventory_match_messages_failed',
+    ],
+  ];
+
+  for (const [options, category] of cases) {
+    await assertInventoryFailureCategory(options, category);
+  }
 });
 
 test('11. outbound swipes/blocks 삭제', async () => {

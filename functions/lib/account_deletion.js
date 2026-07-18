@@ -215,11 +215,20 @@ async function releaseJobLease({ jobRef, leaseOwner, fieldDelete }) {
   }, { merge: true });
 }
 
-async function listAllStorageFiles(bucket, prefix) {
+async function listAllStorageFiles(bucket, prefix, options = {}) {
   const files = [];
   let query = { prefix, autoPaginate: false };
   do {
-    const [pageFiles, nextQuery] = await bucket.getFiles(query);
+    let pageFiles;
+    let nextQuery;
+    try {
+      [pageFiles, nextQuery] = await bucket.getFiles(query);
+    } catch (error) {
+      if (options.failureCategory) {
+        fail('internal', options.failureCategory, true);
+      }
+      throw error;
+    }
     for (const file of pageFiles || []) {
       if (!String(file.name || '').startsWith(prefix)) {
         fail('failed-precondition', 'unsafe_storage_path', false);
@@ -229,6 +238,15 @@ async function listAllStorageFiles(bucket, prefix) {
     query = nextQuery || null;
   } while (query);
   return files;
+}
+
+async function inventoryRead(category, fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof AccountDeletionError) throw error;
+    fail('internal', category, true);
+  }
 }
 
 async function deleteStoragePrefix({ bucket, uid }) {
@@ -738,31 +756,57 @@ async function buildDeletionInventory({ db, uid, uidHash, bucket }) {
     reportsTargetingSnap,
     purchaseSnap,
   ] = await Promise.all([
-    userRef.get(),
-    db.collection('publicProfiles').doc(uid).get(),
-    userRef.collection('dailyFortune').get(),
-    userRef.collection('swipes').get(),
-    userRef.collection('blocks').get(),
-    userRef.collection('jellyTransactions').get(),
-    db.collectionGroup('swipes').where('targetUid', '==', uid).get(),
-    db.collectionGroup('blocks').where('blockedUid', '==', uid).get(),
-    db.collection('matches').where('participants', 'array-contains', uid).get(),
-    db.collection('reports').where('reporterUid', '==', uid).get(),
-    db.collection('reports').where('reportedUid', '==', uid).get(),
-    db.collection('_purchaseReceipts').where('uid', '==', uid).get(),
+    inventoryRead('inventory_user_failed', () => userRef.get()),
+    inventoryRead(
+      'inventory_public_profile_failed',
+      () => db.collection('publicProfiles').doc(uid).get(),
+    ),
+    inventoryRead('inventory_daily_fortune_failed', () => userRef.collection('dailyFortune').get()),
+    inventoryRead('inventory_outbound_swipes_failed', () => userRef.collection('swipes').get()),
+    inventoryRead('inventory_outbound_blocks_failed', () => userRef.collection('blocks').get()),
+    inventoryRead(
+      'inventory_jelly_transactions_failed',
+      () => userRef.collection('jellyTransactions').get(),
+    ),
+    inventoryRead(
+      'inventory_inbound_swipes_failed',
+      () => db.collectionGroup('swipes').where('targetUid', '==', uid).get(),
+    ),
+    inventoryRead(
+      'inventory_inbound_blocks_failed',
+      () => db.collectionGroup('blocks').where('blockedUid', '==', uid).get(),
+    ),
+    inventoryRead(
+      'inventory_matches_failed',
+      () => db.collection('matches').where('participants', 'array-contains', uid).get(),
+    ),
+    inventoryRead(
+      'inventory_reports_reporter_failed',
+      () => db.collection('reports').where('reporterUid', '==', uid).get(),
+    ),
+    inventoryRead(
+      'inventory_reports_reported_failed',
+      () => db.collection('reports').where('reportedUid', '==', uid).get(),
+    ),
+    inventoryRead(
+      'inventory_receipts_failed',
+      () => db.collection('_purchaseReceipts').where('uid', '==', uid).get(),
+    ),
   ]);
 
   const storageFiles = bucket
-    ? await listAllStorageFiles(bucket, `users/${uid}/`)
+    ? await listAllStorageFiles(bucket, `users/${uid}/`, {
+      failureCategory: 'inventory_storage_list_failed',
+    })
     : [];
 
   const matchDocs = matchesSnap.docs || [];
   let messageCount = 0;
   for (const matchDoc of matchDocs) {
-    const messageSnap = await matchDoc.ref
-      .collection('messages')
-      .where('senderId', '==', uid)
-      .get();
+    const messageSnap = await inventoryRead(
+      'inventory_match_messages_failed',
+      () => matchDoc.ref.collection('messages').where('senderId', '==', uid).get(),
+    );
     messageCount += (messageSnap.docs || []).length;
   }
 
