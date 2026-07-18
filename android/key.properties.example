@@ -1,0 +1,8 @@
+# Android release signing secrets — LOCAL ONLY.
+# 이 파일은 예시다. 실제 값은 android/key.properties 에 넣으며 그 파일은 Git 에 커밋되지 않는다.
+# storeFile 은 저장소 밖 경로를 권장한다. 예: ~/Developer/_secrets/cvr-dating-app/upload-keystore.jks
+# 실제 경로/alias/비밀번호를 이 예시 파일에 절대 적지 않는다.
+storeFile=/absolute/path/outside/repository/upload-keystore.jks
+storePassword=REPLACE_LOCALLY
+keyAlias=REPLACE_LOCALLY
+keyPassword=REPLACE_LOCALLY
