@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/profile_options.dart';
+import '../../core/constants/value_questions.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
@@ -13,6 +14,7 @@ import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../onboarding/tag_selection_step.dart';
+import 'value_answers_edit_screen.dart';
 import 'widgets/job_picker.dart';
 
 /// 최대 사진 수 — 메인 1장 + 일상 3장. 온보딩(photo_upload_step.dart)과 동일한
@@ -59,6 +61,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late List<String> _personalityTags;
   late List<String> _idealTags;
   late List<String> _photoUrls;
+  // 가치관 답변(questionKey → answerKey). 원본을 직접 건드리지 않도록
+  // initState에서 방어 복사한다. 전용 화면(ValueAnswersEditScreen)에서
+  // 임시로 편집한 뒤, "저장" 버튼에서만 dual-write로 반영된다.
+  late Map<String, String> _valueAnswers;
 
   bool _isLoading = false;
   // null이면 사진 작업 중이 아님. 값이 있으면 해당 인덱스 슬롯이 업로드/삭제 중.
@@ -87,6 +93,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _interests = List<String>.from(p.interests);
     _personalityTags = List<String>.from(p.personalityTags);
     _idealTags = List<String>.from(p.idealTags);
+    _valueAnswers = Map<String, String>.from(p.valueAnswers);
   }
 
   @override
@@ -141,6 +148,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         interests: _interests,
         personalityTags: _personalityTags,
         idealTags: _idealTags,
+        valueAnswers: Map<String, String>.from(_valueAnswers),
         updatedAt: DateTime.now(),
       );
       await widget.firestoreService.updateEditableUserProfile(updatedProfile);
@@ -488,6 +496,25 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     );
   }
 
+  // ── 가치관 전용 편집 페이지로 이동 ──────────────────────────────────────
+
+  /// 가치관 전용 화면을 열고, 완료 결과(map)를 임시 상태에만 반영한다.
+  /// 여기서는 Firestore write를 하지 않는다 — 실제 저장은 [_save]에서만.
+  Future<void> _openValueAnswersPage() async {
+    final result = await Navigator.push<Map<String, String>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ValueAnswersEditScreen(
+          initialAnswers: Map<String, String>.from(_valueAnswers),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _valueAnswers = Map<String, String>.from(result);
+    });
+  }
+
   // ── UI 빌더 ──────────────────────────────────────────────────────────────
 
   @override
@@ -741,6 +768,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
+
+                // ── 가치관 ────────────────────────────────────────────────
+                PremiumSectionCard(
+                  title: '가치관',
+                  subtitle: '연애와 관계에서 중요하게 생각하는 방식을 알려주세요',
+                  child: _ValueAnswersSummary(
+                    answers: _valueAnswers,
+                    onTap: _openValueAnswersPage,
+                  ),
+                ),
                 const SizedBox(height: 32),
 
                 PrimaryButton(
@@ -887,6 +925,107 @@ class _TagChipDisplay extends StatelessWidget {
             ),
           )
           .toList(),
+    );
+  }
+}
+
+/// 가치관 카드 본문. 응답 수 요약 + 앞쪽 답변 미리보기 + 진입 버튼을 담는다.
+/// 카드 전체가 탭 영역이며, 탭하면 전용 편집 화면으로 이동한다.
+class _ValueAnswersSummary extends StatelessWidget {
+  final Map<String, String> answers;
+  final VoidCallback onTap;
+
+  const _ValueAnswersSummary({required this.answers, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    // catalog 순서로, 현재 질문이면서 answer가 유효한 것만 요약/카운트한다.
+    // unknown question key와 invalid answer는 요약에 포함하지 않는다.
+    final answered = <MapEntry<String, String>>[];
+    for (final question in ValueQuestions.all) {
+      final answer = answers[question.key];
+      if (answer != null &&
+          ValueQuestions.isValidAnswer(question.key, answer)) {
+        answered.add(MapEntry(question.key, answer));
+      }
+    }
+    final total = ValueQuestions.all.length;
+    final count = answered.length;
+    final hasAny = count > 0;
+
+    const maxPreview = 2;
+    final preview = answered.take(maxPreview).toList();
+    final remaining = count - preview.length;
+
+    return InkWell(
+      key: const ValueKey('value-answers-edit-entry'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.button),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!hasAny)
+              const Text(
+                '아직 답변한 가치관 질문이 없어요',
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+              )
+            else ...[
+              Text(
+                '$count / $total 답변',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.mintDeep,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final entry in preview)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${ValueQuestions.byKey(entry.key)!.profileLabel} · '
+                    '${ValueQuestions.answerLabel(entry.key, entry.value)!}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              if (remaining > 0)
+                Text(
+                  '외 $remaining개',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  hasAny ? '수정하기' : '답변하기',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
