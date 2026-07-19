@@ -117,6 +117,15 @@ const CHARM_REPORT_USAGE_POLICY = createUsagePolicy({
   leaseTtlMs: 90 * 1000,
 });
 
+const PROFILE_KEYWORD_SUMMARY_USAGE_POLICY = createUsagePolicy({
+  functionName: 'generateProfileKeywordSummary',
+  hourlyLimit: 6,
+  dailyLimit: 20,
+  cooldownMs: 20 * 1000,
+  refreshCooldownMs: 24 * 60 * 60 * 1000,
+  leaseTtlMs: 60 * 1000,
+});
+
 const SLOT_DECISION = Object.freeze({
   ALLOW: 'ALLOW', // 새 외부 AI 호출 허용 (quota 소비됨)
   RETURN_CACHE: 'RETURN_CACHE', // refresh cooldown 미충족 — 캐시로
@@ -409,6 +418,7 @@ module.exports = {
   MATCH_TEXT_AI_USAGE_POLICIES,
   SELF_TEXT_AI_USAGE_POLICIES,
   CHARM_REPORT_USAGE_POLICY,
+  PROFILE_KEYWORD_SUMMARY_USAGE_POLICY,
   SLOT_DECISION,
   SLOT_OUTCOME,
   sanitizeCount,

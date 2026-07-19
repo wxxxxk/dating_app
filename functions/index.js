@@ -24,7 +24,12 @@ const {
   MATCH_TEXT_AI_USAGE_POLICIES,
   SELF_TEXT_AI_USAGE_POLICIES,
   CHARM_REPORT_USAGE_POLICY,
+  PROFILE_KEYWORD_SUMMARY_USAGE_POLICY,
 } = require('./lib/ai_usage_guard');
+const {
+  PROFILE_KEYWORD_SUMMARY_MODEL,
+  generateProfileKeywordSummaryCore,
+} = require('./lib/profile_keyword_summary');
 const {
   assertProfileInsightAccess,
   buildInsightSourceData,
@@ -94,6 +99,12 @@ const textAiUsageGuards = Object.freeze({
     policy: CHARM_REPORT_USAGE_POLICY,
     logger: console,
   }),
+});
+
+const profileKeywordSummaryUsageGuard = createAiUsageGuard({
+  db,
+  policy: PROFILE_KEYWORD_SUMMARY_USAGE_POLICY,
+  logger: console,
 });
 
 const INVALID_FCM_TOKEN_CODES = new Set([
@@ -430,6 +441,29 @@ async function callOpenAiForNarrative({ systemPrompt, userPayload }) {
     model: FORTUNE_MODEL,
     response_format: { type: 'json_object' },
     temperature: 0.8,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: JSON.stringify(userPayload) },
+    ],
+  });
+
+  const raw = completion.choices?.[0]?.message?.content;
+  if (!raw) {
+    throw new HttpsError('internal', 'GPT 응답이 비어 있습니다.');
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new HttpsError('internal', 'GPT 응답을 JSON으로 해석하지 못했습니다.');
+  }
+}
+
+async function callOpenAiForProfileKeywordSummary({ systemPrompt, userPayload }) {
+  const client = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
+  const completion = await client.chat.completions.create({
+    model: PROFILE_KEYWORD_SUMMARY_MODEL,
+    response_format: { type: 'json_object' },
+    temperature: 0.3,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: JSON.stringify(userPayload) },
@@ -940,6 +974,54 @@ function tagLabels(keys) {
     .filter(Boolean)
     .slice(0, 8);
 }
+
+function parseProfileKeywordSummaryRequestData(data) {
+  const payload = data === undefined || data === null ? {} : data;
+  if (
+    typeof payload !== 'object' ||
+    Array.isArray(payload)
+  ) {
+    throw new HttpsError('invalid-argument', '요청 형식이 올바르지 않습니다.');
+  }
+
+  const keys = Object.keys(payload);
+  if (keys.some((key) => key !== 'refresh')) {
+    throw new HttpsError('invalid-argument', '지원하지 않는 요청 필드입니다.');
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'refresh') &&
+    typeof payload.refresh !== 'boolean') {
+    throw new HttpsError('invalid-argument', 'refresh는 boolean이어야 합니다.');
+  }
+
+  return { refresh: payload.refresh === true };
+}
+
+exports.generateProfileKeywordSummary = onCall(
+  { secrets: [OPENAI_API_KEY] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+    }
+
+    const { refresh } = parseProfileKeywordSummaryRequestData(request.data);
+    const uid = request.auth.uid;
+    return generateProfileKeywordSummaryCore({
+      uid,
+      refresh,
+      publicProfileRef: db.collection('publicProfiles').doc(uid),
+      guard: profileKeywordSummaryUsageGuard,
+      callModel: callOpenAiForProfileKeywordSummary,
+      tagLabels,
+      timestampNow: () => admin.firestore.Timestamp.now(),
+      createError: (code, message) => new HttpsError(code, message),
+      logEvent: (level, category, fields = {}) =>
+        logTextAiEvent(level, 'generateProfileKeywordSummary', category, {
+          callerHash: safeUidHash(uid),
+          ...fields,
+        }),
+    });
+  },
+);
 
 /** users/{uid} 문서에서 GPT 입력에 필요한 공개 프로필 조각만 뽑는다. */
 function icebreakerProfileFromSnap(uid, snap) {

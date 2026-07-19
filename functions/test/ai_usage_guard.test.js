@@ -7,6 +7,8 @@ const path = require('node:path');
 
 const {
   PROFILE_INSIGHT_USAGE_POLICY,
+  CHARM_REPORT_USAGE_POLICY,
+  PROFILE_KEYWORD_SUMMARY_USAGE_POLICY,
   SLOT_DECISION,
   SLOT_OUTCOME,
   sanitizeCount,
@@ -19,8 +21,60 @@ const {
   resolveSlotOutcome,
   createAiUsageGuard,
 } = require('../lib/ai_usage_guard');
+const {
+  PROFILE_KEYWORD_SUMMARY_MODEL,
+  PROFILE_KEYWORD_SUMMARY_PROMPT_VERSION,
+  buildProfileKeywordGenerationInputHash,
+} = require('../lib/profile_keyword_summary');
 
 const POLICY = PROFILE_INSIGHT_USAGE_POLICY;
+
+test('profile keyword summary usage policy export and limits are stable', () => {
+  assert.equal(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.functionName, 'generateProfileKeywordSummary');
+  assert.equal(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.hourlyLimit, 6);
+  assert.equal(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.dailyLimit, 20);
+  assert.equal(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.cooldownMs, 20 * 1000);
+  assert.equal(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.refreshCooldownMs, 24 * 60 * 60 * 1000);
+  assert.equal(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.leaseTtlMs, 60 * 1000);
+  assert.ok(Object.isFrozen(PROFILE_KEYWORD_SUMMARY_USAGE_POLICY));
+
+  assert.equal(PROFILE_INSIGHT_USAGE_POLICY.hourlyLimit, 10);
+  assert.equal(CHARM_REPORT_USAGE_POLICY.dailyLimit, 15);
+});
+
+test('profile keyword summary lease id is deterministic and separated by source/model/version input hash', () => {
+  const sourceHashA = 'a'.repeat(64);
+  const sourceHashB = 'b'.repeat(64);
+  const inputHashA1 = buildProfileKeywordGenerationInputHash(sourceHashA);
+  const inputHashA2 = buildProfileKeywordGenerationInputHash(sourceHashA);
+  const inputHashB = buildProfileKeywordGenerationInputHash(sourceHashB);
+  assert.equal(inputHashA1, inputHashA2);
+  assert.notEqual(inputHashA1, inputHashB);
+  assert.match(inputHashA1, /^[0-9a-f]{64}$/);
+
+  const lease1 = buildLeaseId(
+    PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.functionName,
+    'caller',
+    null,
+    inputHashA1,
+  );
+  const lease2 = buildLeaseId(
+    PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.functionName,
+    'caller',
+    null,
+    inputHashA2,
+  );
+  const lease3 = buildLeaseId(
+    PROFILE_KEYWORD_SUMMARY_USAGE_POLICY.functionName,
+    'caller',
+    null,
+    inputHashB,
+  );
+  assert.equal(lease1, lease2);
+  assert.notEqual(lease1, lease3);
+  assert.equal(PROFILE_KEYWORD_SUMMARY_MODEL, 'gpt-4o-mini');
+  assert.equal(PROFILE_KEYWORD_SUMMARY_PROMPT_VERSION, 1);
+});
 
 // ---------------------------------------------------------------------------
 // Fake Firestore — path 기반 in-memory store + optimistic concurrency.
