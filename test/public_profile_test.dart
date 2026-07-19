@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dating_app/models/profile_story.dart';
 import 'package:dating_app/models/public_profile.dart';
 import 'package:dating_app/models/user_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +32,7 @@ UserProfile buildUserProfile({
   int jelly = 999,
   bool likesUnlocked = true,
   Map<String, String> valueAnswers = const {},
+  List<ProfileStory> profileStories = const [],
 }) {
   return UserProfile(
     uid: 'user-1',
@@ -59,6 +61,7 @@ UserProfile buildUserProfile({
     boostUntil: boostUntil,
     likesUnlocked: likesUnlocked,
     valueAnswers: valueAnswers,
+    profileStories: profileStories,
   );
 }
 
@@ -422,6 +425,133 @@ void main() {
 
     test('currentSchemaVersion은 1을 유지한다', () {
       expect(PublicProfile.currentSchemaVersion, 1);
+    });
+  });
+
+  group('profileStories 공개 계약', () {
+    const stories = [
+      ProfileStory(promptKey: 'happy_moment', answer: '맛있는 걸 먹을 때'),
+      ProfileStory(promptKey: 'weekend', answer: '늦잠 자고 산책하기'),
+      ProfileStory(promptKey: 'date_idea', answer: '전시 보고 커피 마시기'),
+    ];
+
+    test('기본값은 빈 리스트다', () {
+      expect(PublicProfile(uid: 'u').profileStories, isEmpty);
+    });
+
+    test('fromUserProfile이 story를 순서대로 복사한다', () {
+      final public = PublicProfile.fromUserProfile(
+        buildUserProfile(profileStories: stories),
+      );
+
+      expect(public.profileStories, stories);
+      expect(public.profileStories.map((story) => story.promptKey), [
+        'happy_moment',
+        'weekend',
+        'date_idea',
+      ]);
+    });
+
+    test('fromMap이 정상 story를 파싱하고 malformed entry는 제외한다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: const {
+          'profileStories': [
+            {'promptKey': 'happy_moment', 'answer': '첫 답변'},
+            {'promptKey': 'broken'},
+            {'promptKey': 'weekend', 'answer': '두 번째 답변'},
+          ],
+        },
+      );
+
+      expect(public.profileStories, [
+        const ProfileStory(promptKey: 'happy_moment', answer: '첫 답변'),
+        const ProfileStory(promptKey: 'weekend', answer: '두 번째 답변'),
+      ]);
+    });
+
+    test('fromMap은 unknown promptKey를 구조적으로 보존한다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: const {
+          'profileStories': [
+            {'promptKey': 'future_prompt', 'answer': '미래 답변'},
+          ],
+        },
+      );
+
+      expect(public.profileStories.single.promptKey, 'future_prompt');
+    });
+
+    test('toOwnerEditableFirestore가 story payload를 포함한다', () {
+      final payload = PublicProfile.fromUserProfile(
+        buildUserProfile(profileStories: stories),
+      ).toOwnerEditableFirestore();
+
+      expect(payload['profileStories'], [
+        {'promptKey': 'happy_moment', 'answer': '맛있는 걸 먹을 때'},
+        {'promptKey': 'weekend', 'answer': '늦잠 자고 산책하기'},
+        {'promptKey': 'date_idea', 'answer': '전시 보고 커피 마시기'},
+      ]);
+    });
+
+    test('ownerEditableKeys/backfillKeys에는 포함, serverManagedKeys에는 미포함', () {
+      expect(PublicProfile.ownerEditableKeys, contains('profileStories'));
+      expect(PublicProfile.backfillKeys, contains('profileStories'));
+      expect(
+        PublicProfile.serverManagedKeys,
+        isNot(contains('profileStories')),
+      );
+    });
+
+    test('외부 list 변경과 payload 변경이 모델 내부 상태를 바꾸지 않는다', () {
+      final source = [const ProfileStory(promptKey: 'weekend', answer: '산책')];
+      final public = PublicProfile(uid: 'u', profileStories: source);
+      final payload = public.toOwnerEditableFirestore();
+
+      source.add(const ProfileStory(promptKey: 'date_idea', answer: '전시'));
+      (payload['profileStories'] as List).add({
+        'promptKey': 'happy_moment',
+        'answer': '변조',
+      });
+
+      expect(public.profileStories, [
+        const ProfileStory(promptKey: 'weekend', answer: '산책'),
+      ]);
+      expect(() => public.profileStories.clear(), throwsUnsupportedError);
+    });
+
+    test('profileStories가 있어도 비공개/금지 key는 payload에 추가되지 않는다', () {
+      final payload = PublicProfile.fromUserProfile(
+        buildUserProfile(profileStories: stories),
+      ).toOwnerEditableFirestore();
+      for (final forbidden in _forbiddenKeys) {
+        expect(
+          payload.containsKey(forbidden),
+          isFalse,
+          reason: '$forbidden 이(가) owner payload에 노출됨',
+        );
+      }
+    });
+
+    test('schemaVersion은 1을 유지한다', () {
+      final public = PublicProfile.fromUserProfile(
+        buildUserProfile(profileStories: stories),
+      );
+
+      expect(public.schemaVersion, 1);
+    });
+
+    test('기존 valueAnswers 계약은 유지된다', () {
+      final payload = PublicProfile.fromUserProfile(
+        buildUserProfile(
+          valueAnswers: const {'date_style': 'foodie'},
+          profileStories: stories,
+        ),
+      ).toOwnerEditableFirestore();
+
+      expect(payload['valueAnswers'], {'date_style': 'foodie'});
+      expect(payload['profileStories'], isNotEmpty);
     });
   });
 }

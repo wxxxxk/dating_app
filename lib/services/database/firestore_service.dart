@@ -46,6 +46,7 @@ class FirestoreService {
     'idealTags',
     'relationshipGoal',
     'valueAnswers',
+    'profileStories',
     'updatedAt',
   };
 
@@ -74,6 +75,7 @@ class FirestoreService {
     'idealTags',
     'relationshipGoal',
     'valueAnswers',
+    'profileStories',
     'location',
     'verifications',
     'discoveryFilter',
@@ -129,6 +131,9 @@ class FirestoreService {
       'idealTags': profile.idealTags,
       'relationshipGoal': profile.relationshipGoal,
       'valueAnswers': Map<String, String>.from(profile.valueAnswers),
+      'profileStories': profile.profileStories
+          .map((story) => story.toMap())
+          .toList(),
       'updatedAt': Timestamp.fromDate(profile.updatedAt),
     };
   }
@@ -157,6 +162,9 @@ class FirestoreService {
       'idealTags': profile.idealTags,
       'relationshipGoal': profile.relationshipGoal,
       'valueAnswers': Map<String, String>.from(profile.valueAnswers),
+      'profileStories': profile.profileStories
+          .map((story) => story.toMap())
+          .toList(),
       if (profile.location != null) 'location': profile.location!.toFirestore(),
       'verifications': const VerificationStatus().toFirestore(),
       'discoveryFilter': profile.discoveryFilter.toFirestore(),

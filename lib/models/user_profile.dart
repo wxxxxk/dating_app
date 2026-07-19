@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'profile_story.dart';
+
 /// Firestore 원시 값을 안전한 `Map<String, String>`으로 변환한다.
 ///
 /// - 값이 Map이 아니면 빈 map을 반환한다(필드 없는 기존 문서 호환).
@@ -250,11 +252,12 @@ class UserProfile {
   final bool likesUnlocked;
 
   // ── 가치관 답변(questionKey → answerKey) — 없으면 빈 map. ──
-  // 읽기 계약만 이번 단계에서 추가한다. 쓰기(toFirestore)·공개(publicProfiles)·
-  // Rules는 다음 단계에서 함께 활성화한다.
   final Map<String, String> valueAnswers;
 
-  const UserProfile({
+  // ── 이야기 카드(promptKey + answer) — 없으면 빈 list. 표시 순서 보존. ──
+  final List<ProfileStory> profileStories;
+
+  UserProfile({
     required this.uid,
     required this.displayName,
     required this.birthDate,
@@ -283,7 +286,8 @@ class UserProfile {
     this.boostUntil,
     this.likesUnlocked = false,
     this.valueAnswers = const {},
-  });
+    List<ProfileStory> profileStories = const [],
+  }) : profileStories = List<ProfileStory>.unmodifiable(profileStories);
 
   /// 프로필 완성도(0~100). 새 Firestore 필드 없이 기존 데이터만으로 계산한다.
   ///
@@ -398,6 +402,8 @@ class UserProfile {
       likesUnlocked: d['likesUnlocked'] == true,
       // 필드가 없는 기존 문서는 빈 map으로 처리한다.
       valueAnswers: _stringMap(d['valueAnswers']),
+      // 필드가 없는 기존 문서는 빈 list로 처리한다.
+      profileStories: normalizeProfileStories(d['profileStories']),
     );
   }
 
@@ -440,6 +446,9 @@ class UserProfile {
       // 가치관 답변(questionKey → answerKey). 항상 map으로 저장한다(빈 map 허용).
       // 외부에서 전달된 mutable map을 그대로 payload에 노출하지 않도록 복사한다.
       'valueAnswers': Map<String, String>.from(valueAnswers),
+      // 이야기 카드. 항상 list로 저장한다(빈 list 허용).
+      // 각 item map도 새로 만들어 Firestore payload가 모델 내부 객체를 공유하지 않게 한다.
+      'profileStories': profileStories.map((story) => story.toMap()).toList(),
     };
   }
 
@@ -475,6 +484,7 @@ class UserProfile {
     bool? clearBoostUntil,
     bool? likesUnlocked,
     Map<String, String>? valueAnswers,
+    List<ProfileStory>? profileStories,
   }) {
     return UserProfile(
       uid: uid,
@@ -507,6 +517,7 @@ class UserProfile {
           : boostUntil ?? this.boostUntil,
       likesUnlocked: likesUnlocked ?? this.likesUnlocked,
       valueAnswers: valueAnswers ?? this.valueAnswers,
+      profileStories: profileStories ?? this.profileStories,
     );
   }
 }

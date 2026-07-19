@@ -1019,8 +1019,10 @@ test('66. 정상 users/publicProfiles dual-write batch 허용', async () => {
   const userRef = doc(db, 'users', OWNER);
   const publicRef = doc(db, 'publicProfiles', OWNER);
   const batch = writeBatch(db);
-  batch.set(userRef, validUserDoc());
-  batch.set(publicRef, validOwnerProfile(), { merge: true });
+  batch.set(userRef, validUserDoc({ profileStories: VALID_STORIES }));
+  batch.set(publicRef, validOwnerProfile({ profileStories: VALID_STORIES }), {
+    merge: true,
+  });
   await assertSucceeds(batch.commit());
 });
 
@@ -1199,6 +1201,14 @@ const VALID_ANSWERS = {
   affection_expression: 'words',
   life_rhythm: 'morning',
 };
+
+// ── profileStories (Phase 1-2-B) ───────────────────────────────────────────
+// 사용자 작성형 이야기 카드: 최대 3개, 고정 promptKey, answer 1~100자.
+
+const VALID_STORY_1 = { promptKey: 'happy_moment', answer: '맛있는 걸 먹을 때' };
+const VALID_STORY_2 = { promptKey: 'weekend', answer: '늦잠 자고 산책하기' };
+const VALID_STORY_3 = { promptKey: 'date_idea', answer: '전시 보고 커피 마시기' };
+const VALID_STORIES = [VALID_STORY_1, VALID_STORY_2, VALID_STORY_3];
 
 test('74. users create: valueAnswers 없어도 허용(구버전 호환)', async () => {
   await assertSucceeds(
@@ -1402,6 +1412,277 @@ test('93. publicProfiles update: valueAnswers와 server-managed 필드 혼합 �
     updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
       valueAnswers: VALID_ANSWERS,
       rankingBoostUntil: Timestamp.now(),
+    }),
+  );
+});
+
+// ── profileStories (Phase 1-2-B) ───────────────────────────────────────────
+
+test('94. users create/update: 빈 profileStories list 허용', async () => {
+  await assertSucceeds(
+    setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc({ profileStories: [] })),
+  );
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      profileStories: [],
+      updatedAt: serverTimestamp(),
+    }),
+  );
+});
+
+test('95. publicProfiles create/update: 빈 profileStories list 허용', async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ profileStories: [] }),
+    ),
+  );
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      profileStories: [],
+    }),
+  );
+});
+
+test('96. users/publicProfiles create: 유효 story 1~3개 허용', async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: [VALID_STORY_1] }),
+    ),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ profileStories: [VALID_STORY_1, VALID_STORY_2] }),
+    ),
+  );
+  await testEnv.clearFirestore();
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: VALID_STORIES }),
+    ),
+  );
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ profileStories: VALID_STORIES }),
+    ),
+  );
+});
+
+test('97. profileStories answer 정확히 100자 허용', async () => {
+  await assertSucceeds(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({
+        profileStories: [{ promptKey: 'happy_moment', answer: '가'.repeat(100) }],
+      }),
+    ),
+  );
+});
+
+test('98. profileStories 필드 부재 legacy create/update 허용', async () => {
+  await assertSucceeds(setDoc(doc(ownerDb(), 'users', OWNER), validUserDoc()));
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), { displayName: '수정' }),
+  );
+});
+
+test('99. profileStories와 다른 editable field를 함께 update 허용', async () => {
+  await seedUser(OWNER, existingUserDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      bio: '새 소개',
+      profileStories: [VALID_STORY_1, VALID_STORY_2],
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      bio: '새 소개',
+      profileStories: [VALID_STORY_1, VALID_STORY_2],
+    }),
+  );
+});
+
+test('100. owner 자신의 users/publicProfiles profileStories dual-write batch 허용', async () => {
+  const db = ownerDb();
+  const batch = writeBatch(db);
+  batch.set(
+    doc(db, 'users', OWNER),
+    validUserDoc({ profileStories: VALID_STORIES }),
+  );
+  batch.set(
+    doc(db, 'publicProfiles', OWNER),
+    validOwnerProfile({ profileStories: VALID_STORIES }),
+    { merge: true },
+  );
+  await assertSucceeds(batch.commit());
+});
+
+test('101. profileStories가 list가 아니거나 null이면 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: { promptKey: 'weekend' } }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ profileStories: null }),
+    ),
+  );
+});
+
+test('102. profileStories 4개 story 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({
+        profileStories: [
+          VALID_STORY_1,
+          VALID_STORY_2,
+          VALID_STORY_3,
+          { promptKey: 'comfort_food', answer: '떡볶이' },
+        ],
+      }),
+    ),
+  );
+});
+
+test('103. profileStories unknown promptKey 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({
+        profileStories: [{ promptKey: 'unknown_prompt', answer: '답변' }],
+      }),
+    ),
+  );
+});
+
+test('104. profileStories 빈 answer 또는 101자 answer 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: [{ promptKey: 'weekend', answer: '' }] }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        profileStories: [{ promptKey: 'weekend', answer: '가'.repeat(101) }],
+      }),
+    ),
+  );
+});
+
+test('105. profileStories promptKey/answer 타입 오류 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: [{ promptKey: 1, answer: '답변' }] }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        profileStories: [{ promptKey: 'weekend', answer: false }],
+      }),
+    ),
+  );
+});
+
+test('106. profileStories item 필드 누락 또는 extra field 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: [{ promptKey: 'weekend' }] }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        profileStories: [
+          { promptKey: 'weekend', answer: '답변', unexpected: true },
+        ],
+      }),
+    ),
+  );
+});
+
+test('107. profileStories duplicate promptKey 2개/3개 중 일부 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({
+        profileStories: [
+          { promptKey: 'weekend', answer: '첫 답변' },
+          { promptKey: 'weekend', answer: '두 번째 답변' },
+        ],
+      }),
+    ),
+  );
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({
+        profileStories: [
+          VALID_STORY_1,
+          VALID_STORY_2,
+          { promptKey: 'happy_moment', answer: '중복' },
+        ],
+      }),
+    ),
+  );
+});
+
+test('108. profileStories 문자열 item 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OWNER),
+      validUserDoc({ profileStories: ['weekend'] }),
+    ),
+  );
+});
+
+test('109. profileStories 필드 삭제는 거부(초기화는 [] 사용)', async () => {
+  await seedUser(OWNER, existingUserDoc({ profileStories: VALID_STORIES }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'users', OWNER), {
+      profileStories: deleteField(),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await seedPublic(OWNER, fullExistingPublicDoc({ profileStories: VALID_STORIES }));
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      profileStories: deleteField(),
+    }),
+  );
+});
+
+test('110. 다른 UID users/publicProfiles profileStories write 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'users', OTHER),
+      validUserDoc({ profileStories: VALID_STORIES }),
+    ),
+  );
+  await seedPublic(OTHER, fullExistingPublicDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OTHER), {
+      profileStories: VALID_STORIES,
     }),
   );
 });

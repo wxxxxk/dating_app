@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'profile_story.dart';
 import 'user_profile.dart';
 
 /// 유한한 double만 통과시킨다. NaN/Infinity, 숫자가 아닌 값은 null로 처리한다.
@@ -160,6 +161,7 @@ class PublicProfile {
     'idealTags',
     'relationshipGoal',
     'valueAnswers',
+    'profileStories',
     'coarseLocation',
   };
 
@@ -204,6 +206,9 @@ class PublicProfile {
   /// 가치관 답변(questionKey → answerKey). 비민감 취향 데이터라 공개 문서에 포함.
   final Map<String, String> valueAnswers;
 
+  /// 사용자 작성형 이야기 카드. 비민감 공개 콘텐츠라 공개 문서에 포함.
+  final List<ProfileStory> profileStories;
+
   final CoarseLocation? coarseLocation;
 
   // ── server-managed 필드(공개 read, 일반 편집 불가) ───────────────────────
@@ -232,6 +237,7 @@ class PublicProfile {
     List<String> idealTags = const [],
     this.relationshipGoal,
     Map<String, String> valueAnswers = const {},
+    List<ProfileStory> profileStories = const [],
     this.coarseLocation,
     this.verifications = const VerificationStatus(),
     this.rankingBoostUntil,
@@ -241,7 +247,8 @@ class PublicProfile {
        interests = List<String>.unmodifiable(interests),
        personalityTags = List<String>.unmodifiable(personalityTags),
        idealTags = List<String>.unmodifiable(idealTags),
-       valueAnswers = Map<String, String>.unmodifiable(valueAnswers);
+       valueAnswers = Map<String, String>.unmodifiable(valueAnswers),
+       profileStories = List<ProfileStory>.unmodifiable(profileStories);
 
   /// age 값이 유효 범위(0~130) 안에 있는지. Discovery 제외 판정용.
   bool get hasValidAge => age >= 0 && age <= 130;
@@ -283,6 +290,7 @@ class PublicProfile {
       idealTags: profile.idealTags,
       relationshipGoal: profile.relationshipGoal,
       valueAnswers: profile.valueAnswers,
+      profileStories: profile.profileStories,
       coarseLocation: profile.location != null
           ? CoarseLocation.fromUserLocation(profile.location!)
           : null,
@@ -322,6 +330,7 @@ class PublicProfile {
       idealTags: _stringList(data['idealTags']),
       relationshipGoal: _stringOrNull(data['relationshipGoal']),
       valueAnswers: _stringMap(data['valueAnswers']),
+      profileStories: normalizeProfileStories(data['profileStories']),
       coarseLocation: CoarseLocation.fromMap(
         data['coarseLocation'] is Map
             ? Map<String, dynamic>.from(data['coarseLocation'] as Map)
@@ -375,6 +384,7 @@ class PublicProfile {
       'idealTags': idealTags.toList(),
       'relationshipGoal': relationshipGoal,
       'valueAnswers': Map<String, String>.from(valueAnswers),
+      'profileStories': profileStories.map((story) => story.toMap()).toList(),
       'coarseLocation': coarseLocation?.toMap(),
     };
   }

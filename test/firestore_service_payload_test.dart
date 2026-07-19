@@ -1,3 +1,4 @@
+import 'package:dating_app/models/profile_story.dart';
 import 'package:dating_app/models/public_profile.dart';
 import 'package:dating_app/models/user_profile.dart';
 import 'package:dating_app/services/database/firestore_service.dart';
@@ -56,6 +57,7 @@ UserProfile buildUserProfile({
   DateTime? boostUntil,
   List<String>? interests,
   Map<String, String> valueAnswers = const {},
+  List<ProfileStory> profileStories = const [],
 }) {
   return UserProfile(
     uid: 'user-1',
@@ -84,6 +86,7 @@ UserProfile buildUserProfile({
     boostUntil: boostUntil,
     likesUnlocked: true,
     valueAnswers: valueAnswers,
+    profileStories: profileStories,
   );
 }
 
@@ -299,6 +302,153 @@ void main() {
         buildUserProfile(valueAnswers: answers),
       ).toOwnerEditableFirestore();
       expect(payload['valueAnswers'], answers);
+    });
+  });
+
+  group('profileStories dual-write payload', () {
+    const stories = [
+      ProfileStory(promptKey: 'happy_moment', answer: '맛있는 걸 먹을 때'),
+      ProfileStory(promptKey: 'weekend', answer: '늦잠 자고 산책하기'),
+      ProfileStory(promptKey: 'date_idea', answer: '전시 보고 커피 마시기'),
+    ];
+
+    List<Map<String, String>> expectedStoryPayload() => const [
+      {'promptKey': 'happy_moment', 'answer': '맛있는 걸 먹을 때'},
+      {'promptKey': 'weekend', 'answer': '늦잠 자고 산책하기'},
+      {'promptKey': 'date_idea', 'answer': '전시 보고 커피 마시기'},
+    ];
+
+    test(
+      'clientCreatableUserKeys / legacyEditableUserKeys에 profileStories 포함',
+      () {
+        expect(
+          FirestoreService.clientCreatableUserKeys,
+          contains('profileStories'),
+        );
+        expect(
+          FirestoreService.legacyEditableUserKeys,
+          contains('profileStories'),
+        );
+      },
+    );
+
+    test('users 신규 생성 payload가 profileStories를 포함한다', () {
+      final payload = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(profileStories: stories),
+      );
+
+      expect(payload['profileStories'], expectedStoryPayload());
+    });
+
+    test('users 편집 payload가 profileStories를 포함한다', () {
+      final payload = FirestoreService.buildLegacyEditableUserFields(
+        buildUserProfile(profileStories: stories),
+      );
+
+      expect(payload['profileStories'], expectedStoryPayload());
+    });
+
+    test('publicProfiles owner payload가 profileStories를 포함한다', () {
+      final payload = PublicProfile.fromUserProfile(
+        buildUserProfile(profileStories: stories),
+      ).toOwnerEditableFirestore();
+
+      expect(payload['profileStories'], expectedStoryPayload());
+    });
+
+    test('users/publicProfiles payload 내용과 순서가 동일하다', () {
+      final profile = buildUserProfile(profileStories: stories);
+      final create = FirestoreService.buildClientCreatableUserFields(profile);
+      final edit = FirestoreService.buildLegacyEditableUserFields(profile);
+      final public = PublicProfile.fromUserProfile(
+        profile,
+      ).toOwnerEditableFirestore();
+
+      expect(create['profileStories'], edit['profileStories']);
+      expect(create['profileStories'], public['profileStories']);
+    });
+
+    test('빈 리스트도 세 payload에 명시적으로 포함된다', () {
+      final profile = buildUserProfile();
+      final create = FirestoreService.buildClientCreatableUserFields(profile);
+      final edit = FirestoreService.buildLegacyEditableUserFields(profile);
+      final public = PublicProfile.fromUserProfile(
+        profile,
+      ).toOwnerEditableFirestore();
+
+      expect(create.containsKey('profileStories'), isTrue);
+      expect(edit.containsKey('profileStories'), isTrue);
+      expect(public.containsKey('profileStories'), isTrue);
+      expect(create['profileStories'], isEmpty);
+      expect(edit['profileStories'], isEmpty);
+      expect(public['profileStories'], isEmpty);
+    });
+
+    test('payload list/map은 모델 내부 객체를 공유하지 않는다', () {
+      final profile = buildUserProfile(profileStories: stories);
+      final create = FirestoreService.buildClientCreatableUserFields(profile);
+      final edit = FirestoreService.buildLegacyEditableUserFields(profile);
+      final public = PublicProfile.fromUserProfile(
+        profile,
+      ).toOwnerEditableFirestore();
+
+      for (final payload in [create, edit, public]) {
+        expect(
+          identical(payload['profileStories'], profile.profileStories),
+          isFalse,
+        );
+        expect(
+          identical(
+            (payload['profileStories'] as List).first,
+            profile.profileStories.first,
+          ),
+          isFalse,
+        );
+      }
+    });
+
+    test('payload 생성 후 원본 collection 변경이 payload에 영향 없다', () {
+      final source = [const ProfileStory(promptKey: 'weekend', answer: '산책')];
+      final profile = buildUserProfile(profileStories: source);
+      final payload = FirestoreService.buildClientCreatableUserFields(profile);
+
+      source.add(const ProfileStory(promptKey: 'date_idea', answer: '전시'));
+
+      expect(payload['profileStories'], [
+        {'promptKey': 'weekend', 'answer': '산책'},
+      ]);
+    });
+
+    test('기존 valueAnswers payload는 유지된다', () {
+      final payload = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(
+          valueAnswers: const {'date_style': 'foodie'},
+          profileStories: stories,
+        ),
+      );
+
+      expect(payload['valueAnswers'], {'date_style': 'foodie'});
+      expect(payload['profileStories'], isNotEmpty);
+    });
+
+    test('server-only 필드는 client payload에 추가되지 않는다', () {
+      final create = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(profileStories: stories),
+      );
+      final edit = FirestoreService.buildLegacyEditableUserFields(
+        buildUserProfile(profileStories: stories),
+      );
+      final public = PublicProfile.fromUserProfile(
+        buildUserProfile(profileStories: stories),
+      ).toOwnerEditableFirestore();
+
+      for (final forbidden in _forbiddenLegacyEditKeys) {
+        expect(edit.containsKey(forbidden), isFalse, reason: forbidden);
+      }
+      for (final forbidden in _forbiddenPublicOwnerKeys) {
+        expect(public.containsKey(forbidden), isFalse, reason: forbidden);
+      }
+      expect(create.containsKey('rankingBoostUntil'), isFalse);
     });
   });
 
