@@ -159,6 +159,7 @@
 - ✅ 차단: `users/{uid}/blocks/{blockedUid}`, 양방향 숨김에 collectionGroup blocks 사용
 - ✅ 차단 적용: 디스커버리, 매칭, 받은 좋아요, 채팅 진입 확인
 - ✅ 사용자 화면 raw exception/stack trace 노출 방지 작업이 주요 화면에 반영됨(온보딩 포함). 새 작업 시 계속 확인 필요
+- ✅ **회원 탈퇴(계정 삭제) — production E2E 최종 완료**(Phase 0-G, 2026-07-19). `deleteMyAccount` callable(서버 admin SDK 전용)로 구현. `swipes.targetUid` collection-group ASC single-field index가 READY로 확정된 뒤 disposable password 테스트 계정으로 실기기 삭제를 **1회** 실행해 성공. 서버 job은 `inventory → storage → relations → shared_data(anonymize) → profiles → auth → COMPLETED` 순서로 진행되고 **Auth는 마지막에 삭제**. 이번 실행 결과: users/publicProfiles 삭제, Storage 5개 삭제, outbound swipe 1개 삭제, usage docs 2개 삭제, 공유 match/report/receipt/jelly는 대상 0(정책상 retained+anonymized 경로 통과), deletion job **terminal COMPLETED / retryable=false**. 재시도·수동 데이터 mutation·추가 callable 호출 없음. `_deletedAccountAudit`는 jelly 거래 보존 전용 서브컬렉션(`{uidHash}/jellyTransactions/...`)이라 jelly 0건인 계정은 audit 서브독이 생성되지 않는 것이 정상
 
 ## 4. 현재 미구현 / 목업
 
@@ -234,7 +235,7 @@ test/
 
 ## 6. Cloud Functions
 
-`functions/index.js` 실제 exports 기준 **12개**. 전역 리전은 `asia-northeast3`로 고정(`setGlobalOptions`).
+`functions/index.js` 실제 exports 기준 **14개**. 전역 리전은 `asia-northeast3`로 고정(`setGlobalOptions`). **production 배포 상태: 14개 전부 `nodejs22` / `asia-northeast3` / gcfv2**(Node 20→22 마이그레이션 완료, Phase 0-I, 2026-07-19). `deleteMyAccount`는 `timeoutSeconds: 540`, `memory: 1GiB`, `maxInstances: 5`.
 
 | Function | Trigger | GPT/Image 호출 | 캐시 | 역할 |
 |---|---|---:|---|---|
@@ -250,6 +251,8 @@ test/
 | `generateIdealTypeImage` | callable, `timeoutSeconds: 120`, `memory: 1GiB` | 이미지, **기본 provider fal.ai FLUX** (`fal-ai/flux/schnell`) | `users/{uid}.idealTypeImage.inputHash`(provider/promptVersion/refinementText 포함 해시) | 이상형 이미지 생성 후 Storage 저장. 자세한 내용은 7장 |
 | `generateIdealTypeImageProviderPreview` | callable | 이미지, `request.data.provider`로 openai/fal_flux 선택 | 없음(비교용, 캐시 저장 안 함) | 개발자/운영자 전용 provider 비교 callable. custom claim(`admin`/`developer`/`idealImageProviderPreview`) 필요 |
 | `verifyJellyPurchase` | callable | 아니오 | `users/{uid}/jellyTransactions/{transactionId}` 멱등 | IAP 영수증 검증 자리. 현재 검증 함수는 항상 valid 반환하는 스켈레톤 |
+| `deleteMyAccount` | callable, `timeoutSeconds: 540`, `memory: 1GiB`, `maxInstances: 5` | 아니오 | 없음(job 상태/`_deletedAccountAudit`) | 회원 탈퇴 서버 전용 처리. `inventory→storage→relations→shared_data(anonymize)→profiles→auth→COMPLETED` 단계로 진행하고 Auth를 마지막에 삭제. terminal 상태·idempotency 계약 유지(3장 참고). production E2E 완료 |
+| `syncAuthVerificationBadges` | callable | 아니오 | 없음 | 인증 배지 서버 전용 동기화(Phase 0-D). badge server-owned 계약 |
 
 주의:
 - OpenAI 호출은 `OPENAI_API_KEY`, fal.ai 호출은 `FAL_KEY` Firebase Secret 사용. **앱/저장소/이 문서 어디에도 실제 키 값 리터럴을 넣지 않는다.**
@@ -396,9 +399,8 @@ test/
    - **아직 스켈레톤 상태.**
 
 5. **Functions 런타임/의존성 업그레이드**
-   - `functions/package.json`은 Node 20, `firebase-admin` `^12.0.0`, `firebase-functions` `^6.0.0`.
-   - Node 20 런타임 종료 일정 전에 Node 22+ 검토 필요.
-   - Firebase Functions/Admin SDK는 메이저 업그레이드 검토 필요: `firebase-admin` 12 → 14, `firebase-functions` 6 → 7.
+   - **Node 22 마이그레이션 — ✅ 해결됨**(Phase 0-I, 2026-07-19). `functions/package.json`/`package-lock.json` root/`functions/.node-version` 모두 `22`로 통일, production 14개 함수 전부 `nodejs22`로 재배포 완료.
+   - `firebase-admin` `^12.0.0`, `firebase-functions` `^6.0.0`은 그대로. **아직 pending**: Firebase Functions/Admin SDK 메이저 업그레이드 검토(`firebase-admin` 12 → 14, `firebase-functions` 6 → 7).
 
 6. **Cloud Functions region** — ✅ 해결됨. `setGlobalOptions({ region: 'asia-northeast3' })`로 전역 고정되어 있다(과거 버전 문서에는 미설정으로 기록돼 있었으나 현재는 반영됨).
 
@@ -410,6 +412,18 @@ test/
    - ~~`lib/dev/dummy_data_service.dart`~~ / ~~Discovery의 더미 생성 버튼~~ — Phase 0-A(2026-07-16)에서 제거 완료.
    - Fortune History의 `kDebugMode` 최근 7일 채우기
    - 출시 전 노출 여부 점검 필요
+
+9. **Android upload key 독립 암호화 백업 — pending**(Phase 0-H-3)
+   - release 서명 foundation과 upload keystore 생성·검증은 완료(Phase 0-H-1/0-H-2)됐으나, **외장 물리 매체에 AES-256 암호화 독립 백업이 아직 없음**(현재 외장 매체 미연결).
+   - Google Play 최초 업로드 전에 반드시 독립 백업 절차를 완료해야 한다. keystore/비밀번호는 저장소·문서·로그에 남기지 않는다.
+
+10. **App Check release provider 검증 및 enforcement 결정 — pending**
+    - 현재 `deleteMyAccount` 등 callable은 App Check enforcement가 **OFF**(invalid token도 auth VALID면 허용)인 상태로 동작한다.
+    - release 전에 Android release provider(Play Integrity 등) 검증과 enforcement ON 여부를 결정해야 한다. 이번까지의 작업에서는 변경하지 않았다.
+
+11. **Google Play 결제 인프라 — pending**
+    - 4번(`verifyJellyPurchase` 실제 검증)과 함께, Play Console 앱 등록 / Google Play Developer(Publisher) API / service account / license tester 설정이 아직 없다.
+    - 실결제 검증을 켜기 전 위 인프라 구성이 선행되어야 한다.
 
 ## 12. 개발 원칙
 
