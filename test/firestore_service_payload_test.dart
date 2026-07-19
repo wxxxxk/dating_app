@@ -23,6 +23,7 @@ const _forbiddenLegacyEditKeys = <String>{
   'profileInsight',
   'idealTypeImage',
   'idealTypeImageProviderPreview',
+  'aiKeywordSummary',
 };
 
 /// 공개 owner payload에 절대 없어야 하는 비공개/server-managed 필드.
@@ -43,6 +44,7 @@ const _forbiddenPublicOwnerKeys = <String>{
   'profileInsight',
   'idealTypeImage',
   'idealTypeImageProviderPreview',
+  'aiKeywordSummary',
   // server-managed
   'verifications',
   'rankingBoostUntil',
@@ -449,6 +451,7 @@ void main() {
         expect(public.containsKey(forbidden), isFalse, reason: forbidden);
       }
       expect(create.containsKey('rankingBoostUntil'), isFalse);
+      expect(create.containsKey('aiKeywordSummary'), isFalse);
     });
   });
 

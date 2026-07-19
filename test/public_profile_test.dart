@@ -22,7 +22,27 @@ const _forbiddenKeys = <String>{
   'profileInsight',
   'idealTypeImage',
   'idealTypeImageProviderPreview',
+  'aiKeywordSummary',
 };
+
+Map<String, Object?> validAiKeywordSummaryMap({
+  Object? keywords = const ['차분한 대화', '주말 산책'],
+  Object? sourceHash =
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  Object? promptVersion = 1,
+  Object? generator = 'ai',
+  Object? model = 'test-model',
+  Object? generatedAt,
+}) {
+  return {
+    'keywords': keywords,
+    'sourceHash': sourceHash,
+    'promptVersion': promptVersion,
+    'generator': generator,
+    'model': model,
+    'generatedAt': generatedAt ?? Timestamp.fromDate(DateTime(2026, 7, 19)),
+  };
+}
 
 /// 테스트용 UserProfile 생성 헬퍼.
 UserProfile buildUserProfile({
@@ -237,6 +257,19 @@ void main() {
       expect(keys, containsAll(PublicProfile.serverManagedKeys));
     });
 
+    test('aiKeywordSummary는 owner/backfill key 목록과 payload에 포함되지 않는다', () {
+      expect(
+        PublicProfile.ownerEditableKeys,
+        isNot(contains('aiKeywordSummary')),
+      );
+      expect(PublicProfile.backfillKeys, isNot(contains('aiKeywordSummary')));
+      expect(
+        public.toOwnerEditableFirestore(),
+        isNot(contains('aiKeywordSummary')),
+      );
+      expect(public.toBackfillFirestore(), isNot(contains('aiKeywordSummary')));
+    });
+
     test('세 payload 어디에도 비공개/금지 key가 없다', () {
       final payloads = <Map<String, dynamic>>[
         public.toOwnerEditableFirestore(),
@@ -316,6 +349,50 @@ void main() {
       expect(public.rankingBoostUntil, isNull);
       expect(public.profileUpdatedAt, isNull);
       expect(public.schemaVersion, PublicProfile.currentSchemaVersion);
+    });
+
+    test('valid aiKeywordSummary를 파싱한다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: {'aiKeywordSummary': validAiKeywordSummaryMap()},
+      );
+
+      expect(public.aiKeywordSummary, isNotNull);
+      expect(public.aiKeywordSummary!.keywords, ['차분한 대화', '주말 산책']);
+      expect(public.aiKeywordSummary!.generator, 'ai');
+      expect(public.aiKeywordSummary!.model, 'test-model');
+    });
+
+    test('aiKeywordSummary 부재 시 null이다', () {
+      final public = PublicProfile.fromMap(uid: 'u', data: const {});
+
+      expect(public.aiKeywordSummary, isNull);
+    });
+
+    test('malformed aiKeywordSummary는 null이지만 PublicProfile parsing은 성공한다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: {
+          'displayName': '지민',
+          'age': 30,
+          'aiKeywordSummary': validAiKeywordSummaryMap(keywords: ['#위반']),
+        },
+      );
+
+      expect(public.displayName, '지민');
+      expect(public.age, 30);
+      expect(public.aiKeywordSummary, isNull);
+    });
+
+    test('기존 private profileInsight cache와 aiKeywordSummary를 혼동하지 않는다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: {
+          'profileInsight': {'inputHash': 'legacy', 'firstImpression': '문장'},
+        },
+      );
+
+      expect(public.aiKeywordSummary, isNull);
     });
   });
 
@@ -425,6 +502,13 @@ void main() {
 
     test('currentSchemaVersion은 1을 유지한다', () {
       expect(PublicProfile.currentSchemaVersion, 1);
+    });
+
+    test('aiKeywordSummary는 fromUserProfile에서 생성되지 않는다', () {
+      final public = PublicProfile.fromUserProfile(buildUserProfile());
+
+      expect(public.aiKeywordSummary, isNull);
+      expect(public.schemaVersion, PublicProfile.currentSchemaVersion);
     });
   });
 

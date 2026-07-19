@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'ai_keyword_summary.dart';
 import 'profile_story.dart';
 import 'user_profile.dart';
 
@@ -216,6 +217,7 @@ class PublicProfile {
   final DateTime? rankingBoostUntil;
   final DateTime? profileUpdatedAt;
   final int schemaVersion;
+  final AiKeywordSummary? aiKeywordSummary;
 
   PublicProfile({
     required this.uid,
@@ -243,6 +245,7 @@ class PublicProfile {
     this.rankingBoostUntil,
     this.profileUpdatedAt,
     this.schemaVersion = currentSchemaVersion,
+    this.aiKeywordSummary,
   }) : photoUrls = List<String>.unmodifiable(photoUrls),
        interests = List<String>.unmodifiable(interests),
        personalityTags = List<String>.unmodifiable(personalityTags),
@@ -299,6 +302,7 @@ class PublicProfile {
       rankingBoostUntil: null,
       profileUpdatedAt: profile.updatedAt,
       schemaVersion: currentSchemaVersion,
+      aiKeywordSummary: null,
     );
   }
 
@@ -344,6 +348,7 @@ class PublicProfile {
       rankingBoostUntil: _timestampDate(data['rankingBoostUntil']),
       profileUpdatedAt: _timestampDate(data['profileUpdatedAt']),
       schemaVersion: _intOrNull(data['schemaVersion']) ?? currentSchemaVersion,
+      aiKeywordSummary: AiKeywordSummary.tryFromMap(data['aiKeywordSummary']),
     );
   }
 

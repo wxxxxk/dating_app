@@ -8,6 +8,7 @@
 
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
+const assert = require('node:assert/strict');
 const { after, before, beforeEach, test } = require('node:test');
 
 const {
@@ -59,6 +60,18 @@ function validOwnerProfile(overrides = {}) {
   };
 }
 
+function validAiKeywordSummary(overrides = {}) {
+  return {
+    keywords: ['차분한 대화', '주말 산책'],
+    sourceHash: 'a'.repeat(64),
+    promptVersion: 1,
+    generator: 'ai',
+    model: 'test-model',
+    generatedAt: Timestamp.now(),
+    ...overrides,
+  };
+}
+
 /** owner 필드 + server-managed 필드를 포함한 완전한 기존 공개 문서. */
 function fullExistingPublicDoc(overrides = {}) {
   return {
@@ -67,6 +80,7 @@ function fullExistingPublicDoc(overrides = {}) {
     rankingBoostUntil: Timestamp.fromDate(new Date('2030-01-01T00:00:00Z')),
     profileUpdatedAt: Timestamp.now(),
     schemaVersion: 1,
+    aiKeywordSummary: validAiKeywordSummary(),
     ...overrides,
   };
 }
@@ -386,6 +400,115 @@ test('23. server-managed 필드 유지 채 displayName만 변경하면 허용', 
   await seedPublic(OWNER, fullExistingPublicDoc());
   await assertSucceeds(
     updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), { displayName: '지민2' }),
+  );
+});
+
+test('23a. aiKeywordSummary가 포함된 publicProfiles read는 인증 사용자에게 허용', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  const snap = await assertSucceeds(getDoc(doc(otherDb(), 'publicProfiles', OWNER)));
+  assert.deepEqual(snap.data().aiKeywordSummary.keywords, [
+    '차분한 대화',
+    '주말 산책',
+  ]);
+});
+
+test('23b. 비로그인 사용자의 aiKeywordSummary 포함 publicProfiles read는 거부', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertFails(getDoc(doc(anonDb(), 'publicProfiles', OWNER)));
+});
+
+test('23c. owner create payload에 aiKeywordSummary 포함 시 거부', async () => {
+  await assertFails(
+    setDoc(
+      doc(ownerDb(), 'publicProfiles', OWNER),
+      validOwnerProfile({ aiKeywordSummary: validAiKeywordSummary() }),
+    ),
+  );
+});
+
+test('23d. summary가 없는 문서에 owner가 aiKeywordSummary를 추가하면 거부', async () => {
+  await seedPublic(OWNER, validOwnerProfile());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      aiKeywordSummary: validAiKeywordSummary(),
+    }),
+  );
+});
+
+test('23e. owner가 기존 aiKeywordSummary keywords/sourceHash를 변경하면 거부', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      'aiKeywordSummary.keywords': ['변조'],
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      'aiKeywordSummary.sourceHash': 'b'.repeat(64),
+    }),
+  );
+});
+
+test('23f. owner가 기존 aiKeywordSummary generator/model을 변경하면 거부', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      'aiKeywordSummary.generator': 'fallback',
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      'aiKeywordSummary.model': null,
+    }),
+  );
+});
+
+test('23g. owner가 aiKeywordSummary 전체 교체 또는 삭제를 시도하면 거부', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      aiKeywordSummary: validAiKeywordSummary({
+        keywords: ['새 요약'],
+        sourceHash: 'b'.repeat(64),
+      }),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      aiKeywordSummary: deleteField(),
+    }),
+  );
+});
+
+test('23h. 기존 aiKeywordSummary가 있어도 owner bio/interests/profileStories update는 허용되고 보존된다', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertSucceeds(
+    updateDoc(doc(ownerDb(), 'publicProfiles', OWNER), {
+      bio: '새 소개',
+      interests: ['movie', 'cooking'],
+      profileStories: [
+        { promptKey: 'weekend', answer: '산책하고 커피 마시기' },
+      ],
+    }),
+  );
+
+  const snap = await getDoc(doc(ownerDb(), 'publicProfiles', OWNER));
+  assert.deepEqual(snap.data().aiKeywordSummary.keywords, [
+    '차분한 대화',
+    '주말 산책',
+  ]);
+  assert.equal(snap.data().aiKeywordSummary.sourceHash, 'a'.repeat(64));
+});
+
+test('23i. 다른 사용자의 aiKeywordSummary 또는 일반 owner field 수정은 거부', async () => {
+  await seedPublic(OWNER, fullExistingPublicDoc());
+  await assertFails(
+    updateDoc(doc(otherDb(), 'publicProfiles', OWNER), {
+      aiKeywordSummary: validAiKeywordSummary({ sourceHash: 'b'.repeat(64) }),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(otherDb(), 'publicProfiles', OWNER), { bio: '타인 수정' }),
   );
 });
 
