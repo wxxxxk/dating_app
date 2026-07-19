@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
+import '../../core/constants/value_questions.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
 import '../../models/public_profile.dart';
@@ -222,6 +223,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       _profile.idealTags,
                     ),
                   ),
+                  _ValueAnswersSection(answers: _profile.valueAnswers),
                   if (_profile.relationshipGoal != null)
                     _InfoSection(
                       title: '찾는 관계',
@@ -630,11 +632,103 @@ class _TagSection extends StatelessWidget {
   }
 }
 
+/// 상대 프로필의 가치관 답변을 기본 라벨 형태로 표시하는 섹션.
+///
+/// 표시 규칙:
+/// - [PublicProfile.valueAnswers]만 사용한다(비공개 users 문서를 조회하지 않는다).
+/// - 항상 [ValueQuestions.all] 순서로 순회한다.
+/// - 카탈로그에 없는 question key, 유효하지 않은 answer key는 화면에서만 숨긴다
+///   (모델 데이터는 변경하지 않는다).
+/// - 표시할 유효 항목이 하나도 없으면 섹션 자체를 렌더링하지 않는다(빈 상태 문구 없음).
+class _ValueAnswersSection extends StatelessWidget {
+  final Map<String, String> answers;
+
+  const _ValueAnswersSection({required this.answers});
+
+  @override
+  Widget build(BuildContext context) {
+    final entries =
+        <({String questionKey, String questionLabel, String answerLabel})>[];
+    for (final question in ValueQuestions.all) {
+      final answerKey = answers[question.key];
+      if (answerKey == null || answerKey.isEmpty) continue;
+      final answerLabel = ValueQuestions.answerLabel(question.key, answerKey);
+      if (answerLabel == null || answerLabel.isEmpty) continue;
+      entries.add((
+        questionKey: question.key,
+        questionLabel: question.profileLabel,
+        answerLabel: answerLabel,
+      ));
+    }
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return _InfoSection(
+      key: const ValueKey('profile-value-answers-section'),
+      title: '가치관',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            if (i > 0) const SizedBox(height: 14),
+            _ValueAnswerItem(
+              questionKey: entries[i].questionKey,
+              questionLabel: entries[i].questionLabel,
+              answerLabel: entries[i].answerLabel,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ValueAnswerItem extends StatelessWidget {
+  final String questionKey;
+  final String questionLabel;
+  final String answerLabel;
+
+  const _ValueAnswerItem({
+    required this.questionKey,
+    required this.questionLabel,
+    required this.answerLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: ValueKey('profile-value-answer-$questionKey'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          questionLabel,
+          key: ValueKey('profile-value-question-$questionKey'),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          answerLabel,
+          key: ValueKey('profile-value-label-$questionKey'),
+          style: const TextStyle(
+            fontSize: 15,
+            height: 1.4,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _InfoSection extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const _InfoSection({required this.title, required this.child});
+  const _InfoSection({super.key, required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
