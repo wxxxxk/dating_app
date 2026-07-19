@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/profile_options.dart';
+import '../../core/constants/profile_story_prompts.dart';
 import '../../core/constants/value_questions.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
+import '../../models/profile_story.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
@@ -151,6 +153,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final distanceLabel = coarseDistance == null
         ? null
         : LocationService.formatDistance(coarseDistance);
+    final visibleStories = _visibleProfileStories(_profile.profileStories);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -200,7 +203,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 22),
+                  if (visibleStories.isNotEmpty) ...[
+                    if (_profile.bio.isNotEmpty) const SizedBox(height: 22),
+                    _ProfileStoriesSection(entries: visibleStories),
+                  ] else
+                    const SizedBox(height: 22),
                   _DetailGrid(profile: _profile),
                   _TagSection(
                     title: '관심사',
@@ -260,6 +267,48 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ),
     );
   }
+}
+
+class _ProfileStoryDisplayEntry {
+  final String promptKey;
+  final String promptLabel;
+  final String answer;
+
+  const _ProfileStoryDisplayEntry({
+    required this.promptKey,
+    required this.promptLabel,
+    required this.answer,
+  });
+}
+
+List<_ProfileStoryDisplayEntry> _visibleProfileStories(
+  List<ProfileStory> stories,
+) {
+  final entries = <_ProfileStoryDisplayEntry>[];
+  for (final story in stories) {
+    final label = ProfileStoryPrompts.labelFor(story.promptKey);
+    if (label == null || label.isEmpty) continue;
+
+    final answer = _profileStoryDisplayAnswer(story.answer);
+    if (answer.isEmpty) continue;
+
+    entries.add(
+      _ProfileStoryDisplayEntry(
+        promptKey: story.promptKey,
+        promptLabel: label,
+        answer: answer,
+      ),
+    );
+  }
+  return entries;
+}
+
+String _profileStoryDisplayAnswer(String answer) {
+  final withoutControls = answer.replaceAll(
+    RegExp(r'[\u0000-\u0009\u000B-\u001F\u007F]'),
+    '',
+  );
+  return stripEmoji(withoutControls);
 }
 
 class _PhotoGallery extends StatefulWidget {
@@ -627,6 +676,77 @@ class _TagSection extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: labels.map((label) => _TagChip(label: label)).toList(),
+      ),
+    );
+  }
+}
+
+class _ProfileStoriesSection extends StatelessWidget {
+  final List<_ProfileStoryDisplayEntry> entries;
+
+  const _ProfileStoriesSection({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return _InfoSection(
+      key: const ValueKey('profile-stories-section'),
+      title: '이 사람의 이야기',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            _ProfileStoryDisplayCard(entry: entries[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileStoryDisplayCard extends StatelessWidget {
+  final _ProfileStoryDisplayEntry entry;
+
+  const _ProfileStoryDisplayCard({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('profile-story-display-${entry.promptKey}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.nightBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            entry.promptLabel,
+            key: ValueKey('profile-story-prompt-label-${entry.promptKey}'),
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              fontWeight: FontWeight.w800,
+              color: AppColors.mint,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            entry.answer,
+            key: ValueKey('profile-story-answer-label-${entry.promptKey}'),
+            style: const TextStyle(
+              fontSize: 16,
+              height: 1.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textOnDark,
+            ),
+          ),
+        ],
       ),
     );
   }

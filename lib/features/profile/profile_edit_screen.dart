@@ -5,8 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/profile_options.dart';
+import '../../core/constants/profile_story_prompts.dart';
 import '../../core/constants/value_questions.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/text_sanitizer.dart';
+import '../../models/profile_story.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/storage/storage_service.dart';
@@ -14,6 +17,7 @@ import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../onboarding/tag_selection_step.dart';
+import 'profile_stories_edit_screen.dart';
 import 'value_answers_edit_screen.dart';
 import 'widgets/job_picker.dart';
 
@@ -65,6 +69,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   // initState에서 방어 복사한다. 전용 화면(ValueAnswersEditScreen)에서
   // 임시로 편집한 뒤, "저장" 버튼에서만 dual-write로 반영된다.
   late Map<String, String> _valueAnswers;
+  // 이야기 카드(promptKey + answer). 원본 list를 직접 건드리지 않도록
+  // initState에서 방어 복사한다. 전용 화면에서 임시 편집하고, 저장 버튼에서만 반영.
+  late List<ProfileStory> _profileStories;
 
   bool _isLoading = false;
   // null이면 사진 작업 중이 아님. 값이 있으면 해당 인덱스 슬롯이 업로드/삭제 중.
@@ -94,6 +101,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _personalityTags = List<String>.from(p.personalityTags);
     _idealTags = List<String>.from(p.idealTags);
     _valueAnswers = Map<String, String>.from(p.valueAnswers);
+    _profileStories = List<ProfileStory>.from(p.profileStories);
   }
 
   @override
@@ -149,6 +157,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         personalityTags: _personalityTags,
         idealTags: _idealTags,
         valueAnswers: Map<String, String>.from(_valueAnswers),
+        profileStories: List<ProfileStory>.from(_profileStories),
         updatedAt: DateTime.now(),
       );
       await widget.firestoreService.updateEditableUserProfile(updatedProfile);
@@ -515,6 +524,25 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     });
   }
 
+  // ── 이야기 카드 전용 편집 페이지로 이동 ─────────────────────────────────
+
+  /// 이야기 카드 전용 화면을 열고, 완료 결과(list)를 임시 상태에만 반영한다.
+  /// 여기서는 Firestore write를 하지 않는다 — 실제 저장은 [_save]에서만.
+  Future<void> _openProfileStoriesPage() async {
+    final result = await Navigator.push<List<ProfileStory>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProfileStoriesEditScreen(
+          initialStories: List<ProfileStory>.from(_profileStories),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _profileStories = List<ProfileStory>.from(result);
+    });
+  }
+
   // ── UI 빌더 ──────────────────────────────────────────────────────────────
 
   @override
@@ -591,6 +619,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         maxLines: 2,
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ── 이야기 카드 ──────────────────────────────────────────
+                PremiumSectionCard(
+                  title: '나의 이야기',
+                  subtitle: '상대가 대화를 시작할 수 있도록 나만의 이야기를 들려주세요',
+                  child: _ProfileStoriesSummary(
+                    stories: _profileStories,
+                    onTap: _openProfileStoriesPage,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -1009,6 +1048,129 @@ class _ValueAnswersSummary extends StatelessWidget {
               children: [
                 Text(
                   hasAny ? '수정하기' : '답변하기',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 이야기 카드 요약. catalog에 존재하고 정규화 후 빈 답변이 아닌 항목만
+/// 보여준다. unknown story는 보존만 하고 raw key를 화면에 노출하지 않는다.
+class _ProfileStoriesSummary extends StatelessWidget {
+  final List<ProfileStory> stories;
+  final VoidCallback onTap;
+
+  const _ProfileStoriesSummary({required this.stories, required this.onTap});
+
+  String _sanitizePreview(String value) {
+    final withoutControls = value.replaceAll(
+      RegExp(r'[\u0000-\u0009\u000B-\u001F\u007F]'),
+      '',
+    );
+    return stripEmoji(withoutControls);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleStories = <ProfileStory>[];
+    for (final story in stories) {
+      if (!ProfileStoryPrompts.isValidKey(story.promptKey)) continue;
+      final answer = _sanitizePreview(story.answer);
+      if (answer.isEmpty) continue;
+      visibleStories.add(
+        ProfileStory(promptKey: story.promptKey, answer: answer),
+      );
+    }
+
+    final count = visibleStories.length;
+    final hasAny = count > 0;
+    const maxPreview = 2;
+    final preview = visibleStories.take(maxPreview).toList();
+    final remaining = count - preview.length;
+
+    return InkWell(
+      key: const ValueKey('profile-stories-edit-entry'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.button),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!hasAny)
+              const Text(
+                '아직 작성한 이야기가 없어요',
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+              )
+            else ...[
+              Text(
+                '$count / ${ProfileStoryPrompts.maxStories}개 작성',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.mintDeep,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final story in preview)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ProfileStoryPrompts.labelFor(story.promptKey) ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        story.answer,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (remaining > 0)
+                Text(
+                  '외 $remaining개',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+            ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  hasAny ? '수정하기' : '작성하기',
                   style: const TextStyle(
                     fontSize: 15,
                     color: AppColors.primary,
