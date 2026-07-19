@@ -4,6 +4,35 @@
 
 최종 코드 기준 확인일: 2026-07-09
 
+## Phase 0 종료 상태 — 보안·출시 기반 완료 (2026-07-19)
+
+**Phase 0 보안·개발 기반은 완료됐고, Phase 1 기능 개발을 시작할 수 있다.** 단, 아래 "출시 전 deferred 외부 의존성"이 남아 있으므로 **production release ready 상태는 아니다**(모든 release blocker가 해결됐다는 의미가 아니다).
+
+**Phase 0 완료 항목**
+- Dummy Firestore write 제거(0-A)
+- 공개/비공개 프로필 분리 및 client write whitelist
+- 인증 배지 서버 전용화(`syncAuthVerificationBadges`)
+- AI callable abuse guard 적용
+- Google Play 영수증 서버 검증 및 idempotency 구현(`verifyJellyPurchase` 검증 로직 — Play Billing production 인프라는 아래 deferred 참고)
+- 회원 탈퇴 production E2E 완료(0-G, 3장/6장 참고)
+- Android release signing fail-closed 및 upload key 검증(0-H-1/0-H-2)
+- Cloud Functions 14개 Node.js 22 전환·production 배포 완료(0-I)
+
+**Phase 0-J-1 로컬 릴리스 identity 감사 결과** (Play Console 작업·AAB 업로드·결제 설정 변경 0)
+- applicationId: `com.cvrlab.dating_app`
+- versionName / versionCode: `1.0.0` / `1`
+- targetSdk / compileSdk: `36`
+- release AAB 서명 검증 완료(jar verified), upload certificate SHA-256 기대값 일치(`2B:39:27:7D:…:5F:BB`)
+
+**출시 전 deferred 외부 의존성** (실패·미완성이 아니라, 외부 출시 계정 미생성으로 **deferred**. 실제 출시 준비 시 재개)
+- Google Play 개발자 계정 미생성
+- Play Console 앱 초안 미생성
+- 앱 무료/유료 최종 결정 미정, 젤리 실제 판매 가격 미정 — **가격 정책은 Phase 1에서 젤리 소비 구조와 유료 기능 범위가 명확해진 뒤 결정**
+- 최초 AAB 업로드 및 Play App Signing 미진행
+- Google Play Billing production 인프라(Publisher API / service account / license tester) 미구성
+- App Check Play Integrity release provider 검증 및 enforcement 미진행
+- upload key 독립 암호화 백업(0-H-3) — 외장 물리 매체 필요, 최초 AAB 업로드 전 완료 원칙 유지
+
 ## 1. 프로젝트 개요
 
 - **이름**: `dating_app`
