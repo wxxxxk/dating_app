@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/database/firestore_service.dart';
+import '../../services/profile/profile_keyword_summary_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import 'basic_info_step.dart';
@@ -34,6 +36,7 @@ class OnboardingScreen extends StatefulWidget {
   final FirestoreService firestoreService;
   final StorageService storageService;
   final VoidCallback onCompleted;
+  final ProfileKeywordSummaryService? profileKeywordSummaryService;
 
   const OnboardingScreen({
     super.key,
@@ -42,6 +45,7 @@ class OnboardingScreen extends StatefulWidget {
     required this.firestoreService,
     required this.storageService,
     required this.onCompleted,
+    this.profileKeywordSummaryService,
   });
 
   @override
@@ -49,6 +53,8 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
+  late final ProfileKeywordSummaryService _profileKeywordSummaryService;
+
   int _step = 0;
   bool _isLoading = false;
 
@@ -78,6 +84,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   List<String> _idealTags = [];
 
   static const int _totalSteps = 7;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileKeywordSummaryService =
+        widget.profileKeywordSummaryService ?? ProfileKeywordSummaryService();
+  }
 
   void _nextStep() => setState(() => _step++);
   void _prevStep() => setState(() => _step--);
@@ -132,6 +145,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         }
       }
 
+      unawaited(_generateProfileKeywordSummaryBestEffort());
+
       // 3. 완료: app.dart에 알려 HomeScreen으로 전환
       widget.onCompleted();
     } catch (e) {
@@ -145,6 +160,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _generateProfileKeywordSummaryBestEffort() async {
+    try {
+      await _profileKeywordSummaryService.generate();
+    } on ProfileKeywordSummaryFailure catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Onboarding] AI 키워드 요약 생성 실패: ${e.code}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Onboarding] AI 키워드 요약 생성 실패: ${e.runtimeType}');
+      }
     }
   }
 

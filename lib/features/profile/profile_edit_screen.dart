@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +14,7 @@ import '../../core/utils/text_sanitizer.dart';
 import '../../models/profile_story.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
+import '../../services/profile/profile_keyword_summary_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/premium_components.dart';
@@ -35,12 +38,14 @@ class ProfileEditScreen extends StatefulWidget {
   final UserProfile profile;
   final FirestoreService firestoreService;
   final StorageService storageService;
+  final ProfileKeywordSummaryService? profileKeywordSummaryService;
 
   const ProfileEditScreen({
     super.key,
     required this.profile,
     required this.firestoreService,
     required this.storageService,
+    this.profileKeywordSummaryService,
   });
 
   @override
@@ -51,6 +56,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _bioController;
   late final TextEditingController _heightController;
+  late final ProfileKeywordSummaryService _profileKeywordSummaryService;
 
   late String _gender;
   String? _religion;
@@ -102,6 +108,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _idealTags = List<String>.from(p.idealTags);
     _valueAnswers = Map<String, String>.from(p.valueAnswers);
     _profileStories = List<ProfileStory>.from(p.profileStories);
+    _profileKeywordSummaryService =
+        widget.profileKeywordSummaryService ?? ProfileKeywordSummaryService();
   }
 
   @override
@@ -162,6 +170,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       );
       await widget.firestoreService.updateEditableUserProfile(updatedProfile);
 
+      unawaited(_generateProfileKeywordSummaryBestEffort());
+
       if (mounted) {
         // 업데이트된 프로필을 HomeScreen에 전달해 재조회 없이 반영
         Navigator.pop(context, updatedProfile);
@@ -174,6 +184,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _generateProfileKeywordSummaryBestEffort() async {
+    try {
+      await _profileKeywordSummaryService.generate();
+    } on ProfileKeywordSummaryFailure catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ProfileEdit] AI 키워드 요약 생성 실패: ${e.code}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ProfileEdit] AI 키워드 요약 생성 실패: ${e.runtimeType}');
+      }
     }
   }
 
