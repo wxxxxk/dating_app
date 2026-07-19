@@ -45,6 +45,7 @@ class FirestoreService {
     'personalityTags',
     'idealTags',
     'relationshipGoal',
+    'valueAnswers',
     'updatedAt',
   };
 
@@ -72,6 +73,7 @@ class FirestoreService {
     'personalityTags',
     'idealTags',
     'relationshipGoal',
+    'valueAnswers',
     'location',
     'verifications',
     'discoveryFilter',
@@ -126,6 +128,7 @@ class FirestoreService {
       'personalityTags': profile.personalityTags,
       'idealTags': profile.idealTags,
       'relationshipGoal': profile.relationshipGoal,
+      'valueAnswers': Map<String, String>.from(profile.valueAnswers),
       'updatedAt': Timestamp.fromDate(profile.updatedAt),
     };
   }
@@ -153,6 +156,7 @@ class FirestoreService {
       'personalityTags': profile.personalityTags,
       'idealTags': profile.idealTags,
       'relationshipGoal': profile.relationshipGoal,
+      'valueAnswers': Map<String, String>.from(profile.valueAnswers),
       if (profile.location != null) 'location': profile.location!.toFirestore(),
       'verifications': const VerificationStatus().toFirestore(),
       'discoveryFilter': profile.discoveryFilter.toFirestore(),

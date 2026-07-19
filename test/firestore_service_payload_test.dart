@@ -55,6 +55,7 @@ UserProfile buildUserProfile({
   UserLocation? location,
   DateTime? boostUntil,
   List<String>? interests,
+  Map<String, String> valueAnswers = const {},
 }) {
   return UserProfile(
     uid: 'user-1',
@@ -82,6 +83,7 @@ UserProfile buildUserProfile({
     jelly: 999,
     boostUntil: boostUntil,
     likesUnlocked: true,
+    valueAnswers: valueAnswers,
   );
 }
 
@@ -225,6 +227,78 @@ void main() {
       final payload = public.toOwnerEditableFirestore();
       expect(payload.containsKey('rankingBoostUntil'), isFalse);
       expect(payload.containsKey('boostUntil'), isFalse);
+    });
+  });
+
+  group('valueAnswers dual-write payload', () {
+    const answers = {
+      'contact_frequency': 'few_times',
+      'conflict_style': 'cool_down',
+    };
+
+    test(
+      'clientCreatableUserKeys / legacyEditableUserKeys에 valueAnswers 포함',
+      () {
+        expect(
+          FirestoreService.clientCreatableUserKeys,
+          contains('valueAnswers'),
+        );
+        expect(
+          FirestoreService.legacyEditableUserKeys,
+          contains('valueAnswers'),
+        );
+      },
+    );
+
+    test('신규 생성 payload가 답변 map을 포함한다', () {
+      final payload = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(valueAnswers: answers),
+      );
+      expect(payload['valueAnswers'], answers);
+    });
+
+    test('레거시 편집 payload가 답변 map을 포함한다', () {
+      final payload = FirestoreService.buildLegacyEditableUserFields(
+        buildUserProfile(valueAnswers: answers),
+      );
+      expect(payload['valueAnswers'], answers);
+    });
+
+    test('빈 답변이면 두 builder 모두 빈 map을 포함한다', () {
+      final create = FirestoreService.buildClientCreatableUserFields(
+        buildUserProfile(),
+      );
+      final edit = FirestoreService.buildLegacyEditableUserFields(
+        buildUserProfile(),
+      );
+      expect(create['valueAnswers'], isEmpty);
+      expect(edit['valueAnswers'], isEmpty);
+    });
+
+    test('builder는 원본 map 객체를 그대로 노출하지 않는다', () {
+      final source = {'contact_frequency': 'few_times'};
+      final profile = buildUserProfile(valueAnswers: source);
+      final createPayload = FirestoreService.buildClientCreatableUserFields(
+        profile,
+      );
+      final editPayload = FirestoreService.buildLegacyEditableUserFields(
+        profile,
+      );
+      expect(
+        identical(createPayload['valueAnswers'], profile.valueAnswers),
+        isFalse,
+      );
+      expect(
+        identical(editPayload['valueAnswers'], profile.valueAnswers),
+        isFalse,
+      );
+    });
+
+    test('공개 owner payload에도 valueAnswers가 자동 포함된다', () {
+      final payload = PublicProfile.fromUserProfile(
+        buildUserProfile(valueAnswers: answers),
+      ).toOwnerEditableFirestore();
+      expect(payload['valueAnswers'], answers);
     });
   });
 

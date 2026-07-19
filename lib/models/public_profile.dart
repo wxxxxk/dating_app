@@ -28,6 +28,24 @@ DateTime? _timestampDate(dynamic value) {
   return null;
 }
 
+/// Firestore 원시 값을 안전한 `Map<String, String>`으로 변환한다.
+///
+/// Map이 아니면 빈 map, key·value가 모두 String인 항목만 보존한다(숫자/bool/
+/// list/중첩 map 무시). 원본 map을 그대로 노출하지 않도록 새 map을 반환한다.
+/// 알 수 없는 문자열 key-value는 이 저수준 parser에서 제거하지 않는다 —
+/// 카탈로그 유효성 검증은 UI와 Rules의 책임이며, 카탈로그가 바뀌어도 기존
+/// 저장 데이터를 손실시키지 않기 위함이다.
+Map<String, String> _stringMap(dynamic value) {
+  if (value is! Map) return const {};
+  final result = <String, String>{};
+  value.forEach((key, val) {
+    if (key is String && val is String) {
+      result[key] = val;
+    }
+  });
+  return result;
+}
+
 int? _intOrNull(dynamic value) {
   if (value is num) return value.toInt();
   return null;
@@ -141,6 +159,7 @@ class PublicProfile {
     'personalityTags',
     'idealTags',
     'relationshipGoal',
+    'valueAnswers',
     'coarseLocation',
   };
 
@@ -182,6 +201,9 @@ class PublicProfile {
   final List<String> idealTags;
   final String? relationshipGoal;
 
+  /// 가치관 답변(questionKey → answerKey). 비민감 취향 데이터라 공개 문서에 포함.
+  final Map<String, String> valueAnswers;
+
   final CoarseLocation? coarseLocation;
 
   // ── server-managed 필드(공개 read, 일반 편집 불가) ───────────────────────
@@ -209,6 +231,7 @@ class PublicProfile {
     List<String> personalityTags = const [],
     List<String> idealTags = const [],
     this.relationshipGoal,
+    Map<String, String> valueAnswers = const {},
     this.coarseLocation,
     this.verifications = const VerificationStatus(),
     this.rankingBoostUntil,
@@ -217,7 +240,8 @@ class PublicProfile {
   }) : photoUrls = List<String>.unmodifiable(photoUrls),
        interests = List<String>.unmodifiable(interests),
        personalityTags = List<String>.unmodifiable(personalityTags),
-       idealTags = List<String>.unmodifiable(idealTags);
+       idealTags = List<String>.unmodifiable(idealTags),
+       valueAnswers = Map<String, String>.unmodifiable(valueAnswers);
 
   /// age 값이 유효 범위(0~130) 안에 있는지. Discovery 제외 판정용.
   bool get hasValidAge => age >= 0 && age <= 130;
@@ -258,6 +282,7 @@ class PublicProfile {
       personalityTags: profile.personalityTags,
       idealTags: profile.idealTags,
       relationshipGoal: profile.relationshipGoal,
+      valueAnswers: profile.valueAnswers,
       coarseLocation: profile.location != null
           ? CoarseLocation.fromUserLocation(profile.location!)
           : null,
@@ -296,6 +321,7 @@ class PublicProfile {
       personalityTags: _stringList(data['personalityTags']),
       idealTags: _stringList(data['idealTags']),
       relationshipGoal: _stringOrNull(data['relationshipGoal']),
+      valueAnswers: _stringMap(data['valueAnswers']),
       coarseLocation: CoarseLocation.fromMap(
         data['coarseLocation'] is Map
             ? Map<String, dynamic>.from(data['coarseLocation'] as Map)
@@ -348,6 +374,7 @@ class PublicProfile {
       'personalityTags': personalityTags.toList(),
       'idealTags': idealTags.toList(),
       'relationshipGoal': relationshipGoal,
+      'valueAnswers': Map<String, String>.from(valueAnswers),
       'coarseLocation': coarseLocation?.toMap(),
     };
   }

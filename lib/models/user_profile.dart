@@ -1,5 +1,25 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Firestore 원시 값을 안전한 `Map<String, String>`으로 변환한다.
+///
+/// - 값이 Map이 아니면 빈 map을 반환한다(필드 없는 기존 문서 호환).
+/// - key와 value가 모두 String인 항목만 수용한다. 숫자/bool/list/중첩 map
+///   값은 조용히 무시한다.
+/// - 원본 Firestore map을 그대로 노출하지 않도록 새 map을 만들어 돌려준다.
+/// - 알 수 없는 질문 key/answer key는 여기서 제거하지 않는다. 유효성 검증은
+///   카탈로그(ValueQuestions)·UI·Rules의 책임이며, 카탈로그가 나중에 바뀌어도
+///   기존 저장 데이터를 이 저수준 parser가 손실시키지 않도록 하기 위함이다.
+Map<String, String> _stringMap(dynamic value) {
+  if (value is! Map) return const {};
+  final result = <String, String>{};
+  value.forEach((key, val) {
+    if (key is String && val is String) {
+      result[key] = val;
+    }
+  });
+  return result;
+}
+
 /// 사용자의 마지막 위치 정보.
 ///
 /// 정확한 좌표는 Firestore 내부 저장/거리 계산에만 쓰고, 화면에는 거리만 노출한다.
@@ -229,6 +249,11 @@ class UserProfile {
   final DateTime? boostUntil;
   final bool likesUnlocked;
 
+  // ── 가치관 답변(questionKey → answerKey) — 없으면 빈 map. ──
+  // 읽기 계약만 이번 단계에서 추가한다. 쓰기(toFirestore)·공개(publicProfiles)·
+  // Rules는 다음 단계에서 함께 활성화한다.
+  final Map<String, String> valueAnswers;
+
   const UserProfile({
     required this.uid,
     required this.displayName,
@@ -257,6 +282,7 @@ class UserProfile {
     this.jelly = 0,
     this.boostUntil,
     this.likesUnlocked = false,
+    this.valueAnswers = const {},
   });
 
   /// 프로필 완성도(0~100). 새 Firestore 필드 없이 기존 데이터만으로 계산한다.
@@ -370,6 +396,8 @@ class UserProfile {
       jelly: (d['jelly'] as num?)?.toInt() ?? 0,
       boostUntil: (d['boostUntil'] as Timestamp?)?.toDate(),
       likesUnlocked: d['likesUnlocked'] == true,
+      // 필드가 없는 기존 문서는 빈 map으로 처리한다.
+      valueAnswers: _stringMap(d['valueAnswers']),
     );
   }
 
@@ -409,6 +437,9 @@ class UserProfile {
       'jelly': jelly,
       if (boostUntil != null) 'boostUntil': Timestamp.fromDate(boostUntil!),
       'likesUnlocked': likesUnlocked,
+      // 가치관 답변(questionKey → answerKey). 항상 map으로 저장한다(빈 map 허용).
+      // 외부에서 전달된 mutable map을 그대로 payload에 노출하지 않도록 복사한다.
+      'valueAnswers': Map<String, String>.from(valueAnswers),
     };
   }
 
@@ -443,6 +474,7 @@ class UserProfile {
     DateTime? boostUntil,
     bool? clearBoostUntil,
     bool? likesUnlocked,
+    Map<String, String>? valueAnswers,
   }) {
     return UserProfile(
       uid: uid,
@@ -474,6 +506,7 @@ class UserProfile {
           ? null
           : boostUntil ?? this.boostUntil,
       likesUnlocked: likesUnlocked ?? this.likesUnlocked,
+      valueAnswers: valueAnswers ?? this.valueAnswers,
     );
   }
 }

@@ -2,6 +2,52 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 가치관 답변(valueAnswers) 화이트리스트 검증. users/publicProfiles 공용.
+    //
+    // 계약: Map<questionKey, answerKey>. 문항별 단일 답변, 부분 응답·빈 map 허용.
+    // - 필드가 없으면 유효(기존 문서·구버전 앱 호환).
+    // - 있으면 반드시 map이고 key는 6개 질문 key의 부분집합.
+    // - 존재하는 각 key의 값은 해당 질문의 answer key 중 하나여야 한다.
+    // - 임의 question key, 교차 answer key, 숫자/bool/list/중첩 map 값은 거부된다
+    //   (문자열이 아닌 값은 answer key 리스트의 `in` 검사에서 자동 탈락).
+    function valueAnswersValid(data) {
+      return !('valueAnswers' in data) || (
+        data.valueAnswers is map &&
+        data.valueAnswers.keys().hasOnly([
+          'contact_frequency',
+          'conflict_style',
+          'date_style',
+          'alone_time',
+          'affection_expression',
+          'life_rhythm'
+        ]) &&
+        (!('contact_frequency' in data.valueAnswers) ||
+          data.valueAnswers.contact_frequency in [
+            'all_day', 'few_times', 'once_a_day', 'when_needed'
+          ]) &&
+        (!('conflict_style' in data.valueAnswers) ||
+          data.valueAnswers.conflict_style in [
+            'talk_now', 'cool_down', 'text_first', 'soften'
+          ]) &&
+        (!('date_style' in data.valueAnswers) ||
+          data.valueAnswers.date_style in [
+            'active', 'cozy', 'foodie', 'culture'
+          ]) &&
+        (!('alone_time' in data.valueAnswers) ||
+          data.valueAnswers.alone_time in [
+            'a_lot', 'some', 'little', 'together'
+          ]) &&
+        (!('affection_expression' in data.valueAnswers) ||
+          data.valueAnswers.affection_expression in [
+            'words', 'actions', 'gifts', 'time'
+          ]) &&
+        (!('life_rhythm' in data.valueAnswers) ||
+          data.valueAnswers.life_rhythm in [
+            'morning', 'night', 'flexible'
+          ])
+      );
+    }
+
     // users/{uid} 문서:
     // - 본인만 읽을 수 있다. 다른 사용자 표시 정보는 publicProfiles/{uid}를
     //   사용한다.
@@ -16,6 +62,7 @@ service cloud.firestore {
           'createdAt', 'updatedAt', 'height', 'religion', 'smoking',
           'drinking', 'jobCategory', 'jobTitle', 'education', 'mbti',
           'interests', 'personalityTags', 'idealTags', 'relationshipGoal',
+          'valueAnswers',
           'location', 'verifications', 'discoveryFilter',
           'fcmTokens', 'fcmTokenUpdatedAt'
         ];
@@ -26,8 +73,8 @@ service cloud.firestore {
           'displayName', 'gender', 'bio', 'photoUrls', 'height', 'religion',
           'smoking', 'drinking', 'jobCategory', 'jobTitle', 'education',
           'mbti', 'interests', 'personalityTags', 'idealTags',
-          'relationshipGoal', 'updatedAt', 'location', 'discoveryFilter',
-          'fcmTokens', 'fcmTokenUpdatedAt'
+          'relationshipGoal', 'valueAnswers', 'updatedAt', 'location',
+          'discoveryFilter', 'fcmTokens', 'fcmTokenUpdatedAt'
         ];
       }
 
@@ -116,7 +163,8 @@ service cloud.firestore {
             data.fcmTokenUpdatedAt == request.time) &&
           locationValid(data) &&
           initialVerificationsValid(data) &&
-          discoveryFilterValid(data);
+          discoveryFilterValid(data) &&
+          valueAnswersValid(data);
       }
 
       function changedUserFieldsValid(changed) {
@@ -153,7 +201,13 @@ service cloud.firestore {
           (!changed.hasAny(['location']) ||
             locationValid(request.resource.data)) &&
           (!changed.hasAny(['discoveryFilter']) ||
-            discoveryFilterValid(request.resource.data));
+            discoveryFilterValid(request.resource.data)) &&
+          // valueAnswers를 건드리는 update는 결과 문서에 valueAnswers가 여전히
+          // map으로 존재하고 유효해야 한다 — 필드 삭제(FieldValue.delete)는 거부.
+          // 답변 전체 삭제는 {} 저장으로 처리한다.
+          (!changed.hasAny(['valueAnswers']) ||
+            ('valueAnswers' in request.resource.data &&
+              valueAnswersValid(request.resource.data)));
       }
 
       function isAllowedJellySpendUpdate() {
@@ -280,7 +334,7 @@ service cloud.firestore {
           'displayName', 'age', 'gender', 'bio', 'photoUrls', 'height',
           'religion', 'smoking', 'drinking', 'jobCategory', 'jobTitle',
           'education', 'mbti', 'interests', 'personalityTags', 'idealTags',
-          'relationshipGoal', 'coarseLocation'
+          'relationshipGoal', 'valueAnswers', 'coarseLocation'
         ];
       }
 
@@ -316,6 +370,7 @@ service cloud.firestore {
               data.personalityTags.size() <= 8)) &&
           (!('idealTags' in data) ||
             (data.idealTags is list && data.idealTags.size() <= 8)) &&
+          valueAnswersValid(data) &&
           coarseLocationValid(data);
       }
 

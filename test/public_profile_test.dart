@@ -30,6 +30,7 @@ UserProfile buildUserProfile({
   DateTime? boostUntil,
   int jelly = 999,
   bool likesUnlocked = true,
+  Map<String, String> valueAnswers = const {},
 }) {
   return UserProfile(
     uid: 'user-1',
@@ -57,6 +58,7 @@ UserProfile buildUserProfile({
     jelly: jelly,
     boostUntil: boostUntil,
     likesUnlocked: likesUnlocked,
+    valueAnswers: valueAnswers,
   );
 }
 
@@ -334,6 +336,92 @@ void main() {
     test('노출된 리스트는 수정 불가(unmodifiable)다', () {
       final public = PublicProfile(uid: 'u', photoUrls: ['a']);
       expect(() => public.photoUrls.add('b'), throwsUnsupportedError);
+    });
+  });
+
+  group('valueAnswers 공개 계약', () {
+    const answers = {'contact_frequency': 'few_times', 'date_style': 'culture'};
+
+    test('기본값은 빈 map이다', () {
+      expect(PublicProfile(uid: 'u').valueAnswers, isEmpty);
+    });
+
+    test('fromUserProfile이 답변을 복사한다', () {
+      final public = PublicProfile.fromUserProfile(
+        buildUserProfile(valueAnswers: answers),
+      );
+      expect(public.valueAnswers, answers);
+    });
+
+    test('toOwnerEditableFirestore가 valueAnswers map을 포함한다', () {
+      final public = PublicProfile.fromUserProfile(
+        buildUserProfile(valueAnswers: answers),
+      );
+      expect(public.toOwnerEditableFirestore()['valueAnswers'], answers);
+    });
+
+    test('ownerEditableKeys에는 포함, serverManagedKeys에는 미포함', () {
+      expect(PublicProfile.ownerEditableKeys, contains('valueAnswers'));
+      expect(PublicProfile.serverManagedKeys, isNot(contains('valueAnswers')));
+    });
+
+    test('backfillKeys에는 포함된다', () {
+      expect(PublicProfile.backfillKeys, contains('valueAnswers'));
+    });
+
+    test('fromMap: 필드 부재 시 빈 map', () {
+      final public = PublicProfile.fromMap(uid: 'u', data: const {});
+      expect(public.valueAnswers, isEmpty);
+    });
+
+    test('fromMap: 문자열 key-value만 보존하고 비문자열 값은 무시한다', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: const {
+          'valueAnswers': {
+            'contact_frequency': 'few_times', // 보존
+            'noise_num': 3, // 무시
+            'noise_bool': true, // 무시
+            'noise_list': ['a'], // 무시
+            'noise_map': {'k': 'v'}, // 무시
+          },
+        },
+      );
+      expect(public.valueAnswers, {'contact_frequency': 'few_times'});
+    });
+
+    test('fromMap: map이 아니면 빈 map', () {
+      final public = PublicProfile.fromMap(
+        uid: 'u',
+        data: const {'valueAnswers': 'not_a_map'},
+      );
+      expect(public.valueAnswers, isEmpty);
+    });
+
+    test('외부 map 변경이 내부 상태를 바꾸지 않고, 노출 map은 수정 불가다', () {
+      final source = {'contact_frequency': 'few_times'};
+      final public = PublicProfile(uid: 'u', valueAnswers: source);
+      source['date_style'] = 'culture';
+
+      expect(public.valueAnswers, {'contact_frequency': 'few_times'});
+      expect(() => public.valueAnswers['x'] = 'y', throwsUnsupportedError);
+    });
+
+    test('valueAnswers가 있어도 비공개/금지 key는 payload에 추가되지 않는다', () {
+      final payload = PublicProfile.fromUserProfile(
+        buildUserProfile(valueAnswers: answers),
+      ).toOwnerEditableFirestore();
+      for (final forbidden in _forbiddenKeys) {
+        expect(
+          payload.containsKey(forbidden),
+          isFalse,
+          reason: '$forbidden 이(가) owner payload에 노출됨',
+        );
+      }
+    });
+
+    test('currentSchemaVersion은 1을 유지한다', () {
+      expect(PublicProfile.currentSchemaVersion, 1);
     });
   });
 }
