@@ -46,6 +46,7 @@ const {
   deleteMyAccountCore,
   toHttpsError: toAccountDeletionHttpsError,
 } = require('./lib/account_deletion');
+const { tokensForRecipient } = require('./lib/push_tokens');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
@@ -246,8 +247,12 @@ async function removeInvalidTokens(uid, tokens) {
     );
 }
 
-async function sendPushToUser({ uid, title, body, data }) {
-  const tokens = await userTokens(uid);
+async function sendPushToUser({ uid, title, body, data, excludeTokens = [] }) {
+  // 발신자와 겹치는 token(같은 기기 계정 전환)을 제외해 자기 알림을 막는다.
+  const tokens = tokensForRecipient({
+    recipientTokens: await userTokens(uid),
+    senderTokens: excludeTokens,
+  });
   if (!tokens.length) return;
 
   const response = await admin.messaging().sendEachForMulticast({
@@ -305,6 +310,9 @@ exports.onMessageCreated = onDocumentCreated(
 
     const senderSnap = await db.collection('users').doc(senderId).get();
     const senderName = senderSnap.data()?.displayName || '상대방';
+    // 발신자의 현재 기기 token을 수신자 대상에서 제외한다(같은 기기 계정 전환 시
+    // 발신자 token이 수신자 fcmTokens에도 남아 자기 알림이 되돌아오는 문제 방지).
+    const senderTokens = await userTokens(senderId);
     await sendPushToUser({
       uid: receiverUid,
       title: '새 메시지',
@@ -314,6 +322,7 @@ exports.onMessageCreated = onDocumentCreated(
         matchId,
         senderUid: senderId,
       },
+      excludeTokens: senderTokens,
     });
     return null;
   },

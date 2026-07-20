@@ -584,6 +584,76 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+
+      // matches/{matchId}/appointments/{appointmentId} (Phase 2-1):
+      // - 채팅 약속 제안/수락/거절. 부모 match의 participants로 권한을 판단한다.
+      // - read: participant만.
+      // - create: 제안자(proposerUid == 본인)만, 매칭이 해제되지 않았을 때.
+      //   exact field allowlist + pending 초기 상태 + 미래 scheduledAt만 허용한다.
+      // - update: 수신자(recipientUid == 본인)만, pending 제안에 대해서만
+      //   accepted/declined로 응답한다. proposer가 자기 제안에 응답하거나,
+      //   불변 필드(proposer/recipient/scheduledAt/place/note/createdAt)를 바꾸는
+      //   쓰기는 거부한다.
+      // - delete: 항상 금지(약속 삭제 기능 없음).
+      match /appointments/{appointmentId} {
+        function parentMatch() {
+          return get(/databases/$(database)/documents/matches/$(matchId)).data;
+        }
+        function isMatchParticipant() {
+          return request.auth != null &&
+            request.auth.uid in parentMatch().participants;
+        }
+        function matchNotUnmatched() {
+          return parentMatch().get('unmatchedBy', []).size() == 0;
+        }
+
+        allow read: if isMatchParticipant();
+
+        allow create: if request.auth != null &&
+          isMatchParticipant() &&
+          matchNotUnmatched() &&
+          request.resource.data.keys().hasOnly([
+            'proposerUid', 'recipientUid', 'scheduledAt', 'place', 'note',
+            'status', 'createdAt', 'respondedAt', 'respondedBy'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'proposerUid', 'recipientUid', 'scheduledAt', 'place', 'note',
+            'status', 'createdAt', 'respondedAt', 'respondedBy'
+          ]) &&
+          request.resource.data.proposerUid == request.auth.uid &&
+          request.resource.data.recipientUid in parentMatch().participants &&
+          request.resource.data.recipientUid != request.auth.uid &&
+          request.resource.data.scheduledAt is timestamp &&
+          request.resource.data.scheduledAt > request.time &&
+          request.resource.data.place is string &&
+          request.resource.data.place.size() >= 1 &&
+          request.resource.data.place.size() <= 80 &&
+          request.resource.data.note is string &&
+          request.resource.data.note.size() <= 200 &&
+          request.resource.data.status == 'pending' &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.respondedAt == null &&
+          request.resource.data.respondedBy == null;
+
+        allow update: if request.auth != null &&
+          request.auth.uid == resource.data.recipientUid &&
+          isMatchParticipant() &&
+          matchNotUnmatched() &&
+          resource.data.status == 'pending' &&
+          request.resource.data.status in ['accepted', 'declined'] &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'respondedAt', 'respondedBy']) &&
+          request.resource.data.respondedAt == request.time &&
+          request.resource.data.respondedBy == request.auth.uid &&
+          request.resource.data.proposerUid == resource.data.proposerUid &&
+          request.resource.data.recipientUid == resource.data.recipientUid &&
+          request.resource.data.scheduledAt == resource.data.scheduledAt &&
+          request.resource.data.place == resource.data.place &&
+          request.resource.data.note == resource.data.note &&
+          request.resource.data.createdAt == resource.data.createdAt;
+
+        allow delete: if false;
+      }
     }
 
     // collectionGroup('swipes') 조회용 규칙:

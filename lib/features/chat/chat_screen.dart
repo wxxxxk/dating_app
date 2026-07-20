@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../models/chat_appointment.dart';
 import '../../models/fortune_model.dart';
 import '../../models/message_model.dart';
 import '../../models/public_profile.dart';
@@ -12,6 +13,7 @@ import '../../services/fortune/fortune_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../safety/report_sheet.dart';
+import 'chat_appointment_widgets.dart';
 
 /// 매칭 상대와의 1:1 실시간 채팅 화면.
 ///
@@ -55,6 +57,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _showConversationTips = false;
   bool _unmatched = false;
   bool _unmatching = false;
+  bool _submittingAppointment = false;
+  final Map<String, Stream<ChatAppointment?>> _appointmentStreams = {};
   String? _lastReadMarker;
   String? _latestConversationTipMessageId;
   // 실제 typing 이벤트가 연결되면 이 값만 갱신하면 된다.
@@ -112,6 +116,75 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  /// 같은 appointmentId의 스트림을 캐시해 리스트 rebuild마다 재구독되지 않게 한다.
+  Stream<ChatAppointment?> _appointmentStream(String appointmentId) {
+    return _appointmentStreams.putIfAbsent(
+      appointmentId,
+      () => widget.chatService.watchAppointment(
+        matchId: widget.matchId,
+        appointmentId: appointmentId,
+      ),
+    );
+  }
+
+  Future<void> _openAppointmentSheet() async {
+    if (_blocked || _unmatched || _submittingAppointment) return;
+    final proposed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.sheet),
+        ),
+      ),
+      builder: (_) => AppointmentProposalSheet(onSubmit: _submitAppointment),
+    );
+    if (proposed == true && mounted) {
+      _scrollToBottom();
+      _showSnack('약속을 제안했어요.');
+    }
+  }
+
+  /// 시트가 호출하는 실제 제안 로직. 성공 여부를 반환하고, 실패 시 시트가 열린
+  /// 채로 입력을 유지하도록 false를 돌려준다. raw 오류는 화면에 노출하지 않는다.
+  Future<bool> _submitAppointment({
+    required DateTime scheduledAt,
+    required String place,
+    required String note,
+  }) async {
+    if (_submittingAppointment) return false;
+    setState(() => _submittingAppointment = true);
+    try {
+      await widget.chatService.proposeAppointment(
+        matchId: widget.matchId,
+        proposerUid: widget.currentUid,
+        recipientUid: widget.otherProfile.uid,
+        scheduledAt: scheduledAt,
+        place: place,
+        note: note,
+      );
+      return true;
+    } catch (e) {
+      _debugLog('[Chat] 약속 제안 실패 matchId=${widget.matchId} error=$e');
+      return false;
+    } finally {
+      if (mounted) setState(() => _submittingAppointment = false);
+    }
+  }
+
+  Future<void> _respondToAppointment(
+    String appointmentId,
+    ChatAppointmentStatus status,
+  ) async {
+    await widget.chatService.respondToAppointment(
+      matchId: widget.matchId,
+      appointmentId: appointmentId,
+      responderUid: widget.currentUid,
+      status: status,
+    );
   }
 
   void _scrollToBottom() {
@@ -494,28 +567,42 @@ class _ChatScreenState extends State<ChatScreen> {
           itemCount: messages.length,
           itemBuilder: (_, i) {
             final msg = messages[i];
-            final isMine = msg.senderId == widget.currentUid;
             final showDateDivider = _shouldShowDateDivider(messages, i);
-            final position = _bubblePosition(messages, i);
-            final showTime = _shouldShowTime(messages, i);
             return Column(
               key: ValueKey('message-row-${msg.id}'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (showDateDivider) _DateDivider(date: msg.createdAt!),
-                _AnimatedMessageRow(
-                  child: _MessageBubble(
-                    message: msg,
-                    isMine: isMine,
-                    position: position,
-                    showTime: showTime,
-                  ),
-                ),
+                _AnimatedMessageRow(child: _buildMessageContent(messages, i)),
               ],
             );
           },
         );
       },
+    );
+  }
+
+  /// 메시지 종류별 렌더링. 약속 제안은 카드, 응답은 가운데 시스템 행,
+  /// 나머지는 기존 말풍선. 약속/시스템 메시지는 말풍선 grouping과 섞지 않는다.
+  Widget _buildMessageContent(List<MessageModel> messages, int index) {
+    final msg = messages[index];
+    if (msg.isAppointment) {
+      return AppointmentMessageCard(
+        appointmentId: msg.appointmentId!,
+        currentUid: widget.currentUid,
+        stream: _appointmentStream(msg.appointmentId!),
+        onRespond: (status) =>
+            _respondToAppointment(msg.appointmentId!, status),
+      );
+    }
+    if (msg.isAppointmentResponse) {
+      return AppointmentResponseRow(text: msg.text);
+    }
+    return _MessageBubble(
+      message: msg,
+      isMine: msg.senderId == widget.currentUid,
+      position: _bubblePosition(messages, index),
+      showTime: _shouldShowTime(messages, index),
     );
   }
 
@@ -559,6 +646,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (index == messages.length - 1) return true;
 
     final next = messages[index + 1];
+    // 다음 메시지가 약속 카드/시스템 행이면 그룹이 끊기므로 시간을 표시한다.
+    if (!next.isPlainText) return true;
     if (current.senderId != next.senderId) return true;
     if (next.createdAt == null) return true;
     return !_isSameMinute(current.createdAt!, next.createdAt!);
@@ -572,6 +661,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (firstIndex < 0 || secondIndex >= messages.length) return false;
     final first = messages[firstIndex];
     final second = messages[secondIndex];
+    // 약속 카드/응답 시스템 행은 텍스트 말풍선 grouping에 섞지 않는다.
+    if (!first.isPlainText || !second.isPlainText) return false;
     if (first.senderId != second.senderId) return false;
     final firstTime = first.createdAt;
     final secondTime = second.createdAt;
@@ -597,6 +688,10 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       child: Row(
         children: [
+          ChatAppointmentButton(
+            onPressed: _submittingAppointment ? null : _openAppointmentSheet,
+          ),
+          const SizedBox(width: 4),
           Expanded(
             child: TextField(
               controller: _textController,
