@@ -16,6 +16,9 @@ const {
   isMatchingProfileKeywordCache,
   buildDeterministicProfileKeywordFallback,
   profileKeywordSummarySystemPrompt,
+  ProfileKeywordModelCallError,
+  classifyProfileKeywordModelFailure,
+  parseProfileKeywordModelCompletion,
   generateProfileKeywordSummaryCore,
   PROFILE_STORY_PROMPT_LABELS,
   VALUE_QUESTION_LABELS,
@@ -98,6 +101,193 @@ function createGuard({ outcome = 'GENERATE', releaseThrows = false } = {}) {
     },
   };
 }
+
+function modelCallError({ stage = 'api_request', cause = null, finishReason = null } = {}) {
+  return new ProfileKeywordModelCallError({ stage, cause, finishReason });
+}
+
+function completion({ content, finishReason = 'stop' } = {}) {
+  return {
+    choices: [
+      {
+        finish_reason: finishReason,
+        message: { content },
+      },
+    ],
+  };
+}
+
+test('classifyProfileKeywordModelFailure maps OpenAI API errors to safe diagnostics', () => {
+  for (const [name, status, code] of [
+    ['AuthenticationError', 401, 'invalid_api_key'],
+    ['PermissionDeniedError', 403, 'permission_denied'],
+    ['NotFoundError', 404, 'model_not_found'],
+    ['RateLimitError', 429, 'rate_limit_exceeded'],
+    ['InternalServerError', 500, 'server_error'],
+  ]) {
+    const failure = classifyProfileKeywordModelFailure(
+      modelCallError({
+        cause: {
+          name,
+          status,
+          code,
+          request_id: `req_${name}_${status}`,
+          message: 'raw message must not be copied',
+          stack: 'raw stack must not be copied',
+        },
+      }),
+    );
+
+    assert.equal(failure.stage, 'api_request');
+    assert.equal(failure.status, status);
+    assert.equal(failure.errorName, name);
+    assert.equal(failure.apiCode, code);
+    assert.match(failure.requestIdHash, /^[0-9a-f]{12}$/);
+    assert.notEqual(failure.requestIdHash, `req_${name}_${status}`);
+    assert.equal(failure.finishReason, null);
+    assert.ok(!JSON.stringify(failure).includes('raw message'));
+    assert.ok(!JSON.stringify(failure).includes('raw stack'));
+  }
+
+  assert.deepEqual(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ cause: { name: 'APIConnectionError', code: 'connection_error' } }),
+    ),
+    {
+      stage: 'api_request',
+      status: null,
+      errorName: 'APIConnectionError',
+      apiCode: 'connection_error',
+      requestIdHash: null,
+      finishReason: null,
+    },
+  );
+  assert.deepEqual(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ cause: { name: 'APIConnectionTimeoutError', code: 'timeout' } }),
+    ),
+    {
+      stage: 'api_request',
+      status: null,
+      errorName: 'APIConnectionTimeoutError',
+      apiCode: 'timeout',
+      requestIdHash: null,
+      finishReason: null,
+    },
+  );
+});
+
+test('classifyProfileKeywordModelFailure sanitizes malformed error properties', () => {
+  assert.equal(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ cause: { name: 'AuthenticationError', status: '401' } }),
+    ).status,
+    null,
+  );
+  assert.equal(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ cause: { name: 'AuthenticationError', status: 700 } }),
+    ).status,
+    null,
+  );
+  assert.equal(
+    classifyProfileKeywordModelFailure(modelCallError({ cause: { name: 'SyntaxError' } }))
+      .errorName,
+    'UnknownError',
+  );
+  for (const code of ['invalid code', 'bad.code', 'x'.repeat(65)]) {
+    assert.equal(
+      classifyProfileKeywordModelFailure(
+        modelCallError({ cause: { name: 'BadRequestError', code } }),
+      ).apiCode,
+      null,
+    );
+  }
+
+  const requestId = 'req_full_request_id_must_not_be_logged';
+  const failure = classifyProfileKeywordModelFailure(
+    modelCallError({ cause: { name: 'RateLimitError', _request_id: requestId } }),
+  );
+  assert.match(failure.requestIdHash, /^[0-9a-f]{12}$/);
+  assert.notEqual(failure.requestIdHash, requestId);
+  assert.equal(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ cause: { name: 'RateLimitError' } }),
+    ).requestIdHash,
+    null,
+  );
+  assert.deepEqual(classifyProfileKeywordModelFailure(new Error('unknown raw message')), {
+    stage: 'unknown',
+    status: null,
+    errorName: null,
+    apiCode: null,
+    requestIdHash: null,
+    finishReason: null,
+  });
+});
+
+test('classifyProfileKeywordModelFailure sanitizes stages and finish reasons', () => {
+  assert.equal(classifyProfileKeywordModelFailure(modelCallError()).stage, 'api_request');
+  assert.equal(
+    classifyProfileKeywordModelFailure(modelCallError({ stage: 'empty_response' })).stage,
+    'empty_response',
+  );
+  assert.equal(
+    classifyProfileKeywordModelFailure(modelCallError({ stage: 'json_parse' })).stage,
+    'json_parse',
+  );
+  assert.equal(
+    classifyProfileKeywordModelFailure(modelCallError({ stage: 'invalid_stage' })).stage,
+    'unknown',
+  );
+
+  for (const finishReason of ['stop', 'length', 'content_filter', 'tool_calls', 'function_call']) {
+    const failure = classifyProfileKeywordModelFailure(
+      modelCallError({ stage: 'empty_response', finishReason }),
+    );
+    assert.equal(failure.finishReason, finishReason);
+  }
+  assert.equal(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ stage: 'empty_response', finishReason: 'new_reason' }),
+    ).finishReason,
+    'unknown',
+  );
+  assert.equal(
+    classifyProfileKeywordModelFailure(
+      modelCallError({ stage: 'json_parse', finishReason: 'stop' }),
+    ).finishReason,
+    null,
+  );
+});
+
+test('parseProfileKeywordModelCompletion returns valid JSON and wraps parse failures safely', () => {
+  assert.deepEqual(
+    parseProfileKeywordModelCompletion(completion({ content: '{"keywords":["차분한 대화"]}' })),
+    { keywords: ['차분한 대화'] },
+  );
+
+  assert.throws(
+    () => parseProfileKeywordModelCompletion(completion({ content: '   ', finishReason: 'length' })),
+    (error) => {
+      const failure = classifyProfileKeywordModelFailure(error);
+      assert.equal(failure.stage, 'empty_response');
+      assert.equal(failure.finishReason, 'length');
+      return true;
+    },
+  );
+
+  assert.throws(
+    () => parseProfileKeywordModelCompletion(completion({ content: '{bad json}' })),
+    (error) => {
+      const failure = classifyProfileKeywordModelFailure(error);
+      assert.equal(failure.stage, 'json_parse');
+      assert.equal(failure.finishReason, null);
+      assert.ok(!JSON.stringify(failure).includes('bad json'));
+      return true;
+    },
+  );
+});
 
 test('catalog keys match the current public profile Dart catalogs', () => {
   assert.deepEqual(Object.keys(PROFILE_STORY_PROMPT_LABELS), [
@@ -542,6 +732,114 @@ test('core writes fallback on model throw or invalid response and never returns 
     assert.equal(ref.writes[0].payload.aiKeywordSummary.generator, 'fallback');
     assert.equal(ref.writes[0].payload.aiKeywordSummary.model, null);
     assert.equal(guard.releaseCalls[0].success, true);
+  }
+});
+
+test('core logs safe model failure diagnostics and still writes fallback', async () => {
+  const ref = createPublicProfileRef({
+    bio: 'raw profile text must not be logged',
+    interests: ['walk'],
+    personalityTags: ['calm'],
+  });
+  const guard = createGuard();
+  const logs = [];
+  const requestId = 'req_full_request_id_must_not_be_logged';
+
+  const result = await generateProfileKeywordSummaryCore({
+    uid: 'raw_uid_must_not_be_logged',
+    publicProfileRef: ref,
+    guard,
+    tagLabels,
+    timestampNow: timestamp,
+    callModel: async () => {
+      throw modelCallError({
+        cause: {
+          name: 'RateLimitError',
+          status: 429,
+          code: 'insufficient_quota',
+          request_id: requestId,
+          message: 'raw OpenAI message must not be logged',
+          stack: 'raw stack must not be logged',
+          response: { data: 'raw response must not be logged' },
+          body: { data: 'raw body must not be logged' },
+        },
+      });
+    },
+    logEvent: (level, category, fields) => logs.push({ level, category, fields }),
+  });
+
+  assert.equal(result.generator, 'fallback');
+  assert.equal(result.cacheHit, false);
+  assert.equal(ref.writes[0].payload.aiKeywordSummary.generator, 'fallback');
+  assert.equal(ref.writes[0].payload.aiKeywordSummary.model, null);
+  assert.equal(guard.releaseCalls[0].success, true);
+
+  const modelFailed = logs.find((event) => event.category === 'model_failed');
+  assert.ok(modelFailed);
+  assert.equal(modelFailed.level, 'warn');
+  assert.equal(modelFailed.fields.stage, 'api_request');
+  assert.equal(modelFailed.fields.status, 429);
+  assert.equal(modelFailed.fields.errorName, 'RateLimitError');
+  assert.equal(modelFailed.fields.apiCode, 'insufficient_quota');
+  assert.match(modelFailed.fields.requestIdHash, /^[0-9a-f]{12}$/);
+  assert.notEqual(modelFailed.fields.requestIdHash, requestId);
+  assert.equal(modelFailed.fields.finishReason, null);
+  assert.equal(modelFailed.fields.retryable, true);
+
+  const serializedEvent = JSON.stringify(modelFailed);
+  for (const forbidden of [
+    'raw OpenAI message',
+    'raw stack',
+    'raw response',
+    'raw body',
+    requestId,
+    'raw profile text',
+    'raw_uid_must_not_be_logged',
+    '차분한 대화',
+    '주말 산책',
+  ]) {
+    assert.ok(!serializedEvent.includes(forbidden), forbidden);
+  }
+
+  const generatedFallback = logs.find((event) => event.category === 'generated_fallback');
+  assert.ok(generatedFallback);
+  assert.equal(generatedFallback.fields.generator, 'fallback');
+  assert.equal(generatedFallback.fields.cacheHit, false);
+});
+
+test('core classifies empty, json parse, and unknown model failures', async () => {
+  for (const [thrownError, expected] of [
+    [
+      modelCallError({ stage: 'empty_response', finishReason: 'content_filter' }),
+      { stage: 'empty_response', finishReason: 'content_filter' },
+    ],
+    [modelCallError({ stage: 'json_parse' }), { stage: 'json_parse', finishReason: null }],
+    [new Error('unknown raw message'), { stage: 'unknown', finishReason: null }],
+  ]) {
+    const ref = createPublicProfileRef({ interests: ['walk'], personalityTags: ['calm'] });
+    const guard = createGuard();
+    const logs = [];
+
+    const result = await generateProfileKeywordSummaryCore({
+      uid: 'u1',
+      publicProfileRef: ref,
+      guard,
+      tagLabels,
+      timestampNow: timestamp,
+      callModel: async () => {
+        throw thrownError;
+      },
+      logEvent: (level, category, fields) => logs.push({ level, category, fields }),
+    });
+
+    assert.equal(result.generator, 'fallback');
+    assert.equal(ref.writes[0].payload.aiKeywordSummary.generator, 'fallback');
+    assert.equal(guard.releaseCalls[0].success, true);
+    const modelFailed = logs.find((event) => event.category === 'model_failed');
+    assert.equal(modelFailed.fields.stage, expected.stage);
+    assert.equal(modelFailed.fields.finishReason, expected.finishReason);
+    assert.ok(logs.some((event) => event.category === 'generated_fallback'));
+    assert.ok(!JSON.stringify(modelFailed).includes('unknown raw message'));
   }
 });
 

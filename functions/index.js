@@ -28,7 +28,9 @@ const {
 } = require('./lib/ai_usage_guard');
 const {
   PROFILE_KEYWORD_SUMMARY_MODEL,
+  ProfileKeywordModelCallError,
   generateProfileKeywordSummaryCore,
+  parseProfileKeywordModelCompletion,
 } = require('./lib/profile_keyword_summary');
 const {
   assertProfileInsightAccess,
@@ -460,25 +462,25 @@ async function callOpenAiForNarrative({ systemPrompt, userPayload }) {
 
 async function callOpenAiForProfileKeywordSummary({ systemPrompt, userPayload }) {
   const client = new OpenAI({ apiKey: OPENAI_API_KEY.value() });
-  const completion = await client.chat.completions.create({
-    model: PROFILE_KEYWORD_SUMMARY_MODEL,
-    response_format: { type: 'json_object' },
-    temperature: 0.3,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: JSON.stringify(userPayload) },
-    ],
-  });
-
-  const raw = completion.choices?.[0]?.message?.content;
-  if (!raw) {
-    throw new HttpsError('internal', 'GPT 응답이 비어 있습니다.');
-  }
+  let completion;
   try {
-    return JSON.parse(raw);
-  } catch {
-    throw new HttpsError('internal', 'GPT 응답을 JSON으로 해석하지 못했습니다.');
+    completion = await client.chat.completions.create({
+      model: PROFILE_KEYWORD_SUMMARY_MODEL,
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: JSON.stringify(userPayload) },
+      ],
+    });
+  } catch (error) {
+    throw new ProfileKeywordModelCallError({
+      stage: 'api_request',
+      cause: error,
+    });
   }
+
+  return parseProfileKeywordModelCompletion(completion);
 }
 
 const TEXT_AI_RATE_LIMIT_MESSAGE = '요청이 잠시 많습니다. 잠시 후 다시 시도해 주세요.';

@@ -117,6 +117,113 @@ const JOB_CATEGORY_LABELS = Object.freeze({
 
 const KEYWORD_PATTERN = /^[가-힣A-Za-z0-9]+(?: [가-힣A-Za-z0-9]+)*$/u;
 const SOURCE_HASH_PATTERN = /^[0-9a-f]{64}$/;
+const PROFILE_KEYWORD_MODEL_FAILURE_STAGES = Object.freeze([
+  'api_request',
+  'empty_response',
+  'json_parse',
+  'unknown',
+]);
+const PROFILE_KEYWORD_OPENAI_ERROR_NAMES = Object.freeze([
+  'BadRequestError',
+  'AuthenticationError',
+  'PermissionDeniedError',
+  'NotFoundError',
+  'UnprocessableEntityError',
+  'RateLimitError',
+  'InternalServerError',
+  'APIConnectionError',
+  'APIConnectionTimeoutError',
+]);
+const PROFILE_KEYWORD_FINISH_REASONS = Object.freeze([
+  'stop',
+  'length',
+  'content_filter',
+  'tool_calls',
+  'function_call',
+  'unknown',
+]);
+const API_CODE_PATTERN = /^[a-z0-9_-]+$/;
+
+class ProfileKeywordModelCallError extends Error {
+  constructor({ stage, cause, finishReason = null }) {
+    super('Profile keyword model call failed');
+    this.name = 'ProfileKeywordModelCallError';
+    this.stage = stage;
+    this.cause = cause;
+    this.finishReason = finishReason;
+  }
+}
+
+function sanitizeProfileKeywordFailureStage(stage) {
+  return PROFILE_KEYWORD_MODEL_FAILURE_STAGES.includes(stage) ? stage : 'unknown';
+}
+
+function sanitizeProfileKeywordFailureStatus(status) {
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
+
+function sanitizeProfileKeywordErrorName(name) {
+  return PROFILE_KEYWORD_OPENAI_ERROR_NAMES.includes(name) ? name : 'UnknownError';
+}
+
+function sanitizeProfileKeywordApiCode(code) {
+  if (typeof code !== 'string' || code.length > 64 || !API_CODE_PATTERN.test(code)) {
+    return null;
+  }
+  return code;
+}
+
+function hashProfileKeywordRequestId(requestId) {
+  if (typeof requestId !== 'string' || !requestId.trim()) {
+    return null;
+  }
+  return crypto.createHash('sha256').update(requestId).digest('hex').slice(0, 12);
+}
+
+function sanitizeProfileKeywordFinishReason(finishReason) {
+  return PROFILE_KEYWORD_FINISH_REASONS.includes(finishReason) ? finishReason : 'unknown';
+}
+
+function classifyProfileKeywordModelFailure(error) {
+  const stage = sanitizeProfileKeywordFailureStage(error?.stage);
+  const cause = error instanceof ProfileKeywordModelCallError ? error.cause : error;
+  const requestId =
+    cause && typeof cause === 'object' ? cause.request_id || cause._request_id : null;
+
+  return {
+    stage,
+    status: stage === 'api_request' ? sanitizeProfileKeywordFailureStatus(cause?.status) : null,
+    errorName: stage === 'api_request' ? sanitizeProfileKeywordErrorName(cause?.name) : null,
+    apiCode: stage === 'api_request' ? sanitizeProfileKeywordApiCode(cause?.code) : null,
+    requestIdHash: stage === 'api_request' ? hashProfileKeywordRequestId(requestId) : null,
+    finishReason:
+      stage === 'empty_response'
+        ? sanitizeProfileKeywordFinishReason(error?.finishReason)
+        : null,
+  };
+}
+
+function parseProfileKeywordModelCompletion(completion) {
+  const choice = completion?.choices?.[0];
+  const raw = choice?.message?.content;
+
+  if (typeof raw !== 'string' || !raw.trim()) {
+    throw new ProfileKeywordModelCallError({
+      stage: 'empty_response',
+      cause: null,
+      finishReason: choice?.finish_reason,
+    });
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new ProfileKeywordModelCallError({
+      stage: 'json_parse',
+      cause: error,
+    });
+  }
+}
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -724,9 +831,11 @@ async function generateProfileKeywordSummaryCore({
       }
     } catch (error) {
       keywords = buildDeterministicProfileKeywordFallback(source, { tagLabels });
+      const failure = classifyProfileKeywordModelFailure(error);
       emitLog(logEvent, 'warn', 'model_failed', {
         sourceHashPrefix,
         retryable: true,
+        ...failure,
       });
     }
 
@@ -779,6 +888,9 @@ module.exports = {
   isMatchingProfileKeywordCache,
   buildDeterministicProfileKeywordFallback,
   profileKeywordSummarySystemPrompt,
+  ProfileKeywordModelCallError,
+  classifyProfileKeywordModelFailure,
+  parseProfileKeywordModelCompletion,
   generateProfileKeywordSummaryCore,
   // Exported for drift-focused tests.
   PROFILE_STORY_PROMPT_LABELS,
