@@ -6,6 +6,7 @@ import '../../core/constants/profile_story_prompts.dart';
 import '../../core/constants/value_questions.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
+import '../../models/ai_keyword_summary.dart';
 import '../../models/profile_story.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
@@ -154,6 +155,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ? null
         : LocationService.formatDistance(coarseDistance);
     final visibleStories = _visibleProfileStories(_profile.profileStories);
+    final keywordSummary = _profile.aiKeywordSummary;
+    final visibleKeywordSummary =
+        keywordSummary != null && keywordSummary.keywords.length >= 2
+        ? keywordSummary
+        : null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -203,10 +209,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                   ],
-                  if (visibleStories.isNotEmpty) ...[
+                  if (visibleKeywordSummary != null) ...[
                     if (_profile.bio.isNotEmpty) const SizedBox(height: 22),
+                    _ProfileKeywordSummarySection(
+                      summary: visibleKeywordSummary,
+                    ),
+                  ],
+                  if (visibleStories.isNotEmpty) ...[
+                    if (_profile.bio.isNotEmpty &&
+                        visibleKeywordSummary == null)
+                      const SizedBox(height: 22),
                     _ProfileStoriesSection(entries: visibleStories),
-                  ] else
+                  ] else if (visibleKeywordSummary == null)
                     const SizedBox(height: 22),
                   _DetailGrid(profile: _profile),
                   _TagSection(
@@ -676,6 +690,87 @@ class _TagSection extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: labels.map((label) => _TagChip(label: label)).toList(),
+      ),
+    );
+  }
+}
+
+class _ProfileKeywordSummarySection extends StatelessWidget {
+  final AiKeywordSummary summary;
+
+  const _ProfileKeywordSummarySection({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    final isAiGenerated = summary.generator == 'ai';
+    final title = isAiGenerated ? 'AI가 요약한 키워드' : '프로필 키워드';
+
+    return Padding(
+      key: const ValueKey('profile-keyword-summary-section'),
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isAiGenerated) ...[
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 16,
+                  color: AppColors.matchPrimary,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < summary.keywords.length; i++)
+                _ProfileKeywordChip(keyword: summary.keywords[i], index: i),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileKeywordChip extends StatelessWidget {
+  final String keyword;
+  final int index;
+
+  const _ProfileKeywordChip({required this.keyword, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: ValueKey('profile-keyword-summary-chip-$index'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.mintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(color: AppColors.premiumBorder),
+      ),
+      child: Text(
+        '#$keyword',
+        key: ValueKey('profile-keyword-summary-label-$index'),
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: AppColors.mintDeep,
+        ),
       ),
     );
   }
