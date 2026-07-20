@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/charm_model.dart';
@@ -86,15 +87,20 @@ class _CharmReportScreenState extends State<CharmReportScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snap.hasError) {
+            if (kDebugMode) {
+              debugPrint(
+                '[CharmReport] load_failed category=${snap.error.runtimeType}',
+              );
+            }
             return _CharmErrorState(
-              message: '${snap.error}',
+              message: '매력 리포트를 만들지 못했어요.\n잠시 후 다시 시도해주세요.',
               onRetry: () => _reload(),
             );
           }
           final data = snap.data;
           if (data == null) {
             return _CharmErrorState(
-              message: '리포트를 불러오지 못했어요.',
+              message: '매력 리포트를 만들지 못했어요.\n잠시 후 다시 시도해주세요.',
               onRetry: _reload,
             );
           }
@@ -110,6 +116,48 @@ class _CharmReportData {
   final CharmInterestSummary summary;
 
   const _CharmReportData({required this.report, required this.summary});
+}
+
+class _CharmErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _CharmErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final minHeight =
+        MediaQuery.sizeOf(context).height -
+        kToolbarHeight -
+        MediaQuery.paddingOf(context).vertical;
+    final safeMinHeight = minHeight < 0 ? 0.0 : minHeight;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: safeMinHeight),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _CharmReportBody extends StatelessWidget {
@@ -338,57 +386,6 @@ class _AppealTipCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CharmErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _CharmErrorState({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.auto_awesome_rounded,
-              size: 58,
-              color: AppColors.textSecondary,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '매력 리포트를 만들 수 없어요',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: AppColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 18),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('다시 시도'),
-            ),
-          ],
-        ),
       ),
     );
   }

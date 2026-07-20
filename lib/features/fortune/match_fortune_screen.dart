@@ -3,12 +3,11 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
+import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
-import '../../services/share/share_image_service.dart';
-import 'widgets/share_card.dart';
 
 /// 궁합 화면 — 매칭 목록의 "궁합 보기" 진입점.
 ///
@@ -17,7 +16,7 @@ import 'widgets/share_card.dart';
 class MatchFortuneScreen extends StatefulWidget {
   final String matchId;
   final String currentUid;
-  final UserProfile otherProfile;
+  final PublicProfile otherProfile;
   final FirestoreService firestoreService;
   final FortuneService fortuneService;
 
@@ -40,8 +39,9 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
   UserProfile? _myProfile;
   ZodiacInfo? _myZodiac;
   SajuInfo? _mySaju;
+  ZodiacInfo? _otherZodiac;
+  SajuInfo? _otherSaju;
   FortuneNarrative? _narrative;
-  bool _sharing = false;
 
   @override
   void initState() {
@@ -62,93 +62,34 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
         throw StateError('내 프로필을 찾을 수 없습니다.');
       }
 
-      final myZodiac = FortuneCalculator.getZodiacSign(myProfile.birthDate);
-      final mySaju = FortuneCalculator.getSaju(myProfile.birthDate);
-      final otherZodiac = FortuneCalculator.getZodiacSign(
-        widget.otherProfile.birthDate,
-      );
-      final otherSaju = FortuneCalculator.getSaju(
-        widget.otherProfile.birthDate,
-      );
-
-      final narrative = await widget.fortuneService.getMatchFortune(
+      final result = await widget.fortuneService.getMatchFortune(
         matchId: widget.matchId,
-        myZodiac: myZodiac,
-        mySaju: mySaju,
-        otherZodiac: otherZodiac,
-        otherSaju: otherSaju,
+        currentUid: widget.currentUid,
+        otherUid: widget.otherProfile.uid,
       );
 
       if (mounted) {
         setState(() {
           _myProfile = myProfile;
-          _myZodiac = myZodiac;
-          _mySaju = mySaju;
-          _narrative = narrative;
+          _myZodiac = result.myZodiac;
+          _mySaju = result.mySaju;
+          _otherZodiac = result.otherZodiac;
+          _otherSaju = result.otherSaju;
+          _narrative = result.narrative;
         });
       }
-    } catch (e, stackTrace) {
+    } on FortuneFailure catch (e) {
       if (kDebugMode) {
-        debugPrint('[MatchFortune] 궁합 로드 실패: $e');
-        debugPrint('$stackTrace');
+        debugPrint('[MatchFortune] load_failed code=${e.code}');
       }
-      if (mounted) setState(() => _error = '궁합 정보를 불러오지 못했어요.');
+      if (mounted) setState(() => _error = 'load_failed');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[MatchFortune] load_failed category=${e.runtimeType}');
+      }
+      if (mounted) setState(() => _error = 'load_failed');
     } finally {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _shareMatchResult() async {
-    final narrative = _narrative;
-    final myProfile = _myProfile;
-    final myZodiac = _myZodiac;
-    final mySaju = _mySaju;
-    if (narrative == null ||
-        myProfile == null ||
-        myZodiac == null ||
-        mySaju == null ||
-        _sharing) {
-      return;
-    }
-    final otherZodiac = FortuneCalculator.getZodiacSign(
-      widget.otherProfile.birthDate,
-    );
-    final otherSaju = FortuneCalculator.getSaju(widget.otherProfile.birthDate);
-
-    final box = context.findRenderObject() as RenderBox?;
-    final origin = box == null
-        ? Rect.zero
-        : box.localToGlobal(Offset.zero) & box.size;
-
-    setState(() => _sharing = true);
-    try {
-      await ShareImageService.sharePng(
-        context: context,
-        child: MatchShareCard(
-          myProfile: myProfile,
-          otherProfile: widget.otherProfile,
-          narrative: narrative,
-          myZodiac: myZodiac,
-          mySaju: mySaju,
-          otherZodiac: otherZodiac,
-          otherSaju: otherSaju,
-        ),
-        fileName: 'match_${widget.matchId}.png',
-        title: '우리의 사주 궁합',
-        text: '우리의 사주 궁합 결과를 확인해보세요.',
-        sharePositionOrigin: origin,
-      );
-    } catch (e, stackTrace) {
-      if (kDebugMode) {
-        debugPrint('[MatchFortune] 궁합 이미지 생성 실패: $e');
-        debugPrint('$stackTrace');
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('궁합 이미지를 만드는 데 실패했어요.')));
-    } finally {
-      if (mounted) setState(() => _sharing = false);
     }
   }
 
@@ -170,28 +111,9 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                _error ?? '궁합 정보를 불러오지 못했어요.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-            ],
-          ),
-        ),
+      return _MatchFortuneErrorState(
+        message: '궁합 정보를 불러오지 못했어요.\n잠시 후 다시 시도해주세요.',
+        onRetry: _load,
       );
     }
 
@@ -199,17 +121,16 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
     final myProfile = _myProfile;
     final myZodiac = _myZodiac;
     final mySaju = _mySaju;
+    final otherZodiac = _otherZodiac;
+    final otherSaju = _otherSaju;
     if (narrative == null ||
         myProfile == null ||
         myZodiac == null ||
-        mySaju == null) {
+        mySaju == null ||
+        otherZodiac == null ||
+        otherSaju == null) {
       return const SizedBox.shrink();
     }
-
-    final otherZodiac = FortuneCalculator.getZodiacSign(
-      widget.otherProfile.birthDate,
-    );
-    final otherSaju = FortuneCalculator.getSaju(widget.otherProfile.birthDate);
 
     return Stack(
       children: [
@@ -227,11 +148,6 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
             const SizedBox(height: 24),
             _CharacterCard(narrative: narrative),
             const SizedBox(height: 20),
-            _ShareButton(
-              label: '궁합 공유하기',
-              onPressed: _sharing ? null : _shareMatchResult,
-            ),
-            const SizedBox(height: 20),
             _AiRecommendationReasons(narrative: narrative),
             if (narrative.relationshipStory != null &&
                 narrative.relationshipStory!.isNotEmpty) ...[
@@ -240,63 +156,46 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
             ],
           ],
         ),
-        if (_sharing) const _ShareLoadingOverlay(),
       ],
     );
   }
 }
 
-class _ShareButton extends StatelessWidget {
-  final String label;
-  final VoidCallback? onPressed;
+class _MatchFortuneErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
 
-  const _ShareButton({required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton.icon(
-      onPressed: onPressed,
-      icon: const Icon(Icons.ios_share_rounded),
-      label: Text(label),
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColors.mint,
-        foregroundColor: AppColors.onMint,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.button),
-        ),
-      ),
-    );
-  }
-}
-
-class _ShareLoadingOverlay extends StatelessWidget {
-  const _ShareLoadingOverlay();
+  const _MatchFortuneErrorState({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: ColoredBox(
-        color: AppColors.ink.withValues(alpha: 0.26),
+    final minHeight =
+        MediaQuery.sizeOf(context).height -
+        kToolbarHeight -
+        MediaQuery.paddingOf(context).vertical;
+    final safeMinHeight = minHeight < 0 ? 0.0 : minHeight;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: safeMinHeight),
         child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(AppRadius.button),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text('공유 이미지 생성 중'),
-              ],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
+            ],
           ),
         ),
       ),
@@ -308,7 +207,7 @@ class _CoupleRow extends StatelessWidget {
   final UserProfile myProfile;
   final ZodiacInfo myZodiac;
   final SajuInfo mySaju;
-  final UserProfile otherProfile;
+  final PublicProfile otherProfile;
   final ZodiacInfo otherZodiac;
   final SajuInfo otherSaju;
 
@@ -327,7 +226,8 @@ class _CoupleRow extends StatelessWidget {
       children: [
         Expanded(
           child: _PersonCard(
-            profile: myProfile,
+            displayName: myProfile.displayName,
+            photoUrls: myProfile.photoUrls,
             zodiac: myZodiac,
             saju: mySaju,
           ),
@@ -342,7 +242,8 @@ class _CoupleRow extends StatelessWidget {
         ),
         Expanded(
           child: _PersonCard(
-            profile: otherProfile,
+            displayName: otherProfile.displayName,
+            photoUrls: otherProfile.photoUrls,
             zodiac: otherZodiac,
             saju: otherSaju,
           ),
@@ -353,18 +254,20 @@ class _CoupleRow extends StatelessWidget {
 }
 
 class _PersonCard extends StatelessWidget {
-  final UserProfile profile;
+  final String displayName;
+  final List<String> photoUrls;
   final ZodiacInfo zodiac;
   final SajuInfo saju;
   const _PersonCard({
-    required this.profile,
+    required this.displayName,
+    required this.photoUrls,
     required this.zodiac,
     required this.saju,
   });
 
   @override
   Widget build(BuildContext context) {
-    final photoUrl = profile.photoUrls.isNotEmpty ? profile.photoUrls[0] : null;
+    final photoUrl = photoUrls.isNotEmpty ? photoUrls[0] : null;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -386,7 +289,7 @@ class _PersonCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            profile.displayName,
+            displayName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),

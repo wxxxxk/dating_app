@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
@@ -58,8 +59,16 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
         saju: _saju,
       );
       if (mounted) setState(() => _narrative = narrative);
+    } on FortuneFailure catch (e) {
+      if (kDebugMode) {
+        debugPrint('[MyFortune] load_failed code=${e.code}');
+      }
+      if (mounted) setState(() => _error = 'load_failed');
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (kDebugMode) {
+        debugPrint('[MyFortune] load_failed category=${e.runtimeType}');
+      }
+      if (mounted) setState(() => _error = 'load_failed');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -91,10 +100,13 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
         sharePositionOrigin: origin,
       );
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[MyFortune] share_failed category=${e.runtimeType}');
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('공유 이미지 생성 실패: $e')));
+        ..showSnackBar(const SnackBar(content: Text('공유 이미지를 만드는 데 실패했어요.')));
     } finally {
       if (mounted) setState(() => _sharing = false);
     }
@@ -121,28 +133,9 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '사주를 불러오지 못했어요\n$_error',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-            ],
-          ),
-        ),
+      return _MyFortuneErrorState(
+        message: '내 사주 분석을 불러오지 못했어요.\n잠시 후 다시 시도해주세요.',
+        onRetry: _load,
       );
     }
 
@@ -171,6 +164,48 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
         ),
         if (_sharing) const _ShareLoadingOverlay(),
       ],
+    );
+  }
+}
+
+class _MyFortuneErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _MyFortuneErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final minHeight =
+        MediaQuery.sizeOf(context).height -
+        kToolbarHeight -
+        MediaQuery.paddingOf(context).vertical;
+    final safeMinHeight = minHeight < 0 ? 0.0 : minHeight;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: safeMinHeight),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

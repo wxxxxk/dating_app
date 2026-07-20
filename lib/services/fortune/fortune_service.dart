@@ -40,35 +40,46 @@ class FortuneService {
     final cached = userDoc.data()?['fortuneNarrative'] as Map<String, dynamic>?;
     if (cached != null) return FortuneNarrative.fromMap(cached);
 
-    final callable = _functions.httpsCallable('generateFortuneNarrative');
-    final result = await callable.call({
-      'attrs': {'zodiac': zodiac.toAttrs(), 'saju': saju.toAttrs()},
-    });
+    final result = await _callFunction(() {
+      final callable = _functions.httpsCallable('generateFortuneNarrative');
+      return callable.call({
+        'attrs': {'zodiac': zodiac.toAttrs(), 'saju': saju.toAttrs()},
+      });
+    }, label: 'generateFortuneNarrative');
     return FortuneNarrative.fromMap(
       Map<String, dynamic>.from(result.data as Map),
     );
   }
 
   /// 두 사람의 궁합 서사를 가져온다.
-  Future<FortuneNarrative> getMatchFortune({
+  Future<MatchFortuneResult> getMatchFortune({
     required String matchId,
-    required ZodiacInfo myZodiac,
-    required SajuInfo mySaju,
-    required ZodiacInfo otherZodiac,
-    required SajuInfo otherSaju,
+    required String currentUid,
+    required String otherUid,
   }) async {
-    final matchDoc = await _db.collection('matches').doc(matchId).get();
-    final cached = matchDoc.data()?['fortuneMatch'] as Map<String, dynamic>?;
-    if (cached != null) return FortuneNarrative.fromMap(cached);
-
-    final callable = _functions.httpsCallable('generateMatchNarrative');
-    final result = await callable.call({
-      'matchId': matchId,
-      'userA': {'zodiac': myZodiac.toAttrs(), 'saju': mySaju.toAttrs()},
-      'userB': {'zodiac': otherZodiac.toAttrs(), 'saju': otherSaju.toAttrs()},
-    });
-    return FortuneNarrative.fromMap(
-      Map<String, dynamic>.from(result.data as Map),
+    final result = await _callFunction(() {
+      final callable = _functions.httpsCallable('generateMatchNarrative');
+      return callable.call({'matchId': matchId});
+    }, label: 'generateMatchNarrative');
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final narrative = FortuneNarrative.fromMap(
+      Map<String, dynamic>.from(data['narrative'] as Map),
+    );
+    final participantAttrs = Map<String, dynamic>.from(
+      data['participantAttrs'] as Map,
+    );
+    final myAttrs = Map<String, dynamic>.from(
+      participantAttrs[currentUid] as Map,
+    );
+    final otherAttrs = Map<String, dynamic>.from(
+      participantAttrs[otherUid] as Map,
+    );
+    return MatchFortuneResult(
+      narrative: narrative,
+      myZodiac: _zodiacFromAttrs(myAttrs['zodiac']),
+      mySaju: _sajuFromAttrs(myAttrs['saju']),
+      otherZodiac: _zodiacFromAttrs(otherAttrs['zodiac']),
+      otherSaju: _sajuFromAttrs(otherAttrs['saju']),
     );
   }
 
@@ -106,11 +117,13 @@ class FortuneService {
       return DailyFortune.fromMap(cachedSnap.data()!);
     }
 
-    final callable = _functions.httpsCallable('generateDailyFortune');
-    final result = await callable.call({
-      'date': dateKey,
-      'attrs': {'zodiac': zodiac.toAttrs(), 'saju': saju.toAttrs()},
-    });
+    final result = await _callFunction(() {
+      final callable = _functions.httpsCallable('generateDailyFortune');
+      return callable.call({
+        'date': dateKey,
+        'attrs': {'zodiac': zodiac.toAttrs(), 'saju': saju.toAttrs()},
+      });
+    }, label: 'generateDailyFortune');
     return DailyFortune.fromMap(Map<String, dynamic>.from(result.data as Map));
   }
 
@@ -280,9 +293,74 @@ class FortuneService {
 
   static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
+  Future<HttpsCallableResult<dynamic>> _callFunction(
+    Future<HttpsCallableResult<dynamic>> Function() call, {
+    required String label,
+  }) async {
+    try {
+      return await call();
+    } on FirebaseFunctionsException catch (e) {
+      final code = FortuneFailure.safeCode(e.code);
+      _debugLog('[FortuneService] callable_failed label=$label code=$code');
+      throw FortuneFailure(code);
+    }
+  }
+
   static void _debugLog(String message) {
     if (kDebugMode) {
       debugPrint(message);
     }
   }
+}
+
+class FortuneFailure implements Exception {
+  final String code;
+
+  const FortuneFailure(this.code);
+
+  static const _allowedCodes = {
+    'unauthenticated',
+    'permission-denied',
+    'failed-precondition',
+    'resource-exhausted',
+    'unavailable',
+    'deadline-exceeded',
+    'internal',
+    'unknown',
+  };
+
+  static String safeCode(String code) =>
+      _allowedCodes.contains(code) ? code : 'unknown';
+}
+
+class MatchFortuneResult {
+  final FortuneNarrative narrative;
+  final ZodiacInfo myZodiac;
+  final SajuInfo mySaju;
+  final ZodiacInfo otherZodiac;
+  final SajuInfo otherSaju;
+
+  const MatchFortuneResult({
+    required this.narrative,
+    required this.myZodiac,
+    required this.mySaju,
+    required this.otherZodiac,
+    required this.otherSaju,
+  });
+}
+
+ZodiacInfo _zodiacFromAttrs(Object? value) {
+  final map = Map<String, dynamic>.from(value as Map);
+  return ZodiacInfo(
+    sign: map['sign'] as String? ?? '',
+    element: map['element'] as String? ?? '',
+  );
+}
+
+SajuInfo _sajuFromAttrs(Object? value) {
+  final map = Map<String, dynamic>.from(value as Map);
+  return SajuInfo(
+    dayMaster: map['dayMaster'] as String? ?? '',
+    element: map['element'] as String? ?? '',
+  );
 }

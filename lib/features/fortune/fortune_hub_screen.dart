@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
@@ -13,6 +14,7 @@ import '../../services/matches/matches_service.dart';
 import 'fortune_route_names.dart';
 import 'fortune_history_screen.dart';
 import '../ideal_type/ideal_type_screen.dart';
+import 'match_fortune_screen.dart';
 import 'my_fortune_screen.dart';
 
 /// 사주 탭 허브 화면 (하단 내비 3번째 탭).
@@ -20,7 +22,7 @@ import 'my_fortune_screen.dart';
 /// 사주 관련 기능을 한 곳에 모은다:
 /// - 오늘의 운세(애정 중심, 매일 갱신)
 /// - 내 사주 요약 → 탭하면 [MyFortuneScreen] 상세로
-/// - 매칭된 상대와 궁합 보기 → 서버 공개 API 재설계 전까지 안내만 표시
+/// - 매칭된 상대와 궁합 보기
 ///
 /// 사주는 매칭 로직을 지배하지 않는 독립 코너다 — 여기서 매칭 순서를 바꾸거나
 /// 스와이프 카드에 궁합 힌트를 얹지 않는다(의도적 제외).
@@ -111,8 +113,16 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
           _daily = daily;
         });
       }
+    } on FortuneFailure catch (e) {
+      if (kDebugMode) {
+        debugPrint('[FortuneHub] load_failed code=${e.code}');
+      }
+      if (mounted) setState(() => _error = 'load_failed');
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (kDebugMode) {
+        debugPrint('[FortuneHub] load_failed category=${e.runtimeType}');
+      }
+      if (mounted) setState(() => _error = 'load_failed');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -154,13 +164,20 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
     );
   }
 
-  void _openMatchFortune(MatchWithProfile _) {
-    // TODO(Phase 0-B follow-up): move compatibility calculation behind an authenticated server API that accepts targetUid without exposing target birth data.
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('궁합 기능은 서버 공개 API 연결 후 다시 제공할게요.')),
-      );
+  void _openMatchFortune(MatchWithProfile match) {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid == null) return;
+
+    _pushFortuneDetail<void>(
+      routeName: FortuneRouteNames.match,
+      builder: (_) => MatchFortuneScreen(
+        matchId: match.match.matchId,
+        currentUid: uid,
+        otherProfile: match.otherProfile,
+        firestoreService: widget.firestoreService,
+        fortuneService: widget.fortuneService,
+      ),
+    );
   }
 
   @override
@@ -181,28 +198,9 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '사주 정보를 불러오지 못했어요\n$_error',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-            ],
-          ),
-        ),
+      return _FortuneHubErrorState(
+        message: '사주 정보를 불러오지 못했어요.\n잠시 후 다시 시도해주세요.',
+        onRetry: _load,
       );
     }
 
@@ -233,7 +231,7 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
           onTap: _openMyFortune,
         ),
         const SizedBox(height: 24),
-        const _SectionTitle(title: '궁합 준비 중'),
+        const _SectionTitle(title: '매칭된 인연과 궁합'),
         const SizedBox(height: 10),
         _MatchFortuneSection(
           matchesStream: _matchesStream,
@@ -263,6 +261,48 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _FortuneHubErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _FortuneHubErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final minHeight =
+        MediaQuery.sizeOf(context).height -
+        kToolbarHeight -
+        MediaQuery.paddingOf(context).vertical;
+    final safeMinHeight = minHeight < 0 ? 0.0 : minHeight;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: safeMinHeight),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 48,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -166,6 +166,7 @@ test('cache hit returns before text AI guard acquisition', () => {
     const fnSrc = functionSlice(src, fn);
     const cacheIdx = [
       'return cached',
+      'return { narrative: cached, participantAttrs }',
       'return snap.data()',
       'return { icebreakers: cached }',
       'return { suggestions: cached.suggestions }',
@@ -173,6 +174,55 @@ test('cache hit returns before text AI guard acquisition', () => {
     const guardIdx = fnSrc.indexOf('acquireTextAiGenerationSlot({');
     assert.ok(cacheIdx >= 0, `${fn} cache return missing`);
     assert.ok(guardIdx > cacheIdx, `${fn} guard should run after cache hit return`);
+  }
+});
+
+test('generateMatchNarrative accepts only matchId and ignores client attrs', () => {
+  const fnSrc = functionSlice(source(), 'generateMatchNarrative');
+  assert.ok(fnSrc.includes("const { matchId } = payload"));
+  assert.ok(fnSrc.includes("key !== 'matchId'"));
+  assert.ok(fnSrc.includes("HttpsError('invalid-argument', '지원하지 않는 요청 필드입니다.')"));
+  assert.ok(!fnSrc.includes('request.data?.userA'));
+  assert.ok(!fnSrc.includes('request.data?.userB'));
+  assert.ok(!fnSrc.includes('const { matchId, userA, userB } = request.data'));
+});
+
+test('generateMatchNarrative verifies active match and blocks before birthDate read', () => {
+  const fnSrc = functionSlice(source(), 'generateMatchNarrative');
+  const participantIdx = fnSrc.indexOf('assertActiveMatchParticipant({');
+  const blockIdx = fnSrc.indexOf('assertNoMatchBlocks({');
+  const attrsIdx = fnSrc.indexOf('readMatchParticipantAttrs({');
+  assert.ok(participantIdx >= 0);
+  assert.ok(blockIdx > participantIdx);
+  assert.ok(attrsIdx > blockIdx);
+  assert.ok(source().includes("db.getAll(...refs, { fieldMask: ['birthDate'] })"));
+});
+
+test('generateMatchNarrative returns derived attrs and does not log raw birthDate', () => {
+  const src = source();
+  const fnSrc = functionSlice(src, 'generateMatchNarrative');
+  assert.ok(fnSrc.includes('return { narrative: cached, participantAttrs }'));
+  assert.ok(fnSrc.includes('return { narrative, participantAttrs }'));
+  assert.ok(src.includes('participantHash: safeUidHash(participantUid)'));
+  assert.ok(!fnSrc.includes('birthDate'));
+  assert.ok(!src.includes('console.log(birthDate'));
+  assert.ok(!src.includes('console.warn(birthDate'));
+  assert.ok(!src.includes('console.error(birthDate'));
+});
+
+test('target fortune callables persist deterministic fallback on model failure', () => {
+  const src = source();
+  const expected = {
+    generateFortuneNarrative: 'buildFallbackFortuneNarrative(attrs)',
+    generateMatchNarrative: 'buildFallbackMatchNarrative({ firstAttrs: userA, secondAttrs: userB })',
+    generateDailyFortune: 'buildFallbackDailyFortune({ date, attrs })',
+    generateCharmReport: 'buildFallbackCharmReport(data)',
+  };
+  for (const [fn, fallback] of Object.entries(expected)) {
+    const fnSrc = functionSlice(src, fn);
+    assert.ok(fnSrc.includes("'model_failed'"), `${fn} missing model_failed log`);
+    assert.ok(fnSrc.includes("'generated_fallback'"), `${fn} missing fallback log`);
+    assert.ok(fnSrc.includes(fallback), `${fn} missing fallback builder`);
   }
 });
 
@@ -380,9 +430,10 @@ test('refresh cannot bypass guard and frequent refresh returns valid cache', asy
 
 test('malformed cache is not accepted as cache hit', () => {
   const src = source();
-  assert.ok(functionSlice(src, 'generateFortuneNarrative').includes('if (isValidNarrative(cached)) return cached;'));
-  assert.ok(functionSlice(src, 'generateDailyFortune').includes('if (isValidDailyFortune(snap.data())) return snap.data();'));
-  assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached)) return cached;'));
+  assert.ok(functionSlice(src, 'generateFortuneNarrative').includes('if (isValidNarrative(cached))'));
+  assert.ok(functionSlice(src, 'generateMatchNarrative').includes('if (isValidNarrative(cached))'));
+  assert.ok(functionSlice(src, 'generateDailyFortune').includes('if (isValidDailyFortune(snap.data()))'));
+  assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached))'));
   assert.ok(functionSlice(src, 'generateIcebreakers').includes('if (isValidIcebreakerList(cached))'));
   assert.ok(functionSlice(src, 'generateConversationTips').includes('isValidConversationSuggestions(cached?.suggestions)'));
 });
@@ -444,7 +495,12 @@ test('no unrelated Flutter or production configuration files are changed for thi
     .split('\n')
     .filter(Boolean);
   const allowedFlutterFiles = new Set([
+    'lib/features/charm/charm_report_screen.dart',
+    'lib/features/fortune/fortune_hub_screen.dart',
+    'lib/features/fortune/match_fortune_screen.dart',
+    'lib/features/fortune/my_fortune_screen.dart',
     'lib/features/home/home_screen.dart',
+    'lib/services/fortune/fortune_service.dart',
   ]);
   assert.deepEqual(
     changed.filter((file) => file.startsWith('lib/') && !allowedFlutterFiles.has(file)),

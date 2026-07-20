@@ -433,6 +433,112 @@ function sanitizeNarrative(raw, { requireStory }) {
   };
 }
 
+function safeAttrText(value, fallback) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text || fallback;
+}
+
+function buildFallbackFortuneNarrative(attrs) {
+  const zodiacSign = safeAttrText(attrs?.zodiac?.sign, '별자리');
+  const zodiacElement = safeAttrText(attrs?.zodiac?.element, '균형');
+  const dayMaster = safeAttrText(attrs?.saju?.dayMaster, '중심');
+  const sajuElement = safeAttrText(attrs?.saju?.element, '오행');
+  return {
+    characterType: `${dayMaster} 일간의 ${sajuElement} 균형형`,
+    summary:
+      `${zodiacSign}의 ${zodiacElement} 기운과 ${dayMaster} 일간의 ${sajuElement} 흐름을 함께 보면, ` +
+      '관계를 급하게 단정하기보다 상황을 살피며 천천히 맞춰가는 힘이 보여요.',
+    reasons: [
+      {
+        icon: '별',
+        text: `${zodiacSign}의 ${zodiacElement} 원소는 관계에서 드러나는 기본 분위기를 보여줘요.`,
+      },
+      {
+        icon: '일',
+        text: `${dayMaster} 일간은 선택과 표현 방식의 중심축으로 참고할 수 있어요.`,
+      },
+      {
+        icon: '균',
+        text: `${sajuElement} 기운은 오늘의 감정과 대화 흐름을 균형 있게 살피는 단서가 돼요.`,
+      },
+    ],
+    relationshipStory: null,
+  };
+}
+
+function fallbackIndex(seedParts, length) {
+  const hash = stableHash(seedParts);
+  const value = Number.parseInt(hash.slice(0, 8), 16);
+  return value % length;
+}
+
+function buildFallbackDailyFortune({ date, attrs }) {
+  const seed = {
+    date,
+    zodiacSign: attrs?.zodiac?.sign || '',
+    zodiacElement: attrs?.zodiac?.element || '',
+    dayMaster: attrs?.saju?.dayMaster || '',
+    sajuElement: attrs?.saju?.element || '',
+  };
+  const moods = ['잔잔한 설렘', '천천히 가까워짐', '다정한 관찰', '솔직한 대화', '편안한 호감'];
+  const messages = [
+    '오늘은 빠르게 결론을 내리기보다 상대의 말을 한 번 더 들어보면 좋은 날이에요. 작은 반응이 대화의 온도를 부드럽게 만들어줄 수 있어요.',
+    '새로운 만남보다 이미 이어진 대화에서 좋은 흐름을 찾기 쉬워요. 부담 없는 질문 하나가 자연스러운 연결점이 될 수 있어요.',
+    '마음이 앞서기 쉬운 순간에도 표현을 조금 담백하게 정리하면 매력이 더 잘 전해져요. 상대의 속도에 맞추는 태도가 도움이 돼요.',
+    '오늘은 평소보다 솔직한 말이 잘 닿을 수 있어요. 다만 확정적인 표현보다 여지를 남기는 문장이 더 편안하게 느껴질 거예요.',
+    '작은 배려가 눈에 띄는 날이에요. 약속이나 대화에서 세심한 확인을 더하면 신뢰감이 자연스럽게 쌓일 수 있어요.',
+  ];
+  const advice = [
+    '짧은 안부를 먼저 건네보세요.',
+    '상대가 좋아하는 주제를 하나 더 물어보세요.',
+    '답장을 서두르기보다 톤을 부드럽게 정리해보세요.',
+    '칭찬은 구체적으로, 부담은 가볍게 표현해보세요.',
+    '오늘은 듣는 시간을 조금 더 길게 가져보세요.',
+  ];
+  const index = fallbackIndex(seed, moods.length);
+  return {
+    loveScore: (fallbackIndex({ ...seed, type: 'score' }, 5) + 1),
+    mood: moods[index],
+    message: messages[fallbackIndex({ ...seed, type: 'message' }, messages.length)],
+    advice: advice[fallbackIndex({ ...seed, type: 'advice' }, advice.length)],
+  };
+}
+
+function buildFallbackMatchNarrative({ firstAttrs, secondAttrs }) {
+  const firstZodiacElement = safeAttrText(firstAttrs?.zodiac?.element, '서로 다른');
+  const secondZodiacElement = safeAttrText(secondAttrs?.zodiac?.element, '보완되는');
+  const firstDayMaster = safeAttrText(firstAttrs?.saju?.dayMaster, '한쪽');
+  const secondDayMaster = safeAttrText(secondAttrs?.saju?.dayMaster, '상대');
+  const firstSajuElement = safeAttrText(firstAttrs?.saju?.element, '균형');
+  const secondSajuElement = safeAttrText(secondAttrs?.saju?.element, '조화');
+  const isSameElement = firstZodiacElement === secondZodiacElement;
+  return {
+    characterType: isSameElement
+      ? `${firstZodiacElement} 결의 나란한 조합`
+      : `${firstZodiacElement}×${secondZodiacElement} 보완 조합`,
+    summary:
+      isSameElement
+        ? `두 사람은 ${firstZodiacElement} 원소의 비슷한 결을 공유해 감정의 속도를 맞추기 쉬운 편이에요. 다만 익숙함에 기대기보다 서로의 표현 방식을 확인하면 관계가 더 안정적으로 이어질 수 있어요.`
+        : `두 사람은 ${firstZodiacElement}와 ${secondZodiacElement}의 다른 리듬을 가지고 있어요. 차이를 성급히 판단하지 않고 역할을 나누면 서로에게 새로운 관점을 줄 수 있어요.`,
+    reasons: [
+      {
+        icon: '원',
+        text: `${firstZodiacElement}와 ${secondZodiacElement} 원소의 흐름은 대화의 속도와 감정 표현을 살피는 단서가 돼요.`,
+      },
+      {
+        icon: '일',
+        text: `${firstDayMaster} 일간과 ${secondDayMaster} 일간은 서로의 선택 방식이 어떻게 맞물리는지 보여줘요.`,
+      },
+      {
+        icon: '균',
+        text: `${firstSajuElement}와 ${secondSajuElement} 기운은 관계에서 강점과 보완점을 함께 볼 수 있게 해줘요.`,
+      },
+    ],
+    relationshipStory:
+      '처음에는 서로의 속도 차이를 살피는 시간이 필요할 수 있어요. 한 사람은 분위기를 열고, 다른 한 사람은 흐름을 정리해주며 균형을 만들 수 있습니다. 중요한 결정은 서두르기보다 대화를 통해 확인할 때 두 사람의 장점이 더 자연스럽게 드러날 거예요.',
+  };
+}
+
 /**
  * OpenAI Chat Completions를 JSON 모드로 호출해 서사를 받아온다.
  * 응답이 비어있거나 JSON 파싱에 실패하면 HttpsError로 던진다.
@@ -522,6 +628,69 @@ function assertActiveMatchParticipant({ fn, matchId, matchData, callerUid }) {
   return participants;
 }
 
+async function assertNoMatchBlocks({ fn, matchId, participants, callerUid }) {
+  const [uidA, uidB] = participants;
+  if (!uidA || !uidB) {
+    throw new HttpsError('failed-precondition', '상대 참가자를 찾을 수 없습니다.');
+  }
+  const [aBlocksB, bBlocksA] = await Promise.all([
+    db.collection('users').doc(uidA).collection('blocks').doc(uidB).get(),
+    db.collection('users').doc(uidB).collection('blocks').doc(uidA).get(),
+  ]);
+  if (aBlocksB.exists || bBlocksA.exists) {
+    logTextAiEvent('warn', fn, 'access_denied_block', {
+      callerHash: safeUidHash(callerUid),
+      matchHash: safeMatchHash(matchId),
+      retryable: false,
+    });
+    throw new HttpsError('permission-denied', '이 매치에 접근할 권한이 없습니다.');
+  }
+}
+
+function attrsFromBirthDate({ birthDate, participantUid, callerUid, matchId, fn }) {
+  const parts = datePartsInSeoul(birthDate);
+  if (!parts || !parts.year || !parts.month || !parts.day) {
+    logTextAiEvent('warn', fn, 'birth_date_missing', {
+      callerHash: safeUidHash(callerUid),
+      matchHash: safeMatchHash(matchId),
+      participantHash: safeUidHash(participantUid),
+      retryable: false,
+    });
+    throw new HttpsError('failed-precondition', '프로필 생년월일이 필요합니다.');
+  }
+  return {
+    zodiac: getZodiacAttrs(parts),
+    saju: getSajuAttrs(parts),
+  };
+}
+
+async function readMatchParticipantAttrs({ fn, matchId, participants, callerUid }) {
+  const refs = participants.map((uid) => db.collection('users').doc(uid));
+  const snaps = await db.getAll(...refs, { fieldMask: ['birthDate'] });
+  const participantAttrs = {};
+  for (let i = 0; i < participants.length; i += 1) {
+    const uid = participants[i];
+    const snap = snaps[i];
+    if (!snap?.exists) {
+      logTextAiEvent('warn', fn, 'profile_missing', {
+        callerHash: safeUidHash(callerUid),
+        matchHash: safeMatchHash(matchId),
+        participantHash: safeUidHash(uid),
+        retryable: false,
+      });
+      throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
+    }
+    participantAttrs[uid] = attrsFromBirthDate({
+      birthDate: snap.data()?.birthDate,
+      participantUid: uid,
+      callerUid,
+      matchId,
+      fn,
+    });
+  }
+  return participantAttrs;
+}
+
 async function acquireTextAiGenerationSlot({
   fn,
   guard,
@@ -609,7 +778,13 @@ exports.generateFortuneNarrative = onCall(
     const userRef = db.collection('users').doc(request.auth.uid);
     const snap = await userRef.get();
     const cached = snap.data()?.fortuneNarrative;
-    if (isValidNarrative(cached)) return cached;
+    if (isValidNarrative(cached)) {
+      logTextAiEvent('info', 'generateFortuneNarrative', 'cache_hit', {
+        callerHash: safeUidHash(request.auth.uid),
+        retryable: false,
+      });
+      return cached;
+    }
 
     const inputHash = textAiInputHash({ attrs });
     await acquireTextAiGenerationSlot({
@@ -621,22 +796,38 @@ exports.generateFortuneNarrative = onCall(
     });
     let success = false;
     try {
-      const rawNarrative = await callOpenAiForNarrative({
-        systemPrompt: fortuneSystemPrompt(),
-        userPayload: { 속성: attrs },
-      });
-      const narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
-
-      if (!isValidNarrative(narrative)) {
-        logTextAiEvent('error', 'generateFortuneNarrative', 'invalid_response', {
+      let narrative;
+      let generator = 'ai';
+      try {
+        const rawNarrative = await callOpenAiForNarrative({
+          systemPrompt: fortuneSystemPrompt(),
+          userPayload: { 속성: attrs },
+        });
+        narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
+        if (!isValidNarrative(narrative)) {
+          logTextAiEvent('warn', 'generateFortuneNarrative', 'invalid_response', {
+            callerHash: safeUidHash(request.auth.uid),
+            retryable: true,
+          });
+          narrative = buildFallbackFortuneNarrative(attrs);
+          generator = 'fallback';
+        }
+      } catch {
+        logTextAiEvent('warn', 'generateFortuneNarrative', 'model_failed', {
           callerHash: safeUidHash(request.auth.uid),
           retryable: true,
         });
-        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+        narrative = buildFallbackFortuneNarrative(attrs);
+        generator = 'fallback';
       }
 
       await userRef.set({ fortuneNarrative: narrative }, { merge: true });
       success = true;
+      logTextAiEvent('info', 'generateFortuneNarrative', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
+        callerHash: safeUidHash(request.auth.uid),
+        count: narrative.reasons.length,
+        retryable: false,
+      });
       return narrative;
     } finally {
       await releaseTextAiGenerationSlot({
@@ -653,8 +844,8 @@ exports.generateFortuneNarrative = onCall(
 /**
  * 두 사람 궁합 서사 생성 (callable).
  *
- * 입력: { matchId, userA: {zodiac, saju}, userB: {zodiac, saju} }
- * 권한: 호출자가 해당 matchId의 participants에 포함돼야 한다.
+ * 입력: { matchId }
+ * 권한: 호출자가 해당 matchId의 active participants에 포함돼야 한다.
  * 캐싱: matches/{matchId}.fortuneMatch — 이미 있으면 GPT 호출 없이 그대로 반환한다.
  */
 exports.generateMatchNarrative = onCall(
@@ -663,9 +854,14 @@ exports.generateMatchNarrative = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     }
-    const { matchId, userA, userB } = request.data || {};
-    if (!matchId || !isValidAttrs(userA) || !isValidAttrs(userB)) {
-      throw new HttpsError('invalid-argument', '매치 ID/속성이 올바르지 않습니다.');
+    const payload = request.data || {};
+    const { matchId } = payload;
+    if (typeof matchId !== 'string' || !matchId.trim()) {
+      throw new HttpsError('invalid-argument', '매치 ID가 올바르지 않습니다.');
+    }
+    const unsupportedKeys = Object.keys(payload).filter((key) => key !== 'matchId');
+    if (unsupportedKeys.length > 0) {
+      throw new HttpsError('invalid-argument', '지원하지 않는 요청 필드입니다.');
     }
 
     const matchRef = db.collection('matches').doc(matchId);
@@ -680,11 +876,35 @@ exports.generateMatchNarrative = onCall(
       matchData,
       callerUid: request.auth.uid,
     });
+    await assertNoMatchBlocks({
+      fn: 'generateMatchNarrative',
+      matchId,
+      participants,
+      callerUid: request.auth.uid,
+    });
+
+    const participantAttrs = await readMatchParticipantAttrs({
+      fn: 'generateMatchNarrative',
+      matchId,
+      participants,
+      callerUid: request.auth.uid,
+    });
+    const [uidA, uidB] = participants;
+    const userA = participantAttrs[uidA];
+    const userB = participantAttrs[uidB];
 
     const cached = matchData.fortuneMatch;
-    if (isValidNarrative(cached)) return cached;
+    if (isValidNarrative(cached)) {
+      logTextAiEvent('info', 'generateMatchNarrative', 'cache_hit', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
+        count: cached.reasons.length,
+        retryable: false,
+      });
+      return { narrative: cached, participantAttrs };
+    }
 
-    const inputHash = textAiInputHash({ matchId, userA, userB });
+    const inputHash = textAiInputHash({ matchId, participantAttrs });
     await acquireTextAiGenerationSlot({
       fn: 'generateMatchNarrative',
       guard: textAiUsageGuards.generateMatchNarrative,
@@ -695,24 +915,42 @@ exports.generateMatchNarrative = onCall(
     });
     let success = false;
     try {
-      const rawNarrative = await callOpenAiForNarrative({
-        systemPrompt: matchSystemPrompt(),
-        userPayload: { 속성A: userA, 속성B: userB },
-      });
-      const narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
-
-      if (!isValidNarrative(narrative) || typeof narrative.relationshipStory !== 'string') {
-        logTextAiEvent('error', 'generateMatchNarrative', 'invalid_response', {
+      let narrative;
+      let generator = 'ai';
+      try {
+        const rawNarrative = await callOpenAiForNarrative({
+          systemPrompt: matchSystemPrompt(),
+          userPayload: { 속성A: userA, 속성B: userB },
+        });
+        narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
+        if (!isValidNarrative(narrative) || typeof narrative.relationshipStory !== 'string') {
+          logTextAiEvent('warn', 'generateMatchNarrative', 'invalid_response', {
+            callerHash: safeUidHash(request.auth.uid),
+            matchHash: safeMatchHash(matchId),
+            retryable: true,
+          });
+          narrative = buildFallbackMatchNarrative({ firstAttrs: userA, secondAttrs: userB });
+          generator = 'fallback';
+        }
+      } catch {
+        logTextAiEvent('warn', 'generateMatchNarrative', 'model_failed', {
           callerHash: safeUidHash(request.auth.uid),
           matchHash: safeMatchHash(matchId),
           retryable: true,
         });
-        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+        narrative = buildFallbackMatchNarrative({ firstAttrs: userA, secondAttrs: userB });
+        generator = 'fallback';
       }
 
       await matchRef.set({ fortuneMatch: narrative }, { merge: true });
       success = true;
-      return narrative;
+      logTextAiEvent('info', 'generateMatchNarrative', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
+        callerHash: safeUidHash(request.auth.uid),
+        matchHash: safeMatchHash(matchId),
+        count: narrative.reasons.length,
+        retryable: false,
+      });
+      return { narrative, participantAttrs };
     } finally {
       await releaseTextAiGenerationSlot({
         fn: 'generateMatchNarrative',
@@ -973,6 +1211,14 @@ function tagLabels(keys) {
   if (!Array.isArray(keys)) return [];
   return keys
     .map((key) => TAG_LABELS[key] || String(key))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function displayTagLabels(keys) {
+  if (!Array.isArray(keys)) return [];
+  return keys
+    .map((key) => TAG_LABELS[key])
     .filter(Boolean)
     .slice(0, 8);
 }
@@ -1445,7 +1691,13 @@ exports.generateDailyFortune = onCall(
       .doc(date);
 
     const snap = await dailyRef.get();
-    if (isValidDailyFortune(snap.data())) return snap.data();
+    if (isValidDailyFortune(snap.data())) {
+      logTextAiEvent('info', 'generateDailyFortune', 'cache_hit', {
+        callerHash: safeUidHash(request.auth.uid),
+        retryable: false,
+      });
+      return snap.data();
+    }
 
     const inputHash = textAiInputHash({ date, attrs });
     await acquireTextAiGenerationSlot({
@@ -1457,22 +1709,38 @@ exports.generateDailyFortune = onCall(
     });
     let success = false;
     try {
-      const rawFortune = await callOpenAiForNarrative({
-        systemPrompt: dailyFortuneSystemPrompt(),
-        userPayload: { 날짜: date, 속성: attrs },
-      });
-      const fortune = sanitizeDailyFortune(rawFortune);
-
-      if (!isValidDailyFortune(fortune)) {
-        logTextAiEvent('error', 'generateDailyFortune', 'invalid_response', {
+      let fortune;
+      let generator = 'ai';
+      try {
+        const rawFortune = await callOpenAiForNarrative({
+          systemPrompt: dailyFortuneSystemPrompt(),
+          userPayload: { 날짜: date, 속성: attrs },
+        });
+        fortune = sanitizeDailyFortune(rawFortune);
+        if (!isValidDailyFortune(fortune)) {
+          logTextAiEvent('warn', 'generateDailyFortune', 'invalid_response', {
+            callerHash: safeUidHash(request.auth.uid),
+            retryable: true,
+          });
+          fortune = buildFallbackDailyFortune({ date, attrs });
+          generator = 'fallback';
+        }
+      } catch {
+        logTextAiEvent('warn', 'generateDailyFortune', 'model_failed', {
           callerHash: safeUidHash(request.auth.uid),
           retryable: true,
         });
-        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+        fortune = buildFallbackDailyFortune({ date, attrs });
+        generator = 'fallback';
       }
 
       await dailyRef.set(fortune);
       success = true;
+      logTextAiEvent('info', 'generateDailyFortune', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
+        callerHash: safeUidHash(request.auth.uid),
+        status: fortune.loveScore,
+        retryable: false,
+      });
       return fortune;
     } finally {
       await releaseTextAiGenerationSlot({
@@ -1563,6 +1831,80 @@ function charmProfileFromData(data) {
   };
 }
 
+function buildFallbackCharmReport(data) {
+  const bio = String(data?.bio || '').trim();
+  const interests = displayTagLabels(data?.interests);
+  const personalityTags = displayTagLabels(data?.personalityTags);
+  const relationshipGoal = data?.relationshipGoal ? '만남의 방향' : '';
+  const mbti = typeof data?.mbti === 'string' ? data.mbti.trim().toUpperCase() : '';
+  const hasJobCategory = typeof data?.jobCategory === 'string' && data.jobCategory.trim();
+
+  const firstSignal =
+    personalityTags[0] ||
+    interests[0] ||
+    relationshipGoal ||
+    mbti ||
+    (hasJobCategory ? '일상 정보' : '') ||
+    (bio ? '담백한 소개' : '차분한 분위기');
+  const firstImpression = `${firstSignal}이 자연스럽게 전해지는 프로필이에요.`;
+
+  const points = [];
+  if (bio) {
+    points.push({
+      title: '소개에서 보이는 결',
+      description: '짧은 소개 안에서도 본인이 어떤 분위기의 대화를 좋아하는지 조금씩 드러나요.',
+    });
+  }
+  if (interests.length > 0) {
+    points.push({
+      title: '대화를 열 주제',
+      description: `${interests.slice(0, 2).join(', ')} 같은 관심사는 부담 없이 첫 대화를 시작하기 좋은 단서가 돼요.`,
+    });
+  }
+  if (personalityTags.length > 0) {
+    points.push({
+      title: '관계에서의 온도',
+      description: `${personalityTags.slice(0, 2).join(', ')} 성향은 상대가 대화의 톤을 상상하기 쉽게 해줘요.`,
+    });
+  }
+  if (relationshipGoal) {
+    points.push({
+      title: '만남의 방향',
+      description: `${relationshipGoal}에 대한 방향이 보여서 서로의 기대를 맞추는 데 도움이 될 수 있어요.`,
+    });
+  }
+  if (mbti || hasJobCategory) {
+    points.push({
+      title: '기억하기 쉬운 단서',
+      description: [mbti, hasJobCategory ? '일상 정보' : ''].filter(Boolean).join(' · ') +
+        ' 정보는 프로필을 더 구체적으로 떠올리게 해주는 보조 신호가 돼요.',
+    });
+  }
+  while (points.length < 3) {
+    const defaults = [
+      {
+        title: '편안한 첫인상',
+        description: '과하게 꾸미기보다 담백하게 자신을 보여주는 방향이 안정적으로 느껴져요.',
+      },
+      {
+        title: '대화의 여지',
+        description: '상대가 질문을 이어갈 수 있는 작은 단서를 더하면 프로필의 매력이 더 분명해져요.',
+      },
+      {
+        title: '자연스러운 호기심',
+        description: '지금의 프로필은 무리한 단정보다 천천히 알아가고 싶은 여지를 남겨요.',
+      },
+    ];
+    points.push(defaults[points.length]);
+  }
+
+  return {
+    firstImpression,
+    charmPoints: points.slice(0, 3),
+    appealTip: '관심사 하나와 최근에 좋아하는 순간을 한 문장으로 더해보세요.',
+  };
+}
+
 /**
  * 프로필 기반 매력 리포트 생성 (callable).
  *
@@ -1585,21 +1927,16 @@ exports.generateCharmReport = onCall(
 
     const data = snap.data() || {};
     const cached = data.charmReport;
-    if (!refresh && isValidCharmReport(cached)) return cached;
-
-    const profile = charmProfileFromData(data);
-    const hasProfileSignal =
-      !!profile.한줄소개 ||
-      profile.관심사.length > 0 ||
-      profile.성향.length > 0 ||
-      profile.이상형키워드.length > 0;
-    if (!hasProfileSignal) {
-      throw new HttpsError(
-        'failed-precondition',
-        '매력 리포트 생성을 위해 소개나 태그를 먼저 채워주세요.',
-      );
+    if (!refresh && isValidCharmReport(cached)) {
+      logTextAiEvent('info', 'generateCharmReport', 'cache_hit', {
+        callerHash: safeUidHash(request.auth.uid),
+        count: cached.charmPoints.length,
+        retryable: false,
+      });
+      return cached;
     }
 
+    const profile = charmProfileFromData(data);
     const cacheValid = isValidCharmReport(cached);
     const inputHash = textAiInputHash({ profile });
     const slot = await acquireTextAiGenerationSlot({
@@ -1617,17 +1954,30 @@ exports.generateCharmReport = onCall(
 
     let success = false;
     try {
-      const raw = await callOpenAiForNarrative({
-        systemPrompt: charmReportSystemPrompt(),
-        userPayload: { 프로필: profile },
-      });
-      const report = sanitizeCharmReport(raw);
-      if (!isValidCharmReport(report)) {
-        logTextAiEvent('warn', 'generateCharmReport', 'invalid_response', {
+      let report;
+      let generator = 'ai';
+      try {
+        const raw = await callOpenAiForNarrative({
+          systemPrompt: charmReportSystemPrompt(),
+          userPayload: { 프로필: profile },
+        });
+        report = sanitizeCharmReport(raw);
+        if (!isValidCharmReport(report)) {
+          logTextAiEvent('warn', 'generateCharmReport', 'invalid_response', {
+            callerHash: safeUidHash(request.auth.uid),
+            count: Array.isArray(report?.charmPoints) ? report.charmPoints.length : 0,
+            retryable: true,
+          });
+          report = buildFallbackCharmReport(data);
+          generator = 'fallback';
+        }
+      } catch {
+        logTextAiEvent('warn', 'generateCharmReport', 'model_failed', {
           callerHash: safeUidHash(request.auth.uid),
           retryable: true,
         });
-        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+        report = buildFallbackCharmReport(data);
+        generator = 'fallback';
       }
 
       await userRef.set(
@@ -1638,6 +1988,11 @@ exports.generateCharmReport = onCall(
         { merge: true },
       );
       success = true;
+      logTextAiEvent('info', 'generateCharmReport', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
+        callerHash: safeUidHash(request.auth.uid),
+        count: report.charmPoints.length,
+        retryable: false,
+      });
       return report;
     } finally {
       await releaseTextAiGenerationSlot({
