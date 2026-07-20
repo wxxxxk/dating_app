@@ -336,21 +336,35 @@ exports.onMessageCreated = onDocumentCreated(
 const FORTUNE_MODEL = 'gpt-4o-mini';
 const PROFILE_INSIGHT_MODEL = 'gpt-4o';
 
+// 사주·궁합·오늘의 운세·매력 리포트 결과 문구의 버전. 문구 품질을 개선할 때
+// 이 값을 올리면, 이전 버전 문구로 캐시된 결과는 캐시 미스로 처리돼 한 번
+// 재생성된다. Flutter 모델은 unknown 필드를 무시하므로 화면 모델 변경은 없다.
+const TEXT_CONTENT_VERSION = 2;
+
+/** 캐시된 텍스트 결과가 현재 문구 버전으로 생성된 것인지 확인한다. */
+function isCurrentTextContent(value) {
+  return !!value && value.contentVersion === TEXT_CONTENT_VERSION;
+}
+
 /** 개인 사주 서사 생성용 시스템 프롬프트. */
 function fortuneSystemPrompt() {
   return [
-    '당신은 별자리와 사주 명리학 지식을 활용해 데이팅 앱 사용자에게',
-    '재미있고 공감되는 캐릭터 해석을 제공하는 카피라이터입니다.',
+    '당신은 별자리와 사주를 실마리 삼아, 데이팅 앱 사용자가 자기 연애 스타일을',
+    '"내 얘기 같다"고 느끼도록 따뜻하게 풀어주는 카피라이터입니다.',
     '',
     '반드시 지킬 규칙:',
     '1. 사용자 메시지의 "속성" JSON에 주어진 값(별자리/원소/일간/오행)만 근거로 해석한다.',
     '   주어지지 않은 정보(정확한 생년월일, 이름, 성별 등)를 추측하거나 지어내지 않는다.',
-    '2. 점수·퍼센트·순위 등 숫자 지표를 절대 만들지 않는다. 서사와 캐릭터로만 표현한다.',
-    '3. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
+    '2. 명리학 용어를 나열하지 말고, 연애·대화·관계에서 겪는 실제 상황으로 풀어 쓴다.',
+    '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
+    '3. 점수·퍼센트·순위 등 숫자 지표나 확정적 운명 예측은 만들지 않는다.',
+    '   "~한 편이에요", "~할 수 있어요"처럼 여지를 남기는 표현을 쓴다.',
+    '4. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
     '{"characterType": string, "summary": string, "reasons": [{"icon": string, "text": string}], "relationshipStory": null}',
     '- characterType: 이모지 1개 + 한글 캐릭터 이름(4~10자), 예) "🔥 열정형"',
-    '- summary: 2~3문장 요약 서사',
-    '- reasons: 2~4개 배열, 각 항목은 이모지 1개 + 한 줄 근거(주어진 오행/별자리 속성 기반)',
+    '- summary: 2~3문장. 이 사람이 관계에서 보이는 태도를 구체적인 장면처럼 묘사한다',
+    '- reasons: 2~4개 배열. 각 항목은 이모지 1개 + 한 줄. 서로 다른 관점을 담고,',
+    '  "단서가 돼요" 같은 상투적 표현을 반복하지 않는다',
     '- relationshipStory: 개인 서사이므로 항상 null 고정',
   ].join('\n');
 }
@@ -358,20 +372,24 @@ function fortuneSystemPrompt() {
 /** 두 사람 궁합 서사 생성용 시스템 프롬프트. */
 function matchSystemPrompt() {
   return [
-    '당신은 별자리와 사주 명리학 지식을 활용해 데이팅 앱의 두 사용자 궁합을',
-    '캐릭터와 이야기로 해석하는 카피라이터입니다.',
+    '당신은 별자리와 사주를 실마리 삼아, 데이팅 앱에서 매칭된 두 사람이 서로를',
+    '이해하는 데 도움이 될 궁합 이야기를 따뜻하게 들려주는 카피라이터입니다.',
     '',
     '반드시 지킬 규칙:',
     '1. 사용자 메시지의 "속성A"·"속성B" JSON에 주어진 두 사람의 값만 근거로 해석한다.',
     '   주어지지 않은 정보(이름, 나이, 외모 등)를 추측하거나 지어내지 않는다.',
-    '2. 점수·퍼센트·순위·궁합도 같은 숫자 지표를 절대 만들지 않는다. 서사와 캐릭터로만 표현한다.',
-    '3. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
+    '2. 명리학 용어를 나열하기보다, 두 사람이 대화하고 가까워지는 실제 상황으로 풀어 쓴다.',
+    '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
+    '3. 점수·퍼센트·순위·궁합도 같은 숫자 지표나 확정적 예측은 만들지 않는다.',
+    '   "~할 수 있어요", "~해보면 좋아요"처럼 가능성과 조언으로 표현한다.',
+    '4. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
     '{"characterType": string, "summary": string, "reasons": [{"icon": string, "text": string}], "relationshipStory": string}',
     '- characterType: 이모지 2개(두 사람을 상징) + 한글 조합 이름, 예) "🔥🌊 열정×안정 조합"',
-    '- summary: 2~3문장 요약',
-    '- reasons: 2~4개 배열, 각 항목은 이모지 1개 + 한 줄 근거(오행 상생상극, 별자리 원소 궁합 등)',
-    '- relationshipStory: 3~5문장. 두 사람이 만들어갈 관계의 흐름을 이야기로 서술한다',
-    '  (확정적 예측·점수 대신 "~할 수 있어요" 같은 가능성 있는 서사로 표현)',
+    '- summary: 2~3문장. 두 사람이 함께 있을 때의 분위기를 구체적으로 그려준다',
+    '- reasons: 2~4개 배열. 각 항목은 이모지 1개 + 한 줄. 서로 다른 관점을 담되',
+    '  "균형을 만들어요" 같은 상투적 표현을 반복하지 않는다',
+    '- relationshipStory: 3~5문장. 두 사람이 가까워질 때 도움이 될 만한 관계 흐름을',
+    '  실제 대화 장면처럼 서술한다(확정적 예측·점수 금지)',
   ].join('\n');
 }
 
@@ -444,22 +462,22 @@ function buildFallbackFortuneNarrative(attrs) {
   const dayMaster = safeAttrText(attrs?.saju?.dayMaster, '중심');
   const sajuElement = safeAttrText(attrs?.saju?.element, '오행');
   return {
-    characterType: `${dayMaster} 일간의 ${sajuElement} 균형형`,
+    characterType: `${zodiacElement} 기운의 ${sajuElement} 밸런스형`,
     summary:
-      `${zodiacSign}의 ${zodiacElement} 기운과 ${dayMaster} 일간의 ${sajuElement} 흐름을 함께 보면, ` +
-      '관계를 급하게 단정하기보다 상황을 살피며 천천히 맞춰가는 힘이 보여요.',
+      `${zodiacSign}다운 ${zodiacElement}의 분위기가 있어서, 마음이 가도 처음부터 다 보여주기보다 ` +
+      '대화를 나누며 천천히 편해지는 쪽에 가까워요. 상대가 솔직하게 반응해주면 따뜻한 면도 더 자연스럽게 드러나요.',
     reasons: [
       {
-        icon: '별',
-        text: `${zodiacSign}의 ${zodiacElement} 원소는 관계에서 드러나는 기본 분위기를 보여줘요.`,
+        icon: '💬',
+        text: `대화가 편해질수록 ${zodiacElement} 특유의 분위기가 자연스럽게 나와요.`,
       },
       {
-        icon: '일',
-        text: `${dayMaster} 일간은 선택과 표현 방식의 중심축으로 참고할 수 있어요.`,
+        icon: '🧭',
+        text: `${dayMaster} 일간이라 결정을 서두르기보다 나에게 맞는 방식을 찾는 편이에요.`,
       },
       {
-        icon: '균',
-        text: `${sajuElement} 기운은 오늘의 감정과 대화 흐름을 균형 있게 살피는 단서가 돼요.`,
+        icon: '🌱',
+        text: `${sajuElement} 기운 덕분에 감정을 몰아붙이지 않고 상대의 속도도 함께 살펴요.`,
       },
     ],
     relationshipStory: null,
@@ -514,28 +532,30 @@ function buildFallbackMatchNarrative({ firstAttrs, secondAttrs }) {
   const isSameElement = firstZodiacElement === secondZodiacElement;
   return {
     characterType: isSameElement
-      ? `${firstZodiacElement} 결의 나란한 조합`
-      : `${firstZodiacElement}×${secondZodiacElement} 보완 조합`,
+      ? `${firstZodiacElement} 결이 닮은 두 사람`
+      : `${firstZodiacElement}×${secondZodiacElement} 다른 매력의 두 사람`,
     summary:
       isSameElement
-        ? `두 사람은 ${firstZodiacElement} 원소의 비슷한 결을 공유해 감정의 속도를 맞추기 쉬운 편이에요. 다만 익숙함에 기대기보다 서로의 표현 방식을 확인하면 관계가 더 안정적으로 이어질 수 있어요.`
-        : `두 사람은 ${firstZodiacElement}와 ${secondZodiacElement}의 다른 리듬을 가지고 있어요. 차이를 성급히 판단하지 않고 역할을 나누면 서로에게 새로운 관점을 줄 수 있어요.`,
+        ? `두 사람은 ${firstZodiacElement}다운 결이 닮아서 처음부터 말이 잘 통한다고 느끼기 쉬워요. 익숙함에 기대기보다 서로가 어떤 표현을 좋아하는지 확인하면 편안함이 오래 이어져요.`
+        : `두 사람은 표현 속도가 조금 다를 수 있어요. 한쪽이 먼저 결론을 내리기보다 서로 어떻게 마음을 표현하는지 확인하면 대화가 훨씬 편해져요.`,
     reasons: [
       {
-        icon: '원',
-        text: `${firstZodiacElement}와 ${secondZodiacElement} 원소의 흐름은 대화의 속도와 감정 표현을 살피는 단서가 돼요.`,
+        icon: '💬',
+        text: isSameElement
+          ? '비슷한 결이라 첫 대화의 온도를 맞추기 어렵지 않아요.'
+          : '표현 방식이 달라서 오히려 서로에게 새로운 이야기가 많아요.',
       },
       {
-        icon: '일',
-        text: `${firstDayMaster} 일간과 ${secondDayMaster} 일간은 서로의 선택 방식이 어떻게 맞물리는지 보여줘요.`,
+        icon: '🤝',
+        text: `${firstDayMaster} 일간과 ${secondDayMaster} 일간이라, 결정할 때 서로의 방식을 존중하면 부딪힘이 줄어요.`,
       },
       {
-        icon: '균',
-        text: `${firstSajuElement}와 ${secondSajuElement} 기운은 관계에서 강점과 보완점을 함께 볼 수 있게 해줘요.`,
+        icon: '🌗',
+        text: `${firstSajuElement}와 ${secondSajuElement} 기운이 만나면 한쪽이 앞설 때 다른 쪽이 여유를 채워줄 수 있어요.`,
       },
     ],
     relationshipStory:
-      '처음에는 서로의 속도 차이를 살피는 시간이 필요할 수 있어요. 한 사람은 분위기를 열고, 다른 한 사람은 흐름을 정리해주며 균형을 만들 수 있습니다. 중요한 결정은 서두르기보다 대화를 통해 확인할 때 두 사람의 장점이 더 자연스럽게 드러날 거예요.',
+      '처음엔 서로의 속도를 살피는 시간이 필요할 수 있어요. 한 사람이 분위기를 열면 다른 한 사람이 이야기를 이어가며 편해지는 흐름이에요. 중요한 얘기는 서두르지 말고, 어떤 만남을 바라는지 가볍게 나눠보면 두 사람의 좋은 면이 더 자연스럽게 드러날 거예요.',
   };
 }
 
@@ -778,7 +798,7 @@ exports.generateFortuneNarrative = onCall(
     const userRef = db.collection('users').doc(request.auth.uid);
     const snap = await userRef.get();
     const cached = snap.data()?.fortuneNarrative;
-    if (isValidNarrative(cached)) {
+    if (isValidNarrative(cached) && isCurrentTextContent(cached)) {
       logTextAiEvent('info', 'generateFortuneNarrative', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
         retryable: false,
@@ -821,6 +841,7 @@ exports.generateFortuneNarrative = onCall(
         generator = 'fallback';
       }
 
+      narrative.contentVersion = TEXT_CONTENT_VERSION;
       await userRef.set({ fortuneNarrative: narrative }, { merge: true });
       success = true;
       logTextAiEvent('info', 'generateFortuneNarrative', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
@@ -870,7 +891,7 @@ exports.generateMatchNarrative = onCall(
       throw new HttpsError('not-found', '매치를 찾을 수 없습니다.');
     }
     const matchData = matchSnap.data() || {};
-    assertActiveMatchParticipant({
+    const participants = assertActiveMatchParticipant({
       fn: 'generateMatchNarrative',
       matchId,
       matchData,
@@ -894,7 +915,7 @@ exports.generateMatchNarrative = onCall(
     const userB = participantAttrs[uidB];
 
     const cached = matchData.fortuneMatch;
-    if (isValidNarrative(cached)) {
+    if (isValidNarrative(cached) && isCurrentTextContent(cached)) {
       logTextAiEvent('info', 'generateMatchNarrative', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
         matchHash: safeMatchHash(matchId),
@@ -942,6 +963,7 @@ exports.generateMatchNarrative = onCall(
         generator = 'fallback';
       }
 
+      narrative.contentVersion = TEXT_CONTENT_VERSION;
       await matchRef.set({ fortuneMatch: narrative }, { merge: true });
       success = true;
       logTextAiEvent('info', 'generateMatchNarrative', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
@@ -1614,14 +1636,15 @@ exports.generateConversationTips = onCall(
 /** 오늘의 운세(애정 중심) 생성용 시스템 프롬프트. */
 function dailyFortuneSystemPrompt() {
   return [
-    '당신은 데이팅 앱에서 "오늘의 운세"를 애정운/연애운 중심으로 들려주는',
+    '당신은 데이팅 앱에서 "오늘의 운세"를 연애·관계 중심으로 들려주는',
     '따뜻하고 공감되는 카피라이터입니다.',
     '',
     '반드시 지킬 규칙:',
     '1. 사용자 메시지의 "속성" JSON(별자리/원소/일간/오행)과 "날짜"만 근거로 삼는다.',
     '   주어지지 않은 정보를 추측하거나 지어내지 않는다.',
-    '2. 오늘 하루의 연애/관계에 대한 조언 톤으로 쓴다. 확정적 예언이 아니라',
-    '   공감과 응원 위주로 표현한다.',
+    '2. 점술 설명문이 아니라 오늘 하루 참고할 수 있는 짧고 구체적인 연애 조언으로 쓴다.',
+    '   존댓말로, 확정적 예언 대신 공감과 응원 위주로 표현한다.',
+    '   매일 비슷한 generic 문구를 반복하지 말고 그날의 결을 담는다.',
     '3. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
     '{"loveScore": number, "mood": string, "message": string, "advice": string}',
     '- loveScore: 1~5 사이 정수. 정밀한 확률이 아니라 오늘의 애정운 분위기를',
@@ -1691,7 +1714,7 @@ exports.generateDailyFortune = onCall(
       .doc(date);
 
     const snap = await dailyRef.get();
-    if (isValidDailyFortune(snap.data())) {
+    if (isValidDailyFortune(snap.data()) && isCurrentTextContent(snap.data())) {
       logTextAiEvent('info', 'generateDailyFortune', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
         retryable: false,
@@ -1734,6 +1757,7 @@ exports.generateDailyFortune = onCall(
         generator = 'fallback';
       }
 
+      fortune.contentVersion = TEXT_CONTENT_VERSION;
       await dailyRef.set(fortune);
       success = true;
       logTextAiEvent('info', 'generateDailyFortune', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
@@ -1771,9 +1795,12 @@ function charmReportSystemPrompt() {
     '반드시 지킬 규칙:',
     '1. 사용자 메시지의 프로필 JSON에 들어있는 소개, 관심사, 성향, 상세정보만 근거로 쓴다.',
     '   외모, 소득, 직장명, 학벌 수준, 실제 인기도 등 주어지지 않은 정보를 추측하지 않는다.',
-    '2. 점수, 순위, 확률, 외모 평가를 만들지 않는다. 공감되는 첫인상 서사로 표현한다.',
-    '3. 개선 팁은 지적이 아니라 "조금 더 잘 드러내는 방법" 톤으로 쓴다.',
-    '4. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
+    '2. "아담한", "깔끔하고 호감 가는 인상" 같은 외모·체형 계열 표현은 성격 첫인상의',
+    '   근거로 쓰지 않는다. 주어지지 않은 성격을 단정하지도 않는다.',
+    '3. 점수, 순위, 확률, 외모 평가를 만들지 않는다. 존댓말로 조사와 문법이 자연스러운',
+    '   완성 문장을 쓰고, generic한 표현을 반복하지 않는다.',
+    '4. 개선 팁은 지적이 아니라 "조금 더 잘 드러내는 방법" 톤으로 쓴다.',
+    '5. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
     '{"firstImpression": string, "charmPoints": [{"title": string, "description": string}], "appealTip": string}',
     '- firstImpression: 첫인상 한 줄. 35자 안팎의 자연스러운 문장',
     '- charmPoints: 정확히 3개. title은 짧은 라벨, description은 1~2문장',
@@ -1831,68 +1858,96 @@ function charmProfileFromData(data) {
   };
 }
 
+// 외모·체형·이상형 선호 계열 태그 key. 이 값들은 "상대에게 바라는 조건"이거나
+// 외모 묘사라서, 사용자 본인의 성격 첫인상 근거로 쓰면 "아담한이 자연스럽게…"
+// 같은 어색한 문장이나 근거 없는 외모 단정이 생긴다. 매력 리포트 fallback의
+// 성격 신호에서는 제외한다.
+const APPEARANCE_OR_IDEAL_TAG_KEYS = new Set([
+  'good_looking', 'older', 'younger', 'same_age', 'same_area', 'near_work',
+  'same_hobby', 'easy_to_talk', 'petite', 'dependable', 'cheerful',
+  'no_swearing', 'nice_voice', 'initiates_talk', 'good_listener', 'stylish',
+]);
+
+/** 성격 첫인상 근거로 쓸 수 있는 태그 label만 남긴다(외모/이상형 계열 제외). */
+function personalitySignalLabels(keys) {
+  if (!Array.isArray(keys)) return [];
+  return keys
+    .filter((key) => !APPEARANCE_OR_IDEAL_TAG_KEYS.has(key))
+    .map((key) => TAG_LABELS[key])
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
 function buildFallbackCharmReport(data) {
   const bio = String(data?.bio || '').trim();
   const interests = displayTagLabels(data?.interests);
-  const personalityTags = displayTagLabels(data?.personalityTags);
-  const relationshipGoal = data?.relationshipGoal ? '만남의 방향' : '';
+  const personalityLabels = personalitySignalLabels(data?.personalityTags);
+  const hasRelationshipGoal =
+    typeof data?.relationshipGoal === 'string' && data.relationshipGoal.trim();
   const mbti = typeof data?.mbti === 'string' ? data.mbti.trim().toUpperCase() : '';
   const hasJobCategory = typeof data?.jobCategory === 'string' && data.jobCategory.trim();
 
-  const firstSignal =
-    personalityTags[0] ||
-    interests[0] ||
-    relationshipGoal ||
-    mbti ||
-    (hasJobCategory ? '일상 정보' : '') ||
-    (bio ? '담백한 소개' : '차분한 분위기');
-  const firstImpression = `${firstSignal}이 자연스럽게 전해지는 프로필이에요.`;
+  // 첫인상: 성격 → 관심사 → 만남 방향 → MBTI → 소개 순으로, 신호 유형에 맞는
+  // 완성 문장을 고른다. raw label 뒤에 조사("이")를 일괄로 붙이지 않는다.
+  let firstImpression;
+  if (personalityLabels.length > 0) {
+    firstImpression = `${personalityLabels[0]} 분위기가 자연스럽게 느껴지는 프로필이에요.`;
+  } else if (interests.length > 0) {
+    firstImpression = `${interests[0]}에 대한 관심이 은근하게 드러나는 프로필이에요.`;
+  } else if (hasRelationshipGoal) {
+    firstImpression = '어떤 만남을 원하는지 방향이 비교적 분명한 프로필이에요.';
+  } else if (mbti) {
+    firstImpression = '프로필의 몇 가지 단서가 대화를 시작하기 편하게 만들어줘요.';
+  } else if (bio) {
+    firstImpression = '짧은 소개 속에서도 본인의 분위기가 담백하게 전해지는 프로필이에요.';
+  } else {
+    firstImpression = '꾸밈보다 천천히 알아가고 싶게 만드는 인상의 프로필이에요.';
+  }
 
   const points = [];
   if (bio) {
     points.push({
       title: '소개에서 보이는 결',
-      description: '짧은 소개 안에서도 본인이 어떤 분위기의 대화를 좋아하는지 조금씩 드러나요.',
+      description: '짧은 소개 속에서도 어떤 대화를 편하게 여기는지 조금씩 전해져요.',
     });
   }
   if (interests.length > 0) {
     points.push({
-      title: '대화를 열 주제',
-      description: `${interests.slice(0, 2).join(', ')} 같은 관심사는 부담 없이 첫 대화를 시작하기 좋은 단서가 돼요.`,
+      title: '먼저 말 걸기 좋은 지점',
+      description: `${interests.slice(0, 2).join(', ')} 이야기는 상대가 부담 없이 첫 마디를 꺼내기 좋아요.`,
     });
   }
-  if (personalityTags.length > 0) {
+  if (personalityLabels.length > 0) {
     points.push({
-      title: '관계에서의 온도',
-      description: `${personalityTags.slice(0, 2).join(', ')} 성향은 상대가 대화의 톤을 상상하기 쉽게 해줘요.`,
+      title: '대화에서 느껴질 온도',
+      description: `${personalityLabels.slice(0, 2).join(', ')} 면이 있어 상대가 대화 분위기를 미리 그려보기 쉬워요.`,
     });
   }
-  if (relationshipGoal) {
+  if (hasRelationshipGoal) {
     points.push({
       title: '만남의 방향',
-      description: `${relationshipGoal}에 대한 방향이 보여서 서로의 기대를 맞추는 데 도움이 될 수 있어요.`,
+      description: '원하는 만남의 결이 드러나 있어 서로의 기대를 맞춰가기 수월해요.',
     });
   }
   if (mbti || hasJobCategory) {
     points.push({
-      title: '기억하기 쉬운 단서',
-      description: [mbti, hasJobCategory ? '일상 정보' : ''].filter(Boolean).join(' · ') +
-        ' 정보는 프로필을 더 구체적으로 떠올리게 해주는 보조 신호가 돼요.',
+      title: '기억에 남는 단서',
+      description: '프로필 속 작은 정보들이 상대가 당신을 더 또렷하게 떠올리도록 도와줘요.',
     });
   }
   while (points.length < 3) {
     const defaults = [
       {
         title: '편안한 첫인상',
-        description: '과하게 꾸미기보다 담백하게 자신을 보여주는 방향이 안정적으로 느껴져요.',
+        description: '무리해서 꾸미기보다 담백하게 자신을 보여주는 쪽이라 안정감이 느껴져요.',
       },
       {
         title: '대화의 여지',
-        description: '상대가 질문을 이어갈 수 있는 작은 단서를 더하면 프로필의 매력이 더 분명해져요.',
+        description: '상대가 이어서 물어볼 만한 단서를 하나만 더해도 매력이 더 또렷해져요.',
       },
       {
-        title: '자연스러운 호기심',
-        description: '지금의 프로필은 무리한 단정보다 천천히 알아가고 싶은 여지를 남겨요.',
+        title: '천천히 알아가는 재미',
+        description: '한 번에 다 보여주기보다 대화하며 알아가고 싶게 만드는 프로필이에요.',
       },
     ];
     points.push(defaults[points.length]);
@@ -1901,7 +1956,7 @@ function buildFallbackCharmReport(data) {
   return {
     firstImpression,
     charmPoints: points.slice(0, 3),
-    appealTip: '관심사 하나와 최근에 좋아하는 순간을 한 문장으로 더해보세요.',
+    appealTip: '좋아하는 것 하나에 최근의 작은 순간을 한 문장만 덧붙여 보세요.',
   };
 }
 
@@ -1927,7 +1982,7 @@ exports.generateCharmReport = onCall(
 
     const data = snap.data() || {};
     const cached = data.charmReport;
-    if (!refresh && isValidCharmReport(cached)) {
+    if (!refresh && isValidCharmReport(cached) && isCurrentTextContent(cached)) {
       logTextAiEvent('info', 'generateCharmReport', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
         count: cached.charmPoints.length,
@@ -1937,7 +1992,7 @@ exports.generateCharmReport = onCall(
     }
 
     const profile = charmProfileFromData(data);
-    const cacheValid = isValidCharmReport(cached);
+    const cacheValid = isValidCharmReport(cached) && isCurrentTextContent(cached);
     const inputHash = textAiInputHash({ profile });
     const slot = await acquireTextAiGenerationSlot({
       fn: 'generateCharmReport',
@@ -1980,6 +2035,7 @@ exports.generateCharmReport = onCall(
         generator = 'fallback';
       }
 
+      report.contentVersion = TEXT_CONTENT_VERSION;
       await userRef.set(
         {
           charmReport: report,

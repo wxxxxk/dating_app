@@ -119,12 +119,22 @@ test('text AI usage policies are separated and match required quotas', () => {
     assert.equal(p.cooldownMs, 10 * 1000);
     assert.equal(p.leaseTtlMs, 90 * 1000);
   }
-  for (const fn of ['generateFortuneNarrative', 'generateDailyFortune']) {
-    const p = TEXT_POLICIES[fn];
-    assert.equal(p.functionName, fn);
+  {
+    const p = TEXT_POLICIES.generateFortuneNarrative;
+    assert.equal(p.functionName, 'generateFortuneNarrative');
     assert.equal(p.hourlyLimit, 10);
     assert.equal(p.dailyLimit, 20);
     assert.equal(p.cooldownMs, 10 * 1000);
+    assert.equal(p.leaseTtlMs, 90 * 1000);
+  }
+  {
+    // 최근 7일 운세 backfill이 미캐시 날짜를 연속 호출하므로 cooldown은 0이고,
+    // 시간당/일일 quota로만 총 호출량을 제한한다.
+    const p = TEXT_POLICIES.generateDailyFortune;
+    assert.equal(p.functionName, 'generateDailyFortune');
+    assert.equal(p.hourlyLimit, 10);
+    assert.equal(p.dailyLimit, 20);
+    assert.equal(p.cooldownMs, 0);
     assert.equal(p.leaseTtlMs, 90 * 1000);
   }
   assert.equal(CHARM_REPORT_USAGE_POLICY.hourlyLimit, 6);
@@ -293,7 +303,9 @@ test('daily quota is enforced per function policy', async () => {
 });
 
 test('cooldown, window rollover, malformed usage are safe', async () => {
-  const policy = TEXT_POLICIES.generateDailyFortune;
+  // generateDailyFortune는 backfill을 위해 cooldown이 0이므로, cooldown 로직 자체는
+  // cooldown이 남아있는 generateFortuneNarrative 정책으로 검증한다.
+  const policy = TEXT_POLICIES.generateFortuneNarrative;
   let clock = 1_000_000;
   const db = createFakeDb();
   const guard = createAiUsageGuard({ db, policy, now: () => clock });
@@ -310,7 +322,7 @@ test('cooldown, window rollover, malformed usage are safe', async () => {
   })).decision, SLOT_DECISION.ALLOW);
 
   const malformedDb = createFakeDb({
-    '_internalAiUsage/u2/functions/generateDailyFortune': {
+    '_internalAiUsage/u2/functions/generateFortuneNarrative': {
       hourCount: 'bad',
       dayCount: -1,
       hourWindowStart: NaN,
@@ -430,12 +442,52 @@ test('refresh cannot bypass guard and frequent refresh returns valid cache', asy
 
 test('malformed cache is not accepted as cache hit', () => {
   const src = source();
-  assert.ok(functionSlice(src, 'generateFortuneNarrative').includes('if (isValidNarrative(cached))'));
-  assert.ok(functionSlice(src, 'generateMatchNarrative').includes('if (isValidNarrative(cached))'));
-  assert.ok(functionSlice(src, 'generateDailyFortune').includes('if (isValidDailyFortune(snap.data()))'));
-  assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached))'));
+  assert.ok(functionSlice(src, 'generateFortuneNarrative').includes('if (isValidNarrative(cached) && isCurrentTextContent(cached))'));
+  assert.ok(functionSlice(src, 'generateMatchNarrative').includes('if (isValidNarrative(cached) && isCurrentTextContent(cached))'));
+  assert.ok(functionSlice(src, 'generateDailyFortune').includes('if (isValidDailyFortune(snap.data()) && isCurrentTextContent(snap.data()))'));
+  assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached) && isCurrentTextContent(cached))'));
   assert.ok(functionSlice(src, 'generateIcebreakers').includes('if (isValidIcebreakerList(cached))'));
   assert.ok(functionSlice(src, 'generateConversationTips').includes('isValidConversationSuggestions(cached?.suggestions)'));
+});
+
+test('text content version stamps caches and old caches miss', () => {
+  const src = source();
+  assert.ok(src.includes('const TEXT_CONTENT_VERSION = 2;'));
+  // 4개 텍스트 결과 저장 경로 모두 contentVersion을 찍는다.
+  assert.ok(functionSlice(src, 'generateFortuneNarrative').includes('narrative.contentVersion = TEXT_CONTENT_VERSION;'));
+  assert.ok(functionSlice(src, 'generateMatchNarrative').includes('narrative.contentVersion = TEXT_CONTENT_VERSION;'));
+  assert.ok(functionSlice(src, 'generateDailyFortune').includes('fortune.contentVersion = TEXT_CONTENT_VERSION;'));
+  assert.ok(functionSlice(src, 'generateCharmReport').includes('report.contentVersion = TEXT_CONTENT_VERSION;'));
+  // charm refresh cooldown 판정도 현재 버전 캐시만 유효로 본다.
+  assert.ok(functionSlice(src, 'generateCharmReport').includes('const cacheValid = isValidCharmReport(cached) && isCurrentTextContent(cached);'));
+  // 버전 헬퍼는 정확히 contentVersion === TEXT_CONTENT_VERSION만 통과시킨다.
+  assert.ok(src.includes('return !!value && value.contentVersion === TEXT_CONTENT_VERSION;'));
+});
+
+test('generateMatchNarrative uses the returned active participants list', () => {
+  const fnSrc = functionSlice(source(), 'generateMatchNarrative');
+  // 반환값을 버리지 않고 participants로 받아 이후 검증/조회에 실제로 쓴다.
+  assert.ok(fnSrc.includes('const participants = assertActiveMatchParticipant({'));
+  const assignIdx = fnSrc.indexOf('const participants = assertActiveMatchParticipant({');
+  assert.ok(fnSrc.indexOf('participants,\n      callerUid', assignIdx) > assignIdx);
+  assert.ok(fnSrc.includes('const [uidA, uidB] = participants;'));
+});
+
+test('fallback charm first impression never appends 이 to a raw label', () => {
+  const src = source();
+  const start = src.indexOf('function buildFallbackCharmReport(');
+  const end = src.indexOf('exports.generateCharmReport = onCall(', start + 1);
+  assert.ok(start >= 0 && end > start);
+  const fnSrc = src.slice(start, end);
+  // "아담한이 자연스럽게…" 를 만들던 raw label + '이' 연결을 완전히 제거한다.
+  assert.ok(!fnSrc.includes('이 자연스럽게 전해지는 프로필이에요'));
+  assert.ok(!fnSrc.includes('${firstSignal}'));
+  // 외모/이상형 계열 key는 성격 첫인상 근거에서 제외한다.
+  assert.ok(src.includes('const APPEARANCE_OR_IDEAL_TAG_KEYS = new Set(['));
+  assert.ok(src.includes("'petite'"));
+  assert.ok(src.includes("'good_looking'"));
+  assert.ok(src.includes('function personalitySignalLabels('));
+  assert.ok(fnSrc.includes('personalitySignalLabels(data?.personalityTags)'));
 });
 
 test('text AI logs do not include raw uid, matchId, prompt, response, or error.message', () => {

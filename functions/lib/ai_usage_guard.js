@@ -104,7 +104,10 @@ const SELF_TEXT_AI_USAGE_POLICIES = Object.freeze({
     functionName: 'generateDailyFortune',
     hourlyLimit: 10,
     dailyLimit: 20,
-    cooldownMs: 10 * 1000,
+    // 최근 7일 운세 backfill은 하루치 미캐시 날짜를 연속 호출하므로 연속 호출
+    // cooldown을 두면 두 번째 날짜부터 resource-exhausted가 난다. 날짜별 Firestore
+    // 캐시와 시간·일일 quota가 이미 burst 총량을 제한하므로 cooldown만 0으로 둔다.
+    cooldownMs: 0,
     leaseTtlMs: 90 * 1000,
   }),
 });
