@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/chat_appointment.dart';
+import '../../models/chat_presence.dart';
 import '../../models/fortune_model.dart';
 import '../../models/message_model.dart';
 import '../../models/public_profile.dart';
+import '../../services/chat/chat_presence_service.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/fortune/fortune_service.dart';
 import '../../services/matches/matches_service.dart';
@@ -24,6 +26,7 @@ class ChatScreen extends StatefulWidget {
   final PublicProfile otherProfile;
   final String currentUid;
   final ChatService chatService;
+  final ChatPresenceService presenceService;
   final FortuneService fortuneService;
   final MatchesService matchesService;
   final SafetyService safetyService;
@@ -34,6 +37,7 @@ class ChatScreen extends StatefulWidget {
     required this.otherProfile,
     required this.currentUid,
     required this.chatService,
+    required this.presenceService,
     required this.fortuneService,
     required this.matchesService,
     required this.safetyService,
@@ -43,7 +47,17 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
+  /// heartbeat 주기. stale 판정(90초)보다 충분히 짧아야 정상 foreground 상태가
+  /// 만료로 오인되지 않는다.
+  static const Duration heartbeatInterval = Duration(seconds: 30);
+
+  /// 마지막 입력 후 이 시간이 지나면 입력 중 표시를 내린다.
+  static const Duration typingIdleTimeout = Duration(seconds: 2);
+
+  /// "N분 전 접속" 문구 갱신 주기. 초 단위 rebuild는 하지 않는다.
+  static const Duration statusRefreshInterval = Duration(seconds: 30);
+
   late final Stream<List<MessageModel>> _stream;
   final _textController = TextEditingController();
   final _inputFocusNode = FocusNode();
@@ -61,16 +75,28 @@ class _ChatScreenState extends State<ChatScreen> {
   final Map<String, Stream<ChatAppointment?>> _appointmentStreams = {};
   String? _lastReadMarker;
   String? _latestConversationTipMessageId;
-  // 실제 typing 이벤트가 연결되면 이 값만 갱신하면 된다.
-  final bool _isOtherTyping = false;
   StreamSubscription<bool>? _unmatchedSub;
+
+  // ── presence(접속/입력 중) 상태 ────────────────────────────────────────
+  StreamSubscription<ChatPresence?>? _presenceSub;
+  Timer? _presenceHeartbeat;
+  Timer? _typingDebounce;
+  Timer? _statusTicker;
+  ChatPresence? _otherPresence;
+  bool _localTyping = false;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _stream = widget.chatService.watchMessages(widget.matchId);
     _markMatchRead();
     _checkBlocked();
+    _watchOtherPresence();
+    _writePresence(isOnline: true, isTyping: false);
+    _startHeartbeat();
+    _startStatusTicker();
     // 채팅방을 열어둔 채로 상대가 매칭을 해제해도 바로 반영되도록 구독한다.
     // 실제 차단은 firestore.rules(메시지 create)가 서버 단에서 하므로,
     // 이 구독은 UX(입력창 비활성화·안내) 목적이다.
@@ -79,11 +105,22 @@ class _ChatScreenState extends State<ChatScreen> {
     ) {
       if (!mounted) return;
       setState(() => _unmatched = value);
+      // 매칭이 해제되면 내 presence도 즉시 내린다.
+      if (value) _goOffline();
     }, onError: (Object e) => _debugLog('[Chat] unmatch 상태 구독 실패: $e'));
   }
 
   @override
   void dispose() {
+    _typingDebounce?.cancel();
+    _presenceHeartbeat?.cancel();
+    _statusTicker?.cancel();
+    _presenceSub?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    // 화면을 벗어나면 offline로 내린다. dispose에서는 await할 수 없으므로
+    // best-effort로 보내고, 실패해도 상대는 heartbeat 만료로 offline을 본다.
+    _localTyping = false;
+    _writePresence(isOnline: false, isTyping: false);
     _textController.dispose();
     _inputFocusNode.dispose();
     _scrollController.dispose();
@@ -91,9 +128,128 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  // ── presence ──────────────────────────────────────────────────────────
+
+  /// presence를 갱신해도 되는 상태인지. 차단/매칭 해제 상태에서는 접속 정보를
+  /// 더 이상 흘리지 않는다.
+  bool get _presenceEnabled => !_blocked && !_unmatched;
+
+  bool get _isForeground => _lifecycleState == AppLifecycleState.resumed;
+
+  void _watchOtherPresence() {
+    _presenceSub = widget.presenceService
+        .watchPresence(
+          matchId: widget.matchId,
+          uid: widget.otherProfile.uid,
+        )
+        .listen(
+          (presence) {
+            if (!mounted) return;
+            setState(() => _otherPresence = presence);
+          },
+          onError: (Object e) => _debugLog('[Chat] presence 구독 실패: $e'),
+        );
+  }
+
+  /// presence write는 항상 best-effort — 실패해도 채팅 기능을 막지 않고
+  /// 사용자 화면에 오류를 노출하지 않는다.
+  void _writePresence({required bool isOnline, required bool isTyping}) {
+    unawaited(
+      widget.presenceService
+          .setPresence(
+            matchId: widget.matchId,
+            uid: widget.currentUid,
+            isOnline: isOnline,
+            isTyping: isTyping,
+          )
+          .catchError((Object e) {
+            _debugLog('[Chat] presence 갱신 실패 matchId=${widget.matchId} error=$e');
+          }),
+    );
+  }
+
+  void _startHeartbeat() {
+    _presenceHeartbeat?.cancel();
+    if (!_presenceEnabled) return;
+    _presenceHeartbeat = Timer.periodic(heartbeatInterval, (_) {
+      if (!mounted || !_presenceEnabled || !_isForeground) return;
+      // 현재 typing 상태를 함께 실어 heartbeat가 입력 중 표시를 되돌리지 않게 한다.
+      _writePresence(isOnline: true, isTyping: _localTyping);
+    });
+  }
+
+  /// "N분 전 접속" 문구가 시간이 지나도 굳어 있지 않도록 주기적으로 rebuild한다.
+  void _startStatusTicker() {
+    _statusTicker?.cancel();
+    _statusTicker = Timer.periodic(statusRefreshInterval, (_) {
+      if (!mounted) return;
+      setState(() {});
+    });
+  }
+
+  /// 백그라운드 전환·차단·매칭 해제·화면 이탈 시 공통 offline 처리.
+  void _goOffline() {
+    _presenceHeartbeat?.cancel();
+    _presenceHeartbeat = null;
+    _typingDebounce?.cancel();
+    _typingDebounce = null;
+    _localTyping = false;
+    _writePresence(isOnline: false, isTyping: false);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    _lifecycleState = state;
+    if (state == AppLifecycleState.resumed) {
+      if (!_presenceEnabled) return;
+      _localTyping = false;
+      _writePresence(isOnline: true, isTyping: false);
+      _startHeartbeat();
+      return;
+    }
+    // inactive / paused / hidden / detached 는 모두 offline으로 본다.
+    _goOffline();
+  }
+
+  /// 입력창 변경 핸들러. 키 입력마다 write하지 않고, true/false 상태가 실제로
+  /// 바뀔 때만 Firestore에 반영한다.
+  void _onInputChanged(String value) {
+    if (!_presenceEnabled || !_isForeground) {
+      _setLocalTyping(false);
+      return;
+    }
+    if (value.trim().isEmpty) {
+      _setLocalTyping(false);
+      return;
+    }
+    _setLocalTyping(true);
+    _typingDebounce?.cancel();
+    _typingDebounce = Timer(typingIdleTimeout, () {
+      if (!mounted) return;
+      _setLocalTyping(false);
+    });
+  }
+
+  void _setLocalTyping(bool typing) {
+    if (!typing) {
+      _typingDebounce?.cancel();
+      _typingDebounce = null;
+    }
+    if (_localTyping == typing) return;
+    _localTyping = typing;
+    _writePresence(
+      isOnline: _presenceEnabled && _isForeground,
+      isTyping: typing,
+    );
+  }
+
   Future<void> _send() async {
     final text = _textController.text;
     if (text.trim().isEmpty || _sending || _blocked || _unmatched) return;
+
+    // 전송을 시작하는 순간 입력 중 표시는 내린다.
+    _setLocalTyping(false);
 
     // 입력창은 전송 시도와 동시에 비워 즉각 반응하게 하고, 실패 시 되돌린다.
     _textController.clear();
@@ -282,6 +438,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _blocked = blocked;
         _checkingBlock = false;
       });
+      if (blocked) _goOffline();
     } catch (e) {
       _debugLog('[Safety] 채팅 차단 상태 확인 실패: $e');
       if (mounted) setState(() => _checkingBlock = false);
@@ -340,6 +497,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       if (!mounted) return;
       setState(() => _blocked = submission.blockUser || _blocked);
+      if (_blocked) _goOffline();
       _showSnack(submission.blockUser ? '신고가 접수되고 차단했어요.' : '신고가 접수되었어요.');
     } catch (e) {
       _debugLog(
@@ -380,6 +538,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       if (!mounted) return;
       setState(() => _blocked = true);
+      _goOffline();
       _showSnack('차단했어요.');
     } catch (e) {
       _debugLog(
@@ -445,6 +604,13 @@ class _ChatScreenState extends State<ChatScreen> {
     final other = widget.otherProfile;
     final photoUrl = other.photoUrls.isNotEmpty ? other.photoUrls[0] : null;
 
+    // 차단/매칭 해제 상태에서는 상대 접속 정보를 노출하지 않는다.
+    final showPresence = !_checkingBlock && _presenceEnabled;
+    final presence = showPresence ? _otherPresence : null;
+    final now = DateTime.now();
+    final otherOnline = presence?.isActuallyOnline(now: now) ?? false;
+    final otherTyping = presence?.isActuallyTyping(now: now) ?? false;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: true,
@@ -480,10 +646,15 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(28),
-          child: _ChatStatusBar(label: '온라인'),
-        ),
+        bottom: showPresence
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(28),
+                child: _ChatStatusBar(
+                  label: chatPresenceLabel(presence: presence, now: now),
+                  isOnline: otherOnline,
+                ),
+              )
+            : null,
         actions: [
           PopupMenuButton<String>(
             tooltip: '안전 메뉴',
@@ -515,7 +686,7 @@ class _ChatScreenState extends State<ChatScreen> {
             : Column(
                 children: [
                   Expanded(child: _buildMessageList()),
-                  _TypingSlot(isTyping: _isOtherTyping),
+                  _TypingSlot(isTyping: otherTyping),
                   _buildConversationCoach(),
                   _unmatched ? const _UnmatchedInputBar() : _buildInputBar(),
                 ],
@@ -699,6 +870,7 @@ class _ChatScreenState extends State<ChatScreen> {
               minLines: 1,
               maxLines: 4,
               textInputAction: TextInputAction.send,
+              onChanged: _onInputChanged,
               onSubmitted: (_) => _send(),
               decoration: InputDecoration(
                 hintText: '메시지를 입력하세요',
@@ -1433,8 +1605,9 @@ class _MessageTime extends StatelessWidget {
 
 class _ChatStatusBar extends StatelessWidget {
   final String label;
+  final bool isOnline;
 
-  const _ChatStatusBar({required this.label});
+  const _ChatStatusBar({required this.label, required this.isOnline});
 
   @override
   Widget build(BuildContext context) {
@@ -1453,20 +1626,23 @@ class _ChatStatusBar extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: const BoxDecoration(
-              color: AppColors.wood,
+            decoration: BoxDecoration(
+              color: isOnline ? AppColors.wood : AppColors.divider,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 5),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              label,
+              key: const ValueKey('chat-status-label'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

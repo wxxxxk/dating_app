@@ -9,6 +9,7 @@ import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
+import '../../services/chat/chat_presence_service.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/discovery/discovery_service.dart';
@@ -37,6 +38,7 @@ class ReceivedLikesScreen extends StatefulWidget {
   final DiscoveryService discoveryService;
   final MatchesService matchesService;
   final ChatService chatService;
+  final ChatPresenceService presenceService;
   final FortuneService fortuneService;
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
@@ -51,6 +53,7 @@ class ReceivedLikesScreen extends StatefulWidget {
     required this.discoveryService,
     required this.matchesService,
     required this.chatService,
+    required this.presenceService,
     required this.fortuneService,
     required this.jellyService,
     required this.jellyPurchaseService,
@@ -144,6 +147,7 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
           otherProfile: match.otherProfile,
           currentUid: widget.currentUid,
           chatService: widget.chatService,
+          presenceService: widget.presenceService,
           fortuneService: widget.fortuneService,
           matchesService: widget.matchesService,
           safetyService: widget.safetyService,

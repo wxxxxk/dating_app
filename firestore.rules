@@ -654,6 +654,61 @@ service cloud.firestore {
 
         allow delete: if false;
       }
+
+      // matches/{matchId}/presence/{presenceUid} (Phase 2-2):
+      // - 채팅방 단위 접속/입력 중 상태. 전역 온라인 상태가 아니라 "이 채팅방을
+      //   열고 있는가"만 담고, uid 외 프로필/위치/기기 정보는 저장하지 않는다.
+      // - read: participant만(상대 상태 표시용).
+      // - create/update: 본인 문서(presenceUid == 본인 uid)만, 매칭이 해제되지
+      //   않았을 때만. exact field allowlist로 임의 필드 주입을 막고,
+      //   lastActiveAt/updatedAt은 request.time만 허용해 클라이언트가 heartbeat
+      //   만료(stale) 판정을 시간 조작으로 우회하지 못하게 한다.
+      // - offline인데 isTyping true인 조합은 거부한다(모델/서비스와 같은 계약).
+      // - delete: 항상 금지 — 문서는 삭제하지 않고 상태만 갱신한다.
+      match /presence/{presenceUid} {
+        function parentMatch() {
+          return get(/databases/$(database)/documents/matches/$(matchId)).data;
+        }
+        function isMatchParticipant() {
+          return request.auth != null &&
+            request.auth.uid in parentMatch().participants;
+        }
+        function matchNotUnmatched() {
+          return parentMatch().get('unmatchedBy', []).size() == 0;
+        }
+        function validPresence() {
+          return request.resource.data.keys().hasOnly([
+            'uid', 'isOnline', 'isTyping', 'lastActiveAt', 'updatedAt'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'uid', 'isOnline', 'isTyping', 'lastActiveAt', 'updatedAt'
+          ]) &&
+          request.resource.data.uid == presenceUid &&
+          request.resource.data.isOnline is bool &&
+          request.resource.data.isTyping is bool &&
+          (request.resource.data.isOnline == true ||
+            request.resource.data.isTyping == false) &&
+          request.resource.data.lastActiveAt == request.time &&
+          request.resource.data.updatedAt == request.time;
+        }
+
+        allow read: if isMatchParticipant();
+
+        allow create: if request.auth != null &&
+          request.auth.uid == presenceUid &&
+          isMatchParticipant() &&
+          matchNotUnmatched() &&
+          validPresence();
+
+        allow update: if request.auth != null &&
+          request.auth.uid == presenceUid &&
+          isMatchParticipant() &&
+          matchNotUnmatched() &&
+          validPresence() &&
+          request.resource.data.uid == resource.data.uid;
+
+        allow delete: if false;
+      }
     }
 
     // collectionGroup('swipes') 조회용 규칙:

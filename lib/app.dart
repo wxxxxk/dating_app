@@ -10,6 +10,7 @@ import 'features/auth/signup_screen.dart';
 import 'features/main_shell.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth/auth_service.dart';
+import 'services/chat/chat_presence_service.dart';
 import 'services/chat/chat_service.dart';
 import 'services/charm/charm_service.dart';
 import 'services/database/firestore_service.dart';
@@ -44,6 +45,7 @@ class _MyAppState extends State<MyApp> {
   late final DiscoveryService _discoveryService;
   late final MatchesService _matchesService;
   late final ChatService _chatService;
+  late final ChatPresenceService _presenceService;
   late final CharmService _charmService;
   late final FortuneService _fortuneService;
   late final JellyService _jellyService;
@@ -63,6 +65,7 @@ class _MyAppState extends State<MyApp> {
     _storageService = StorageService();
     _discoveryService = DiscoveryService();
     _chatService = ChatService();
+    _presenceService = ChatPresenceService();
     _charmService = CharmService();
     _fortuneService = FortuneService();
     _jellyService = JellyService();
@@ -78,6 +81,7 @@ class _MyAppState extends State<MyApp> {
       authService: _authService,
       firestoreService: _firestoreService,
       chatService: _chatService,
+      presenceService: _presenceService,
       fortuneService: _fortuneService,
       matchesService: _matchesService,
       safetyService: _safetyService,
@@ -114,6 +118,7 @@ class _MyAppState extends State<MyApp> {
         discoveryService: _discoveryService,
         matchesService: _matchesService,
         chatService: _chatService,
+        presenceService: _presenceService,
         charmService: _charmService,
         fortuneService: _fortuneService,
         jellyService: _jellyService,
@@ -141,6 +146,7 @@ class _MyAppState extends State<MyApp> {
                 discoveryService: _discoveryService,
                 matchesService: _matchesService,
                 chatService: _chatService,
+                presenceService: _presenceService,
                 charmService: _charmService,
                 fortuneService: _fortuneService,
                 jellyService: _jellyService,
@@ -182,6 +188,7 @@ class _AuthGate extends StatefulWidget {
   final DiscoveryService discoveryService;
   final MatchesService matchesService;
   final ChatService chatService;
+  final ChatPresenceService presenceService;
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -199,6 +206,7 @@ class _AuthGate extends StatefulWidget {
     required this.discoveryService,
     required this.matchesService,
     required this.chatService,
+    required this.presenceService,
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
@@ -330,6 +338,7 @@ class _AuthGateState extends State<_AuthGate> {
       discoveryService: widget.discoveryService,
       matchesService: widget.matchesService,
       chatService: widget.chatService,
+      presenceService: widget.presenceService,
       charmService: widget.charmService,
       fortuneService: widget.fortuneService,
       jellyService: widget.jellyService,

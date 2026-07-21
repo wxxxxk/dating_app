@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/chat/chat_screen.dart';
 import '../auth/auth_service.dart';
+import '../chat/chat_presence_service.dart';
 import '../chat/chat_service.dart';
 import '../database/firestore_service.dart';
 import '../fortune/fortune_service.dart';
@@ -23,6 +24,7 @@ class NotificationService {
     required AuthService authService,
     required FirestoreService firestoreService,
     required ChatService chatService,
+    required ChatPresenceService presenceService,
     required FortuneService fortuneService,
     required MatchesService matchesService,
     required SafetyService safetyService,
@@ -33,6 +35,7 @@ class NotificationService {
        _authService = authService,
        _firestoreService = firestoreService,
        _chatService = chatService,
+       _presenceService = presenceService,
        _fortuneService = fortuneService,
        _matchesService = matchesService,
        _safetyService = safetyService,
@@ -44,6 +47,7 @@ class NotificationService {
   final AuthService _authService;
   final FirestoreService _firestoreService;
   final ChatService _chatService;
+  final ChatPresenceService _presenceService;
   final FortuneService _fortuneService;
   final MatchesService _matchesService;
   final SafetyService _safetyService;
@@ -221,6 +225,7 @@ class NotificationService {
             otherProfile: otherProfile,
             currentUid: currentUid,
             chatService: _chatService,
+            presenceService: _presenceService,
             fortuneService: _fortuneService,
             matchesService: _matchesService,
             safetyService: _safetyService,
