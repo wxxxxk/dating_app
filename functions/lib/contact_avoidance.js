@@ -199,10 +199,47 @@ async function findMatchedUids({ uid, contactHashes, db }) {
 }
 
 /**
+ * 소유 관계 하나를 transaction으로 제거한다(Phase 3-4A).
+ *
+ * pair는 "한쪽이라도 상대를 연락처로 보유하면 유지"가 계약이다. 일반 read 후
+ * 별도 batch로 지우면 그 사이에 상대가 관계를 만들 때 pair가 잘못 사라질 수
+ * 있으므로, 세 문서를 같은 transaction에서 읽고 판단한다.
+ *
+ * - 상대의 reciprocal 관계가 있으면 내 관계만 지우고 pair는 남긴다.
+ * - 없으면 pair까지 지운다.
+ * - 이미 없는 문서에 대해서도 성공한다(idempotent).
+ */
+async function removeOwnerRelation({ uid, target, db }) {
+  const ownerRef = db
+    .collection('users')
+    .doc(uid)
+    .collection(OWNER_MATCHES_SUBCOLLECTION)
+    .doc(target);
+  const reciprocalRef = db
+    .collection('users')
+    .doc(target)
+    .collection(OWNER_MATCHES_SUBCOLLECTION)
+    .doc(uid);
+  const pairRef = db
+    .collection(PAIRS_COLLECTION)
+    .doc(contactAvoidancePairId(uid, target));
+
+  return db.runTransaction(async (transaction) => {
+    const reciprocalSnap = await transaction.get(reciprocalRef);
+    transaction.delete(ownerRef);
+    // 상대가 동시에 관계를 만들었다면 여기서 보이거나, 보이지 않더라도
+    // 그 write가 이 transaction과 충돌해 재시도되므로 pair가 유실되지 않는다.
+    if (reciprocalSnap.exists) return { pairKept: true };
+    transaction.delete(pairRef);
+    return { pairKept: false };
+  });
+}
+
+/**
  * 소유 관계(owner relation) diff를 적용하고 pair를 정리한다.
  *
- * pair는 "한쪽이라도 상대를 연락처로 보유하면 유지"가 계약이다. 따라서 관계를
- * 제거할 때는 반대쪽 소유 여부를 확인한 뒤에만 pair를 지운다.
+ * 추가는 deterministic ID 기반 idempotent set이라 batch로 묶고, 제거는 위
+ * transaction으로 하나씩 처리한다(개인정보 정확성 > batch 속도).
  */
 async function applyMatchDiff({
   uid,
@@ -221,25 +258,11 @@ async function applyMatchDiff({
   const toAdd = [...matchedUids].filter((target) => !existing.has(target));
   const toRemove = [...existing].filter((target) => !matchedUids.has(target));
 
-  // 제거 대상 중 상대가 여전히 나를 보유하고 있으면 pair는 유지한다.
-  const reciprocalChecks = await Promise.all(
-    toRemove.map(async (target) => {
-      const snap = await db
-        .collection('users')
-        .doc(target)
-        .collection(OWNER_MATCHES_SUBCOLLECTION)
-        .doc(uid)
-        .get();
-      return { target, reciprocal: snap.exists };
-    }),
-  );
-
   const writes = [];
   for (const target of toAdd) {
     const pairId = contactAvoidancePairId(uid, target);
     writes.push({
       ref: ownerRef.doc(target),
-      op: 'set',
       data: {
         targetUid: target,
         pairId,
@@ -249,7 +272,6 @@ async function applyMatchDiff({
     });
     writes.push({
       ref: db.collection(PAIRS_COLLECTION).doc(pairId),
-      op: 'set',
       data: {
         participants: sortedParticipants(uid, target),
         updatedAt: serverTimestamp(),
@@ -257,26 +279,17 @@ async function applyMatchDiff({
       },
     });
   }
-  for (const { target, reciprocal } of reciprocalChecks) {
-    writes.push({ ref: ownerRef.doc(target), op: 'delete' });
-    if (!reciprocal) {
-      writes.push({
-        ref: db.collection(PAIRS_COLLECTION).doc(contactAvoidancePairId(uid, target)),
-        op: 'delete',
-      });
-    }
-  }
 
   for (const part of chunk(writes, BATCH_CHUNK)) {
     const batch = db.batch();
     for (const write of part) {
-      if (write.op === 'delete') {
-        batch.delete(write.ref);
-      } else {
-        batch.set(write.ref, write.data, { merge: true });
-      }
+      batch.set(write.ref, write.data, { merge: true });
     }
     await batch.commit();
+  }
+
+  for (const target of toRemove) {
+    await removeOwnerRelation({ uid, target, db });
   }
 
   return { added: toAdd.length, removed: toRemove.length };
@@ -441,6 +454,7 @@ module.exports = {
   contactHashFromPhoneNumber,
   isContactAvoidancePair,
   normalizePhoneNumber,
+  removeOwnerRelation,
   safeUidHash,
   syncAvoidContactsCore,
   syncPrivatePhoneIdentifier,

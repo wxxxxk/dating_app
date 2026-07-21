@@ -50,6 +50,7 @@ const {
   reviewAffiliationVerificationCore,
 } = require('./lib/affiliation_verification_review');
 const {
+  contactAvoidancePairId,
   isContactAvoidancePair,
   syncAvoidContactsCore,
   syncPrivatePhoneIdentifier,
@@ -181,21 +182,32 @@ exports.onSwipeCreated = onDocumentWritten(
       .doc(uid);
 
     // Phase 3-4: 지인 피하기로 묶인 상대와는 새 매칭을 만들지 않는다.
-    // 클라이언트 필터를 우회해 swipe 문서를 만들어도 여기서 막힌다.
-    // 기존 매치는 건드리지 않는다(존재하면 위 멱등 분기로 그대로 유지).
+    // 아래 사전 검사는 불필요한 transaction을 줄이는 최적화일 뿐이고,
+    // 최종 방어는 transaction 안의 pairRef read다(3-4A).
     if (await isContactAvoidancePair({ db, uidA: uid, uidB: targetUid })) {
       return null;
     }
 
+    // pairId는 두 uid 순서와 무관하게 같은 값이다.
+    const pairRef = db
+      .collection('contactAvoidancePairs')
+      .doc(contactAvoidancePairId(uid, targetUid));
+
     const created = await db.runTransaction(async (transaction) => {
-      const [existing, currentSwipe, reverseSwipe] = await Promise.all([
+      const [existing, currentSwipe, reverseSwipe, pairSnap] = await Promise.all([
         transaction.get(matchRef),
         transaction.get(currentSwipeRef),
         transaction.get(reverseSwipeRef),
+        transaction.get(pairRef),
       ]);
 
       // 이미 매칭됐으면 다시 만들지 않는다 (멱등 처리).
       if (existing.exists) return false;
+
+      // transaction 도중 pair가 생성되면 Firestore가 충돌로 재시도하고,
+      // 재시도에서 이 검사에 걸려 매칭이 만들어지지 않는다.
+      // 기존 매치는 위 멱등 분기에서 이미 그대로 유지된다.
+      if (pairSnap.exists) return false;
 
       // Rewind가 swipe 문서를 삭제했거나 action을 바꾼 뒤라면 이벤트의
       // 과거 after 데이터만 믿고 매칭을 만들면 안 된다.

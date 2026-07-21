@@ -37,6 +37,12 @@ class _ContactAvoidanceScreenState extends State<ContactAvoidanceScreen> {
   late final Stream<ContactAvoidanceSettings?> _settingsStream = widget.service
       .watchSettings(widget.uid);
 
+  /// 실제 숨김 수는 pair stream 기준이 정확하다 — 상대만 나를 연락처에 가지고
+  /// 있어도 pair가 존재하므로 settings.hiddenCount와 다를 수 있다.
+  /// UID 목록은 화면에 표시하지 않고 개수만 쓴다.
+  late final Stream<Set<String>> _avoidedUidsStream = widget.service
+      .watchAvoidedUids(widget.uid);
+
   bool _consented = false;
   bool _syncing = false;
   bool _permissionDenied = false;
@@ -276,7 +282,14 @@ class _ContactAvoidanceScreenState extends State<ContactAvoidanceScreen> {
               label: '동기화한 연락처',
               value: '${settings.contactCount}개',
             ),
-            _SummaryRow(label: '숨긴 가입자', value: '${settings.hiddenCount}명'),
+            StreamBuilder<Set<String>>(
+              stream: _avoidedUidsStream,
+              builder: (context, snap) {
+                // pair stream을 아직 못 받았으면 서버 요약값으로 폴백한다.
+                final count = snap.data?.length ?? settings.hiddenCount;
+                return _SummaryRow(label: '숨긴 가입자', value: '$count명');
+              },
+            ),
             _SummaryRow(
               label: '마지막 동기화',
               value: _formatSyncedAt(settings.syncedAt),

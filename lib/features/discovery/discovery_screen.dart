@@ -85,6 +85,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   String _currentUserPhotoUrl = '';
   final _locationService = const LocationService();
   Timer? _boostTimer;
+  // 지인 피하기(Phase 3-4A): pair 변경을 화면 수명 동안 구독해 즉시 반영한다.
+  StreamSubscription<Set<String>>? _avoidedUidsSub;
+  Set<String> _avoidedUids = {};
+  Timer? _avoidanceReloadDebounce;
   _RewindCandidate? _rewindCandidate;
   bool _rewinding = false;
   String? _rewindEntryAction;
@@ -96,6 +100,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   @override
   void initState() {
     super.initState();
+    _watchAvoidedUids();
     _loadDiscovery();
     _boostTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final boostUntil = _currentUserProfile?.boostUntil;
@@ -108,21 +113,82 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
   @override
   void dispose() {
     _boostTimer?.cancel();
+    _avoidanceReloadDebounce?.cancel();
+    _avoidedUidsSub?.cancel();
     super.dispose();
   }
 
   // ── 데이터 로드 ────────────────────────────────────────────────────────────
 
-  /// 지인 피하기 pair 상대 목록. 조회 실패는 Discovery 로딩을 막지 않는다.
-  Future<Set<String>> _loadAvoidedUids(String uid) async {
-    try {
-      return await widget.contactAvoidanceService
-          .watchAvoidedUids(uid)
-          .first
-          .timeout(const Duration(seconds: 5));
-    } catch (_) {
-      return const <String>{};
+  /// 지인 피하기 pair 상대 목록을 화면 수명 동안 구독한다.
+  ///
+  /// 새로 추가된 상대는 현재 카드 목록에서 즉시 빼고, 해제된 상대는 debounce 뒤
+  /// 전체 재조회로 후보에 되돌린다. 구독 오류는 Discovery 전체를 막지 않는다.
+  void _watchAvoidedUids() {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid == null) return;
+    _avoidedUidsSub = widget.contactAvoidanceService
+        .watchAvoidedUids(uid)
+        .listen(
+          _onAvoidedUidsChanged,
+          onError: (Object e) {
+            if (kDebugMode) debugPrint('[Discovery] 지인 피하기 구독 실패: $e');
+          },
+        );
+  }
+
+  void _onAvoidedUidsChanged(Set<String> next) {
+    if (!mounted) return;
+    // 값이 실제로 바뀌지 않았으면 아무 것도 하지 않는다(불필요한 재조회 방지).
+    if (setEquals(_avoidedUids, next)) return;
+
+    final added = next.difference(_avoidedUids);
+    final removed = _avoidedUids.difference(next);
+    _avoidedUids = next;
+
+    if (added.isNotEmpty) _removeAvoidedFromDeck(added);
+    if (removed.isNotEmpty) _scheduleAvoidanceReload();
+  }
+
+  /// 새로 제외된 상대를 현재 덱에서 즉시 지운다. 보고 있던 카드가 사라져도
+  /// 인덱스가 범위를 벗어나지 않도록 보정한다.
+  void _removeAvoidedFromDeck(Set<String> added) {
+    if (_profiles.isEmpty) return;
+    final currentUid = _currentIndex < _profiles.length
+        ? _profiles[_currentIndex].uid
+        : null;
+    final remaining = _profiles
+        .where((profile) => !added.contains(profile.uid))
+        .toList();
+    if (remaining.length == _profiles.length) return;
+
+    // 보고 있던 카드가 남아 있으면 그 카드를 계속 보여주고,
+    // 제외됐다면 같은 자리(다음 유효 카드)로 넘어간다.
+    var nextIndex = currentUid == null
+        ? _currentIndex
+        : remaining.indexWhere((profile) => profile.uid == currentUid);
+    if (nextIndex < 0) {
+      nextIndex = _currentIndex.clamp(0, remaining.isEmpty ? 0 : remaining.length);
     }
+
+    setState(() {
+      _profiles = remaining;
+      _currentIndex = remaining.isEmpty ? 0 : nextIndex.clamp(0, remaining.length);
+      // 되돌리기 후보가 제외 대상이면 함께 정리한다.
+      if (_rewindCandidate != null &&
+          added.contains(_rewindCandidate!.profile.uid)) {
+        _rewindCandidate = null;
+      }
+    });
+  }
+
+  /// pair 해제는 후보 복원을 위해 전체 재조회가 필요하다. 연속 변경을 묶는다.
+  void _scheduleAvoidanceReload() {
+    _avoidanceReloadDebounce?.cancel();
+    _avoidanceReloadDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      _loadDiscovery();
+    });
   }
 
   Future<void> _loadDiscovery() async {
@@ -146,12 +212,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       );
       // 지인 피하기(Phase 3-4) 상대는 차단 UID와 합쳐 후보 조회 단계에서 뺀다 —
       // 화면에 잠깐 보였다가 사라지는 flash를 만들지 않기 위해서다.
-      final avoidedUids = await _loadAvoidedUids(uid);
+      // 최신 pair 집합은 _avoidedUidsSub가 계속 갱신한다.
       final profiles = await widget.discoveryService.getDiscoveryProfiles(
         currentUid: uid,
         currentLocation: currentLocation,
         filter: filter,
-        excludedUids: {...blockedUids, ...avoidedUids},
+        excludedUids: {...blockedUids, ..._avoidedUids},
       );
       final photoUrls = profile?.photoUrls ?? const <String>[];
       if (mounted) {

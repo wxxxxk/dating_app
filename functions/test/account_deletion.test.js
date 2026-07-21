@@ -1082,3 +1082,164 @@ test('42. callable runtime option 유지', () => {
   assert.ok(body.includes('maxInstances: 5'));
   assert.equal(body.includes('enforceAppCheck'), false);
 });
+
+// ── Phase 3-4A: 지인 피하기·인증 개인정보 정리 ──────────────────────────
+//
+// 기존 seed/파일 목록을 건드리지 않고, 이 시나리오 전용 seed를 주입한다.
+
+const THIRD = 'user-gamma';
+const PAIR_WITH_OTHER = 'pair-uid-other';
+const PAIR_UNRELATED = 'pair-other-gamma';
+
+function contactSeed() {
+  return {
+    ...seed(),
+    // 지인 피하기 데이터
+    [`privatePhoneIdentifiers/${UID}`]: {
+      uid: UID,
+      contactHash: 'a'.repeat(64),
+    },
+    [`contactAvoidanceSyncLimits/${UID}`]: { lastSyncAt: 'T1' },
+    [`users/${UID}/contactAvoidanceMatches/${OTHER}`]: { targetUid: OTHER },
+    // 상대가 나를 가리키는 inbound 관계
+    [`users/${OTHER}/contactAvoidanceMatches/${UID}`]: { targetUid: UID },
+    [`contactAvoidancePairs/${PAIR_WITH_OTHER}`]: {
+      participants: [OTHER, UID].sort(),
+    },
+    // 나와 무관한 pair는 남아야 한다.
+    [`contactAvoidancePairs/${PAIR_UNRELATED}`]: {
+      participants: [OTHER, THIRD].sort(),
+    },
+    [`users/${OTHER}/contactAvoidanceMatches/${THIRD}`]: { targetUid: THIRD },
+    // 사진 인증 요청(top-level)
+    [`photoVerificationRequests/${UID}`]: {
+      uid: UID,
+      status: 'pending',
+      storagePath: `photoVerification/${UID}/upload1.jpg`,
+    },
+  };
+}
+
+function contactFiles() {
+  return [
+    `users/${UID}/profile/a.jpg`,
+    `photoVerification/${UID}/selfie.jpg`,
+    `affiliationVerification/${UID}/work/proof.jpg`,
+    `affiliationVerification/${UID}/school/proof.png`,
+    // 다른 사용자 파일은 절대 지우면 안 된다.
+    `users/${OTHER}/profile/keep.jpg`,
+    `photoVerification/${OTHER}/keep.jpg`,
+    `affiliationVerification/${OTHER}/work/keep.jpg`,
+  ];
+}
+
+test('3-4A: 탈퇴 시 연락처 식별자·sync limit·사진 인증 요청을 삭제한다', async () => {
+  const ctx = await runDelete({ seed: contactSeed(), files: contactFiles() });
+
+  assert.equal(ctx.db.docs.has(`privatePhoneIdentifiers/${UID}`), false);
+  assert.equal(ctx.db.docs.has(`contactAvoidanceSyncLimits/${UID}`), false);
+  assert.equal(ctx.db.docs.has(`photoVerificationRequests/${UID}`), false);
+});
+
+test('3-4A: outbound/inbound owner relation과 본인 pair만 삭제한다', async () => {
+  const ctx = await runDelete({ seed: contactSeed(), files: contactFiles() });
+
+  // 내 소유 관계
+  assert.equal(
+    ctx.db.docs.has(`users/${UID}/contactAvoidanceMatches/${OTHER}`),
+    false,
+  );
+  // 상대가 나를 가리키던 관계
+  assert.equal(
+    ctx.db.docs.has(`users/${OTHER}/contactAvoidanceMatches/${UID}`),
+    false,
+  );
+  // 내가 포함된 pair
+  assert.equal(
+    ctx.db.docs.has(`contactAvoidancePairs/${PAIR_WITH_OTHER}`),
+    false,
+  );
+  // 무관한 pair와 다른 사용자의 관계는 그대로
+  assert.equal(
+    ctx.db.docs.has(`contactAvoidancePairs/${PAIR_UNRELATED}`),
+    true,
+  );
+  assert.equal(
+    ctx.db.docs.has(`users/${OTHER}/contactAvoidanceMatches/${THIRD}`),
+    true,
+  );
+});
+
+test('3-4A: 세 Storage prefix를 모두 정리하고 남의 파일은 두지 않는다', async () => {
+  const ctx = await runDelete({ seed: contactSeed(), files: contactFiles() });
+
+  const deleted = ctx.db.operations
+    .concat(ctx.bucket.operations)
+    .filter((op) => typeof op === 'string' && op.startsWith('storageDelete:'))
+    .map((op) => op.slice('storageDelete:'.length));
+
+  assert.ok(deleted.includes(`users/${UID}/profile/a.jpg`));
+  assert.ok(deleted.includes(`photoVerification/${UID}/selfie.jpg`));
+  assert.ok(deleted.includes(`affiliationVerification/${UID}/work/proof.jpg`));
+  assert.ok(deleted.includes(`affiliationVerification/${UID}/school/proof.png`));
+
+  for (const kept of [
+    `users/${OTHER}/profile/keep.jpg`,
+    `photoVerification/${OTHER}/keep.jpg`,
+    `affiliationVerification/${OTHER}/work/keep.jpg`,
+  ]) {
+    assert.equal(deleted.includes(kept), false, kept);
+  }
+});
+
+test('3-4A: 이미 없는 문서·파일에서도 멱등하게 성공한다', async () => {
+  // 지인 피하기/인증 데이터가 전혀 없는 상태(이미 지워졌거나 사용한 적 없음)
+  const ctx = await runDelete({
+    seed: seed(),
+    files: [`users/${UID}/profile/a.jpg`],
+  });
+  assert.equal(ctx.db.docs.has(`privatePhoneIdentifiers/${UID}`), false);
+
+  // pair만 남고 관계는 이미 사라진 부분 삭제 상태에서도 성공한다.
+  const partial = {
+    ...seed(),
+    [`contactAvoidancePairs/${PAIR_WITH_OTHER}`]: {
+      participants: [OTHER, UID].sort(),
+    },
+  };
+  const ctx2 = await runDelete({ seed: partial, files: [] });
+  assert.equal(
+    ctx2.db.docs.has(`contactAvoidancePairs/${PAIR_WITH_OTHER}`),
+    false,
+  );
+});
+
+test('3-4A: Auth는 여전히 마지막에 삭제되고 로그에 raw 값이 없다', async () => {
+  const ctx = await runDelete({ seed: contactSeed(), files: contactFiles() });
+
+  assert.deepEqual(ctx.auth.deleted, [UID], 'Auth 삭제가 수행돼야 한다');
+  // Auth 삭제 시점에 Firestore/Storage 정리는 이미 끝나 있어야 한다.
+  assert.equal(ctx.db.docs.has(`privatePhoneIdentifiers/${UID}`), false);
+  assert.equal(ctx.db.docs.has(`contactAvoidancePairs/${PAIR_WITH_OTHER}`), false);
+
+  const logged = JSON.stringify(ctx.loggerRecords);
+  assert.equal(logged.includes(UID), false);
+  assert.equal(logged.includes('photoVerification/'), false);
+  assert.equal(logged.includes('affiliationVerification/'), false);
+  assert.equal(logged.includes('privatePhoneIdentifiers'), false);
+});
+
+test('3-4A: 기존 match/message/report 익명화 계약은 그대로다', async () => {
+  const ctx = await runDelete({ seed: contactSeed(), files: contactFiles() });
+
+  const match = ctx.db.docs.get('matches/m1');
+  assert.ok(match, '매치 문서는 보존된다');
+  assert.equal(match.participants.includes(UID), false);
+  assert.ok(match.participants.includes(DELETED_ID));
+
+  const message = ctx.db.docs.get('matches/m1/messages/msg-other');
+  assert.ok(message, '상대 메시지는 보존된다');
+  assert.equal(message.text, 'other body must stay');
+
+  assert.ok(ctx.db.docs.get('reports/r1'), '신고는 보존된다');
+});

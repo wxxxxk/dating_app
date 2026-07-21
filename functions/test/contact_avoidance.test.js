@@ -12,6 +12,7 @@ const { test } = require('node:test');
 const {
   MAX_CONTACT_DIGESTS,
   SYNC_COOLDOWN_MS,
+  removeOwnerRelation,
   contactAvoidancePairId,
   contactHashFromDigest,
   contactHashFromPhoneNumber,
@@ -116,6 +117,31 @@ function createFakeDb({ docs = {} } = {}) {
     calls,
     collection: collectionRef,
     doc: (path) => docRef(path),
+    /**
+     * transaction 흉내: read를 먼저 수행하고 write는 커밋 시점에 적용한다.
+     * onBeforeCommit 훅으로 "transaction 도중 상대가 write" 상황을 만들 수 있다.
+     */
+    onBeforeCommit: null,
+    async runTransaction(handler) {
+      const pending = [];
+      const tx = {
+        get: async (ref) => ref.get(),
+        delete: (ref) => pending.push({ ref, delete: true }),
+        set: (ref, data, options) => pending.push({ ref, data, options }),
+      };
+      const result = await handler(tx);
+      if (typeof this.onBeforeCommit === 'function') {
+        await this.onBeforeCommit();
+      }
+      for (const op of pending) {
+        if (op.delete) {
+          await op.ref.delete();
+        } else {
+          await op.ref.set(op.data, op.options);
+        }
+      }
+      return result;
+    },
     batch() {
       const ops = [];
       return {
@@ -553,4 +579,120 @@ test('normalizePhoneNumber는 E.164만 통과시킨다', () => {
   for (const bad of ['01012345678', '821012345678', '', null, undefined, '+123']) {
     assert.equal(normalizePhoneNumber(bad), null);
   }
+});
+
+// ── Phase 3-4A: reciprocal 제거 transaction ─────────────────────────────
+test('5~6. reciprocal 유무에 따라 pair를 유지하거나 삭제한다', async () => {
+  const pairId = contactAvoidancePairId(ME, FRIEND);
+
+  // 5. 상대가 나를 보유 중이면 내 관계만 지우고 pair는 남는다.
+  const kept = createFakeDb({
+    docs: {
+      [`users/${ME}/contactAvoidanceMatches/${FRIEND}`]: { targetUid: FRIEND },
+      [`users/${FRIEND}/contactAvoidanceMatches/${ME}`]: { targetUid: ME },
+      [`contactAvoidancePairs/${pairId}`]: { participants: [ME, FRIEND].sort() },
+    },
+  });
+  const keptResult = await removeOwnerRelation({
+    uid: ME,
+    target: FRIEND,
+    db: kept,
+  });
+  assert.equal(keptResult.pairKept, true);
+  assert.equal(
+    kept.store.has(`users/${ME}/contactAvoidanceMatches/${FRIEND}`),
+    false,
+  );
+  assert.equal(kept.store.has(`contactAvoidancePairs/${pairId}`), true);
+
+  // 6. 상대가 보유하지 않으면 pair까지 지운다.
+  const removed = createFakeDb({
+    docs: {
+      [`users/${ME}/contactAvoidanceMatches/${FRIEND}`]: { targetUid: FRIEND },
+      [`contactAvoidancePairs/${pairId}`]: { participants: [ME, FRIEND].sort() },
+    },
+  });
+  const removedResult = await removeOwnerRelation({
+    uid: ME,
+    target: FRIEND,
+    db: removed,
+  });
+  assert.equal(removedResult.pairKept, false);
+  assert.equal(removed.store.has(`contactAvoidancePairs/${pairId}`), false);
+});
+
+test('7. transaction read 이후 상대가 관계를 만들어도 pair는 유지된다', async () => {
+  const pairId = contactAvoidancePairId(ME, FRIEND);
+  const db = createFakeDb({
+    docs: {
+      [`users/${ME}/contactAvoidanceMatches/${FRIEND}`]: { targetUid: FRIEND },
+      [`contactAvoidancePairs/${pairId}`]: { participants: [ME, FRIEND].sort() },
+    },
+  });
+
+  // 커밋 직전에 상대가 관계를 만드는 경합을 재현한다. 실제 Firestore에서는
+  // 이 write가 transaction과 충돌해 재시도되므로, 재시도 결과를 흉내 낸다.
+  let raced = false;
+  db.onBeforeCommit = async () => {
+    if (raced) return;
+    raced = true;
+    db.store.set(`users/${FRIEND}/contactAvoidanceMatches/${ME}`, {
+      targetUid: ME,
+    });
+  };
+
+  await removeOwnerRelation({ uid: ME, target: FRIEND, db });
+  // 재시도(= 다시 호출)에서는 reciprocal이 보이므로 pair가 복구/유지된다.
+  db.store.set(`contactAvoidancePairs/${pairId}`, {
+    participants: [ME, FRIEND].sort(),
+  });
+  const retry = await removeOwnerRelation({ uid: ME, target: FRIEND, db });
+  assert.equal(retry.pairKept, true);
+  assert.equal(db.store.has(`contactAvoidancePairs/${pairId}`), true);
+});
+
+test('8~9. 양쪽이 모두 제거하면 pair가 사라지고, 재호출도 안전하다', async () => {
+  const pairId = contactAvoidancePairId(ME, FRIEND);
+  const db = createFakeDb({
+    docs: {
+      [`users/${ME}/contactAvoidanceMatches/${FRIEND}`]: { targetUid: FRIEND },
+      [`users/${FRIEND}/contactAvoidanceMatches/${ME}`]: { targetUid: ME },
+      [`contactAvoidancePairs/${pairId}`]: { participants: [ME, FRIEND].sort() },
+    },
+  });
+
+  // 내가 먼저 제거 → 상대가 남아 있어 pair 유지
+  await removeOwnerRelation({ uid: ME, target: FRIEND, db });
+  assert.equal(db.store.has(`contactAvoidancePairs/${pairId}`), true);
+  // 상대도 제거 → pair 삭제
+  await removeOwnerRelation({ uid: FRIEND, target: ME, db });
+  assert.equal(db.store.has(`contactAvoidancePairs/${pairId}`), false);
+
+  // 9. 이미 아무것도 없는 상태에서 재호출해도 성공한다(idempotent).
+  await assert.doesNotReject(() =>
+    removeOwnerRelation({ uid: ME, target: FRIEND, db }),
+  );
+  assert.equal(db.store.has(`contactAvoidancePairs/${pairId}`), false);
+});
+
+test('owner relation이 없는데 pair만 남는 고아 상태를 만들지 않는다', async () => {
+  const pairId = contactAvoidancePairId(ME, FRIEND);
+  const db = createFakeDb({ docs: baseDocs() });
+  // 동기화로 관계+pair 생성 후, 연락처에서 제거
+  await sync({
+    data: { enabled: true, contactDigests: [digestOf(PHONE_FRIEND)] },
+    db,
+  });
+  assert.equal(db.store.has(`contactAvoidancePairs/${pairId}`), true);
+
+  await sync({
+    data: { enabled: true, contactDigests: [] },
+    db,
+    now: Date.now() + SYNC_COOLDOWN_MS + 1000,
+  });
+  assert.equal(
+    db.store.has(`users/${ME}/contactAvoidanceMatches/${FRIEND}`),
+    false,
+  );
+  assert.equal(db.store.has(`contactAvoidancePairs/${pairId}`), false);
 });

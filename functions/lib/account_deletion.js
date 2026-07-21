@@ -249,17 +249,40 @@ async function inventoryRead(category, fn) {
   }
 }
 
+/**
+ * 이 사용자의 파일이 존재할 수 있는 모든 Storage prefix.
+ *
+ * - users/{uid}/                    프로필 사진·AI 이상형 이미지
+ * - photoVerification/{uid}/        사진 인증 셀피 (Phase 3-2)
+ * - affiliationVerification/{uid}/  직장·학교 증빙 (Phase 3-3)
+ *
+ * 검토가 끝나면 보통 서버가 지우지만, 검토 전에 탈퇴하면 남으므로 여기서
+ * 함께 정리한다. prefix 밖 경로가 나오면 listAllStorageFiles가 즉시 중단한다.
+ */
+function storagePrefixesForUid(uid) {
+  return [
+    `users/${uid}/`,
+    `photoVerification/${uid}/`,
+    `affiliationVerification/${uid}/`,
+  ];
+}
+
 async function deleteStoragePrefix({ bucket, uid }) {
-  const prefix = `users/${uid}/`;
-  const files = await listAllStorageFiles(bucket, prefix);
-  for (const file of files) {
-    try {
-      await file.delete();
-    } catch (error) {
-      if (!isNotFoundError(error)) throw error;
+  let filesDeleted = 0;
+  for (const prefix of storagePrefixesForUid(uid)) {
+    // 파일이 하나도 없으면 빈 목록이 돌아온다(성공).
+    const files = await listAllStorageFiles(bucket, prefix);
+    for (const file of files) {
+      try {
+        await file.delete();
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
+      }
     }
+    filesDeleted += files.length;
   }
-  return { filesDeleted: files.length };
+  // prefix 문자열은 반환하지 않고 개수만 돌려준다.
+  return { filesDeleted };
 }
 
 async function deleteRefs(refs, allowedPrefix = null) {
@@ -289,12 +312,111 @@ async function deleteRelations({ db, uid }) {
     db.collectionGroup('blocks').where('blockedUid', '==', uid),
   );
 
+  const contactAvoidance = await deleteContactAvoidanceData({ db, uid });
+  const verificationRequests = await deleteVerificationRequestDocs({ db, uid });
+
   return {
     outboundSwipesDeleted: await deleteRefs(outboundSwipeRefs, `${userPrefix}swipes/`),
     outboundBlocksDeleted: await deleteRefs(outboundBlockRefs, `${userPrefix}blocks/`),
     inboundSwipesDeleted: await deleteRefs(inboundSwipeRefs),
     inboundBlocksDeleted: await deleteRefs(inboundBlockRefs),
+    ...contactAvoidance,
+    ...verificationRequests,
   };
+}
+
+/** 문서가 이미 없어도 성공하는 삭제(멱등). */
+async function deleteDocIfExists(ref) {
+  try {
+    await ref.delete();
+    return true;
+  } catch (error) {
+    if (isNotFoundError(error)) return false;
+    throw error;
+  }
+}
+
+/**
+ * 지인 피하기(Phase 3-4) 데이터 정리.
+ *
+ * - privatePhoneIdentifiers/{uid}: 전화번호 HMAC 식별자
+ * - contactAvoidanceSyncLimits/{uid}: 재동기화 cooldown 기록
+ * - users/{uid}/contactAvoidanceMatches/*: 내가 보유한 소유 관계(outbound)
+ * - 상대가 나를 가리키는 소유 관계(inbound)
+ * - 내가 참여한 pair 전부
+ *
+ * inbound 관계는 pair의 participants에서 상대를 뽑아 문서 경로로 직접 지운다.
+ * 소유 관계가 생기면 pair도 함께 생기므로 이 경로로 빠짐없이 정리되고,
+ * collectionGroup 인덱스를 새로 요구하지 않는다.
+ *
+ * 계정 삭제에서는 UID 자체가 사라지므로 reciprocal 여부와 무관하게 이 UID가
+ * 포함된 pair를 모두 지운다. 다른 두 사용자만의 pair는 건드리지 않는다.
+ */
+async function deleteContactAvoidanceData({ db, uid }) {
+  const userPrefix = `users/${uid}/`;
+  const userRef = db.collection('users').doc(uid);
+
+  const identifierDeleted = await deleteDocIfExists(
+    db.collection('privatePhoneIdentifiers').doc(uid),
+  );
+  const syncLimitDeleted = await deleteDocIfExists(
+    db.collection('contactAvoidanceSyncLimits').doc(uid),
+  );
+
+  const outboundRefs = await snapshotRefs(
+    userRef.collection('contactAvoidanceMatches'),
+  );
+  const outboundDeleted = await deleteRefs(
+    outboundRefs,
+    `${userPrefix}contactAvoidanceMatches/`,
+  );
+
+  const pairSnap = await db
+    .collection('contactAvoidancePairs')
+    .where('participants', 'array-contains', uid)
+    .get();
+
+  let inboundDeleted = 0;
+  const pairRefs = [];
+  for (const doc of pairSnap.docs || []) {
+    pairRefs.push(doc.ref);
+    const participants = doc.data()?.participants;
+    if (!Array.isArray(participants)) continue;
+    for (const participant of participants) {
+      if (typeof participant !== 'string' || !participant) continue;
+      if (participant === uid) continue;
+      const removed = await deleteDocIfExists(
+        db
+          .collection('users')
+          .doc(participant)
+          .collection('contactAvoidanceMatches')
+          .doc(uid),
+      );
+      if (removed) inboundDeleted += 1;
+    }
+  }
+
+  return {
+    contactIdentifierDeleted: identifierDeleted,
+    contactSyncLimitDeleted: syncLimitDeleted,
+    contactOwnerRelationsDeleted: outboundDeleted,
+    contactInboundRelationsDeleted: inboundDeleted,
+    contactPairsDeleted: await deleteRefs(pairRefs),
+  };
+}
+
+/**
+ * 인증 요청 문서 정리.
+ *
+ * photoVerificationRequests/{uid}는 top-level이라 users recursive delete로
+ * 지워지지 않는다. 소속 인증 요청은 users/{uid} 하위라 recursive delete로
+ * 정리되지만, 증빙 이미지는 Storage 단계에서 함께 지운다.
+ */
+async function deleteVerificationRequestDocs({ db, uid }) {
+  const photoRequestDeleted = await deleteDocIfExists(
+    db.collection('photoVerificationRequests').doc(uid),
+  );
+  return { photoVerificationRequestDeleted: photoRequestDeleted };
 }
 
 function normalizeMatchData(data, uid, deletedIdentifier, uidHash) {
