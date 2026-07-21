@@ -1190,6 +1190,23 @@ service cloud.firestore {
     // leaveCommunityParty / cancelCommunityParty / reportCommunityParty).
     // 클라이언트는 정원·상태·참가자 수를 직접 바꿀 수 없다.
 
+    // 파티 하위 컬렉션(members/joinRequests/groupMessages)이 공유하는 부모 조건.
+    // 취소·삭제된 파티나 schema가 다른 문서의 하위 데이터는 열지 않는다.
+    function partyDataOf(partyId) {
+      return get(/databases/$(database)/documents/communityParties/$(partyId)).data;
+    }
+
+    function partyReadable(partyId) {
+      return exists(/databases/$(database)/documents/communityParties/$(partyId)) &&
+        partyDataOf(partyId).visibility == 'authenticated' &&
+        partyDataOf(partyId).status in ['open', 'full'] &&
+        partyDataOf(partyId).schemaVersion == 1;
+    }
+
+    function partyHostUidOf(partyId) {
+      return partyDataOf(partyId).hostUid;
+    }
+
     match /communityParties/{partyId} {
       function partyKeys() {
         return [
@@ -1224,6 +1241,24 @@ service cloud.firestore {
           snapshot.schoolVerified is bool;
       }
 
+      // 서버(community_party.js)의 PARTY_CATEGORIES와 같은 집합이다.
+      function partyCategories() {
+        return [
+          'coffee', 'dining', 'culture', 'hobby',
+          'exercise', 'walk', 'study', 'other'
+        ];
+      }
+
+      // 서버의 PARTY_AREAS와 같은 집합. 시/도 단위까지만 받는다 —
+      // 상세 주소를 담을 수 있는 자유 문자열 필드는 이 모델에 없다.
+      function partyAreas() {
+        return [
+          'seoul', 'gyeonggi', 'incheon', 'busan', 'daegu', 'daejeon',
+          'gwangju', 'ulsan', 'sejong', 'gangwon', 'chungbuk', 'chungnam',
+          'jeonbuk', 'jeonnam', 'gyeongbuk', 'gyeongnam', 'jeju', 'online'
+        ];
+      }
+
       // 정확한 주소·위경도·참가비 필드는 keys allowlist 자체에 없다.
       function partyShapeValid() {
         let data = resource.data;
@@ -1238,8 +1273,8 @@ service cloud.firestore {
           data.description is string &&
           data.description.size() >= 1 &&
           data.description.size() <= 500 &&
-          data.category is string &&
-          data.area is string &&
+          data.category in partyCategories() &&
+          data.area in partyAreas() &&
           data.startAt is timestamp &&
           data.maxParticipants is int &&
           data.maxParticipants >= 3 &&
@@ -1271,15 +1306,16 @@ service cloud.firestore {
       // 본인 문서와, 호스트가 자기 파티의 멤버 목록만 볼 수 있다.
       // 일반 참여자는 다른 참여자 목록을 훑을 수 없다.
       match /members/{memberUid} {
-        function partyHostUid() {
-          return get(/databases/$(database)/documents/communityParties/$(partyId)).data.hostUid;
-        }
-
+        // 취소된 파티의 하위 데이터는 일반 클라이언트에 열지 않는다.
+        // 운영 감사는 Admin SDK로 하므로 여기서 열어둘 이유가 없다.
         allow get: if request.auth != null &&
-          (request.auth.uid == memberUid || request.auth.uid == partyHostUid());
+          partyReadable(partyId) &&
+          (request.auth.uid == memberUid ||
+            request.auth.uid == partyHostUidOf(partyId));
 
         allow list: if request.auth != null &&
-          request.auth.uid == partyHostUid();
+          partyReadable(partyId) &&
+          request.auth.uid == partyHostUidOf(partyId);
 
         allow create, update, delete: if false;
       }
@@ -1287,15 +1323,18 @@ service cloud.firestore {
       // communityParties/{partyId}/joinRequests/{uid}:
       // 요청자 본인과 호스트만 볼 수 있다.
       match /joinRequests/{requesterUid} {
-        function partyHostUid() {
-          return get(/databases/$(database)/documents/communityParties/$(partyId)).data.hostUid;
-        }
-
+        // 요청자 본인의 단일 get은 rejected/withdrawn 확인을 위해 상태와
+        // 무관하게 허용한다. 호스트 목록 조회는 실제 UI 쿼리와 같게
+        // status == 'pending'으로 제한한다.
         allow get: if request.auth != null &&
-          (request.auth.uid == requesterUid || request.auth.uid == partyHostUid());
+          partyReadable(partyId) &&
+          (request.auth.uid == requesterUid ||
+            request.auth.uid == partyHostUidOf(partyId));
 
         allow list: if request.auth != null &&
-          request.auth.uid == partyHostUid();
+          partyReadable(partyId) &&
+          request.auth.uid == partyHostUidOf(partyId) &&
+          resource.data.status == 'pending';
 
         allow create, update, delete: if false;
       }
