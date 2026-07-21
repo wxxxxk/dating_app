@@ -416,6 +416,16 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      // users/{uid}/partyMemberships/{partyId} (Phase 4-4):
+      // "내가 관여한 파티" mirror. 내 파티 화면과 상태 표시가 이 문서만 읽고,
+      // 파티별 member/joinRequest 목록을 훑지 않는다.
+      // 생성·갱신·삭제는 파티 callable(Admin SDK)이 파티 문서와 같은
+      // transaction 안에서만 한다.
+      match /partyMemberships/{partyId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
       // users/{uid}/affiliationVerificationRequests/{type} (Phase 3-3):
       //
       // 직장·학교 소속 인증 "요청" 문서다(문서 id가 곧 type). 인증 배지
@@ -1167,6 +1177,139 @@ service cloud.firestore {
     // communityWriteLimits/{uid} (Phase 4-2): 서버 전용 rate limit 상태.
     // 본인도 읽거나 지울 수 없다(우회 방지).
     match /communityWriteLimits/{uid} {
+      allow read, write: if false;
+    }
+
+
+    // ========================================================================
+    // Phase 4-4: Party·Square
+    // ========================================================================
+    //
+    // 파티 관련 write는 **전부 서버 전용**이다(createCommunityParty /
+    // requestPartyJoin / reviewPartyJoinRequest / withdrawPartyJoinRequest /
+    // leaveCommunityParty / cancelCommunityParty / reportCommunityParty).
+    // 클라이언트는 정원·상태·참가자 수를 직접 바꿀 수 없다.
+
+    match /communityParties/{partyId} {
+      function partyKeys() {
+        return [
+          'hostUid', 'hostSnapshot', 'title', 'description',
+          'category', 'area', 'startAt', 'maxParticipants',
+          'participantCount', 'status', 'visibility',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ];
+      }
+
+      // 호스트 snapshot은 커뮤니티와 동일한 공개 6개 필드만 담는다.
+      function hostSnapshotValid(data) {
+        let snapshot = data.hostSnapshot;
+        return snapshot is map &&
+          snapshot.keys().hasOnly([
+            'uid', 'displayName', 'photoUrl',
+            'photoVerified', 'workVerified', 'schoolVerified'
+          ]) &&
+          snapshot.keys().hasAll([
+            'uid', 'displayName', 'photoUrl',
+            'photoVerified', 'workVerified', 'schoolVerified'
+          ]) &&
+          snapshot.uid is string &&
+          snapshot.uid == data.hostUid &&
+          snapshot.displayName is string &&
+          snapshot.displayName.size() >= 1 &&
+          snapshot.displayName.size() <= 40 &&
+          snapshot.photoUrl is string &&
+          snapshot.photoUrl.size() <= 2048 &&
+          snapshot.photoVerified is bool &&
+          snapshot.workVerified is bool &&
+          snapshot.schoolVerified is bool;
+      }
+
+      // 정확한 주소·위경도·참가비 필드는 keys allowlist 자체에 없다.
+      function partyShapeValid() {
+        let data = resource.data;
+        return data.keys().hasOnly(partyKeys()) &&
+          data.keys().hasAll(partyKeys()) &&
+          data.hostUid is string &&
+          data.hostUid.size() > 0 &&
+          hostSnapshotValid(data) &&
+          data.title is string &&
+          data.title.size() >= 1 &&
+          data.title.size() <= 60 &&
+          data.description is string &&
+          data.description.size() >= 1 &&
+          data.description.size() <= 500 &&
+          data.category is string &&
+          data.area is string &&
+          data.startAt is timestamp &&
+          data.maxParticipants is int &&
+          data.maxParticipants >= 3 &&
+          data.maxParticipants <= 8 &&
+          data.participantCount is int &&
+          data.participantCount >= 1 &&
+          data.participantCount <= data.maxParticipants &&
+          data.createdAt is timestamp &&
+          data.updatedAt is timestamp &&
+          data.schemaVersion == 1;
+      }
+
+      // get은 문서 하나를 직접 읽으므로 형태까지 엄격히 검증한다.
+      // cancelled 파티는 일반 사용자에게 열지 않는다.
+      allow get: if request.auth != null &&
+        resource.data.visibility == 'authenticated' &&
+        resource.data.status in ['open', 'full'] &&
+        partyShapeValid();
+
+      // list(쿼리)는 쿼리 제약으로 보장 가능한 조건만 둔다(communityPosts와
+      // 같은 이유). 형태가 깨진 문서 방어는 클라이언트 parser가 맡는다.
+      allow list: if request.auth != null &&
+        resource.data.visibility == 'authenticated' &&
+        resource.data.status in ['open', 'full'];
+
+      allow create, update, delete: if false;
+
+      // communityParties/{partyId}/members/{uid}:
+      // 본인 문서와, 호스트가 자기 파티의 멤버 목록만 볼 수 있다.
+      // 일반 참여자는 다른 참여자 목록을 훑을 수 없다.
+      match /members/{memberUid} {
+        function partyHostUid() {
+          return get(/databases/$(database)/documents/communityParties/$(partyId)).data.hostUid;
+        }
+
+        allow get: if request.auth != null &&
+          (request.auth.uid == memberUid || request.auth.uid == partyHostUid());
+
+        allow list: if request.auth != null &&
+          request.auth.uid == partyHostUid();
+
+        allow create, update, delete: if false;
+      }
+
+      // communityParties/{partyId}/joinRequests/{uid}:
+      // 요청자 본인과 호스트만 볼 수 있다.
+      match /joinRequests/{requesterUid} {
+        function partyHostUid() {
+          return get(/databases/$(database)/documents/communityParties/$(partyId)).data.hostUid;
+        }
+
+        allow get: if request.auth != null &&
+          (request.auth.uid == requesterUid || request.auth.uid == partyHostUid());
+
+        allow list: if request.auth != null &&
+          request.auth.uid == partyHostUid();
+
+        allow create, update, delete: if false;
+      }
+    }
+
+    // partyReports/{reportId} (Phase 4-4): 운영 검토 전용.
+    // 신고 생성은 reportCommunityParty callable(Admin SDK)만 한다.
+    match /partyReports/{reportId} {
+      allow read, write: if false;
+    }
+
+    // partyWriteLimits/{uid} (Phase 4-4): 서버 전용 rate limit 상태.
+    // 본인도 읽거나 지울 수 없다(우회 방지).
+    match /partyWriteLimits/{uid} {
       allow read, write: if false;
     }
 

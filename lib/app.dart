@@ -19,6 +19,7 @@ import 'services/chat/chat_service.dart';
 import 'services/charm/charm_service.dart';
 import 'services/community/community_media_service.dart';
 import 'services/community/community_service.dart';
+import 'services/community/party_service.dart';
 import 'services/database/firestore_service.dart';
 import 'services/discovery/discovery_service.dart';
 import 'services/fortune/fortune_service.dart';
@@ -56,6 +57,7 @@ class _MyAppState extends State<MyApp> {
   late final ContactAvoidanceService _contactAvoidanceService;
   late final CommunityService _communityService;
   late final CommunityMediaService _communityMediaService;
+  late final PartyService _partyService;
   late final MethodChannelScreenProtectionService _screenProtectionService;
   late final CharmService _charmService;
   late final FortuneService _fortuneService;
@@ -81,6 +83,7 @@ class _MyAppState extends State<MyApp> {
     _contactAvoidanceService = ContactAvoidanceService();
     _communityService = CommunityService();
     _communityMediaService = CommunityMediaService();
+    _partyService = PartyService();
     _screenProtectionService = MethodChannelScreenProtectionService();
     _charmService = CharmService();
     _fortuneService = FortuneService();
@@ -141,6 +144,7 @@ class _MyAppState extends State<MyApp> {
         contactAvoidanceService: _contactAvoidanceService,
         communityService: _communityService,
         communityMediaService: _communityMediaService,
+        partyService: _partyService,
         screenProtectionService: _screenProtectionService,
         charmService: _charmService,
         fortuneService: _fortuneService,
@@ -174,6 +178,7 @@ class _MyAppState extends State<MyApp> {
                 contactAvoidanceService: _contactAvoidanceService,
                 communityService: _communityService,
                 communityMediaService: _communityMediaService,
+                partyService: _partyService,
                 charmService: _charmService,
                 fortuneService: _fortuneService,
                 jellyService: _jellyService,
@@ -220,6 +225,7 @@ class _AuthGate extends StatefulWidget {
   final ContactAvoidanceService contactAvoidanceService;
   final CommunityService communityService;
   final CommunityMediaService communityMediaService;
+  final PartyService partyService;
   final ScreenProtectionService screenProtectionService;
   final CharmService charmService;
   final FortuneService fortuneService;
@@ -243,6 +249,7 @@ class _AuthGate extends StatefulWidget {
     required this.contactAvoidanceService,
     required this.communityService,
     required this.communityMediaService,
+    required this.partyService,
     required this.screenProtectionService,
     required this.charmService,
     required this.fortuneService,
@@ -393,6 +400,7 @@ class _AuthGateState extends State<_AuthGate> {
       contactAvoidanceService: widget.contactAvoidanceService,
       communityService: widget.communityService,
       communityMediaService: widget.communityMediaService,
+      partyService: widget.partyService,
       charmService: widget.charmService,
       fortuneService: widget.fortuneService,
       jellyService: widget.jellyService,

@@ -8,6 +8,7 @@ import 'package:dating_app/models/community/community_post.dart';
 import 'package:dating_app/services/auth/auth_service.dart';
 import 'package:dating_app/services/community/community_media_service.dart';
 import 'package:dating_app/services/community/community_service.dart';
+import 'package:dating_app/services/community/party_service.dart';
 import 'package:dating_app/services/database/firestore_service.dart';
 import 'package:dating_app/services/privacy/contact_avoidance_service.dart';
 import 'package:dating_app/services/safety/safety_service.dart';
@@ -130,6 +131,7 @@ _pump(
         authService: _FakeAuthService(),
         communityService: c,
         mediaService: CommunityMediaService(),
+        partyService: PartyService(),
         safetyService: _FakeSafetyService(blocked: blocked),
         contactAvoidanceService: a,
       ),
@@ -182,19 +184,35 @@ void main() {
       ]) {
         expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
       }
-      // Phase 4-3: 라운지·피드는 이용 가능, 파티·그룹 채팅만 준비 중.
-      expect(find.text('이용 가능'), findsNWidgets(2));
-      expect(find.text('준비 중'), findsNWidgets(2));
+      // Phase 4-4: 라운지·피드·파티는 이용 가능, 그룹 채팅만 준비 중.
+      expect(find.text('이용 가능'), findsNWidgets(3));
+      expect(find.text('준비 중'), findsOneWidget);
 
-      // 10. 준비 중 목적지는 안내만 한다.
+      // 10. 준비 중인 그룹 채팅만 안내를 띄운다.
       await tester.tap(
-        find.byKey(const ValueKey('community-destination-party-square')),
+        find.byKey(const ValueKey('community-destination-group-chat')),
       );
       await tester.pump();
       await tester.pump();
-      expect(find.text('파티·스퀘어는 다음 단계에서 열릴 예정이에요.'), findsOneWidget);
-      // 피드는 더 이상 준비 중 안내를 띄우지 않는다.
+      expect(find.text('그룹 채팅은 다음 단계에서 열릴 예정이에요.'), findsOneWidget);
+      // 파티·피드는 더 이상 준비 중 안내를 띄우지 않는다.
+      expect(find.text('파티·스퀘어는 다음 단계에서 열릴 예정이에요.'), findsNothing);
       expect(find.text('피드는 다음 단계에서 열릴 예정이에요.'), findsNothing);
+    });
+
+    testWidgets('B-1. 파티·스퀘어 카드는 PartySquareScreen을 연다', (tester) async {
+      await _pump(tester);
+
+      await tester.tap(
+        find.byKey(const ValueKey('community-destination-party-square')),
+      );
+      // 실제 서비스라 목록 stream은 끝나지 않는다. settle 대신 프레임만 넘긴다.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.byKey(const ValueKey('party-square-screen')), findsOneWidget);
+      expect(find.byKey(const ValueKey('party-tab-square')), findsOneWidget);
+      expect(find.byKey(const ValueKey('party-tab-mine')), findsOneWidget);
     });
 
     testWidgets('9. 허브는 라운지 게시물을 직접 구독하지 않는다', (tester) async {

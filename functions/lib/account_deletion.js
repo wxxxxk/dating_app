@@ -7,6 +7,7 @@ const {
   planAccountDeletion,
 } = require('./account_deletion_plan');
 const { cleanupCommunityContentForUser } = require('./community');
+const { cleanupPartyDataForUser } = require('./community_party');
 
 const FUNCTION_NAME = 'deleteMyAccount';
 const CONFIRMATION_TEXT = 'DELETE_MY_ACCOUNT';
@@ -1095,6 +1096,14 @@ async function deleteMyAccountCore({
           deletedIdentifier,
           serverTimestamp,
         });
+        // Phase 4-4: 호스트 파티는 취소+익명화, 참여/요청은 제거하고
+        // participantCount를 보정한다(재실행 안전).
+        const party = await cleanupPartyDataForUser({
+          db,
+          uid,
+          deletedIdentifier,
+          serverTimestamp,
+        });
         const usage = await cleanupUsageState({ db, uid });
         return {
           ...shared,
@@ -1102,6 +1111,7 @@ async function deleteMyAccountCore({
           ...purchases,
           ...jelly,
           ...community,
+          ...party,
           ...usage,
         };
       },

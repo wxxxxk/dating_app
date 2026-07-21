@@ -1161,6 +1161,16 @@ async function cleanupCommunityContentForUser({
 }
 
 module.exports = {
+  // Phase 4-4: Party 모듈이 같은 입력 검증·안전 검사·로그 계약을 재사용한다.
+  assertAllowedCommunityText,
+  makeError,
+  millisOf,
+  requireAuthUid,
+  requireDocId,
+  requireExactObject,
+  safeLog,
+  safeUidHash,
+
   COMMENT_COOLDOWN_MS,
   COMMENT_TEXT_MAX_LENGTH,
   FEED_MAX_IMAGES,

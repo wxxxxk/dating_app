@@ -4,19 +4,23 @@ import '../../core/theme/app_colors.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/community/community_media_service.dart';
 import '../../services/community/community_service.dart';
+import '../../services/community/party_service.dart';
 import '../../services/privacy/contact_avoidance_service.dart';
 import '../../services/safety/safety_service.dart';
 import 'feed/feed_screen.dart';
 import 'lounge/lounge_screen.dart';
+import 'party/party_square_screen.dart';
 
 /// 커뮤니티 홈(Phase 4-2) — 목적지 선택 화면.
 ///
-/// 네 목적지를 소개하고, 그중 라운지만 실제 화면([LoungeScreen])으로 연결한다.
-/// 게시물 목록은 여기서 구독하지 않는다 — 라운지 화면이 단독으로 구독한다.
+/// 네 목적지를 소개하고, 그중 라운지·피드·파티·스퀘어를 실제 화면으로
+/// 연결한다(그룹 채팅은 Phase 4-5). 목록은 여기서 구독하지 않는다 — 각
+/// 목적지 화면이 단독으로 구독한다.
 class CommunityHubScreen extends StatelessWidget {
   final AuthService authService;
   final CommunityService communityService;
   final CommunityMediaService mediaService;
+  final PartyService partyService;
   final SafetyService safetyService;
   final ContactAvoidanceService contactAvoidanceService;
 
@@ -25,6 +29,7 @@ class CommunityHubScreen extends StatelessWidget {
     required this.authService,
     required this.communityService,
     required this.mediaService,
+    required this.partyService,
     required this.safetyService,
     required this.contactAvoidanceService,
   });
@@ -55,6 +60,19 @@ class CommunityHubScreen extends StatelessWidget {
           authService: authService,
           communityService: communityService,
           mediaService: mediaService,
+          safetyService: safetyService,
+          contactAvoidanceService: contactAvoidanceService,
+        ),
+      ),
+    );
+  }
+
+  void _openPartySquare(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PartySquareScreen(
+          authService: authService,
+          partyService: partyService,
           safetyService: safetyService,
           contactAvoidanceService: contactAvoidanceService,
         ),
@@ -142,10 +160,9 @@ class CommunityHubScreen extends StatelessWidget {
                 icon: Icons.celebration_outlined,
                 title: '파티·스퀘어',
                 description: '관심사 모임과 공개 이벤트를 찾아봐요',
-                statusLabel: '준비 중',
-                available: false,
-                onTap: () =>
-                    _showComingSoon(context, '파티·스퀘어는 다음 단계에서 열릴 예정이에요.'),
+                statusLabel: '이용 가능',
+                available: true,
+                onTap: () => _openPartySquare(context),
               ),
               const SizedBox(height: 10),
               _DestinationCard(

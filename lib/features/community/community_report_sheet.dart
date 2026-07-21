@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../services/community/community_service.dart';
+import '../../services/community/party_service.dart';
 import '../../services/safety/safety_service.dart';
 
 /// 커뮤니티 신고 사유 key → 표시 라벨(서버 allowlist와 동일한 key 집합).
@@ -49,35 +50,76 @@ Future<CommunityReportOutcome?> showCommunityReportSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
     ),
     builder: (_) => CommunityReportSheet(
-      communityService: communityService,
+      title: targetType == 'comment' ? '댓글 신고' : '게시물 신고',
+      blockLabel: '신고 후 이 사용자 차단',
       safetyService: safetyService,
       currentUid: currentUid,
-      targetType: targetType,
-      postId: postId,
-      commentId: commentId,
       reportedUid: reportedUid,
+      onSubmit: (reason, detail) => communityService.reportContent(
+        targetType: targetType,
+        postId: postId,
+        commentId: commentId,
+        reason: reason,
+        detail: detail,
+      ),
+    ),
+  );
+}
+
+/// 파티 신고 시트(Phase 4-4).
+///
+/// 사유 allowlist·차단 분리 계약은 게시물 신고와 동일하다. 신고만으로 파티가
+/// 사라지거나 호스트가 차단되지 않는다 — 차단은 체크했을 때만 별도로 한다.
+Future<CommunityReportOutcome?> showPartyReportSheet(
+  BuildContext context, {
+  required PartyService partyService,
+  required SafetyService safetyService,
+  required String currentUid,
+  required String partyId,
+  required String reportedUid,
+}) {
+  return showModalBottomSheet<CommunityReportOutcome>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+    ),
+    builder: (_) => CommunityReportSheet(
+      title: '파티 신고',
+      blockLabel: '신고 후 이 호스트 차단',
+      safetyService: safetyService,
+      currentUid: currentUid,
+      reportedUid: reportedUid,
+      onSubmit: (reason, detail) => partyService.reportParty(
+        partyId: partyId,
+        reason: reason,
+        detail: detail,
+      ),
     ),
   );
 }
 
 class CommunityReportSheet extends StatefulWidget {
-  final CommunityService communityService;
+  final String title;
+  final String blockLabel;
   final SafetyService safetyService;
   final String currentUid;
-  final String targetType;
-  final String postId;
-  final String commentId;
   final String reportedUid;
+
+  /// 실제 신고 호출. 게시물·댓글·파티가 각자 다른 callable을 쓰지만 사유
+  /// allowlist와 차단 분리 계약은 같으므로 시트 UI는 하나만 둔다.
+  final Future<void> Function(String reason, String detail) onSubmit;
 
   const CommunityReportSheet({
     super.key,
-    required this.communityService,
+    required this.title,
+    required this.blockLabel,
     required this.safetyService,
     required this.currentUid,
-    required this.targetType,
-    required this.postId,
-    required this.commentId,
     required this.reportedUid,
+    required this.onSubmit,
   });
 
   @override
@@ -108,13 +150,7 @@ class _CommunityReportSheetState extends State<CommunityReportSheet> {
     });
 
     try {
-      await widget.communityService.reportContent(
-        targetType: widget.targetType,
-        postId: widget.postId,
-        commentId: widget.commentId,
-        reason: reason,
-        detail: _detailController.text,
-      );
+      await widget.onSubmit(reason, _detailController.text);
     } on CommunityActionError catch (e) {
       if (!mounted) return;
       setState(() {
@@ -164,7 +200,7 @@ class _CommunityReportSheetState extends State<CommunityReportSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              widget.targetType == 'comment' ? '댓글 신고' : '게시물 신고',
+              widget.title,
               style: const TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.bold,
@@ -228,9 +264,12 @@ class _CommunityReportSheetState extends State<CommunityReportSheet> {
                   ? null
                   : (value) =>
                         setState(() => _blockAfterReport = value == true),
-              title: const Text(
-                '신고 후 이 사용자 차단',
-                style: TextStyle(fontSize: 14, color: AppColors.textPrimary),
+              title: Text(
+                widget.blockLabel,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
             if (_errorMessage != null) ...[

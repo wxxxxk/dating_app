@@ -68,6 +68,15 @@ const {
   deleteCommunityCommentCore,
   reportCommunityContentCore,
 } = require('./lib/community');
+const {
+  createCommunityPartyCore,
+  requestPartyJoinCore,
+  reviewPartyJoinRequestCore,
+  withdrawPartyJoinRequestCore,
+  leaveCommunityPartyCore,
+  cancelCommunityPartyCore,
+  reportCommunityPartyCore,
+} = require('./lib/community_party');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
@@ -3580,6 +3589,43 @@ exports.deleteCommunityPost = communityCallable(deleteCommunityPostCore, {
 });
 exports.deleteCommunityComment = communityCallable(deleteCommunityCommentCore);
 exports.reportCommunityContent = communityCallable(reportCommunityContentCore);
+
+// ============================================================================
+// Phase 4-4: Party·Square (파티 생성·참여 요청·승인·취소·신고)
+// ============================================================================
+//
+// Party write도 전부 서버 전용이다. 하나의 파티 모델을 Square 탐색과 "내 파티"
+// 관리가 함께 쓴다. 그룹 채팅은 Phase 4-5에서 승인된 멤버 기반으로 붙인다.
+//
+// 커뮤니티와 같은 오류 계약(__communitySafeError)을 쓰므로 같은 wrapper를
+// 재사용한다 — core가 던진 안전한 HttpsError만 통과하고 나머지는 감춘다.
+
+/** Timestamp 변환이 필요한 party core에만 넘긴다. */
+function partyCallable(core) {
+  return onCall(async (request) => {
+    try {
+      return await core({
+        request,
+        db,
+        HttpsError,
+        serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+        timestampFromMillis: (millis) =>
+          admin.firestore.Timestamp.fromMillis(millis),
+        logger: console,
+      });
+    } catch (error) {
+      throw toCommunityHttpsError(error);
+    }
+  });
+}
+
+exports.createCommunityParty = partyCallable(createCommunityPartyCore);
+exports.requestPartyJoin = partyCallable(requestPartyJoinCore);
+exports.reviewPartyJoinRequest = partyCallable(reviewPartyJoinRequestCore);
+exports.withdrawPartyJoinRequest = partyCallable(withdrawPartyJoinRequestCore);
+exports.leaveCommunityParty = partyCallable(leaveCommunityPartyCore);
+exports.cancelCommunityParty = partyCallable(cancelCommunityPartyCore);
+exports.reportCommunityParty = partyCallable(reportCommunityPartyCore);
 
 // ============================================================================
 // Phase 0-G-2B: 회원 탈퇴 서버 처리
