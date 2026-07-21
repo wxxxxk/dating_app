@@ -182,7 +182,16 @@ class CommunityCountRow extends StatelessWidget {
 class CommunityUnavailableNotice extends StatelessWidget {
   final String message;
 
-  const CommunityUnavailableNotice({super.key, required this.message});
+  /// 일시적 오류일 때만 준다. 삭제·차단처럼 되돌릴 수 없는 상태에는 없다.
+  final VoidCallback? onRetry;
+  final Key? retryKey;
+
+  const CommunityUnavailableNotice({
+    super.key,
+    required this.message,
+    this.onRetry,
+    this.retryKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -195,13 +204,28 @@ class CommunityUnavailableNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.border),
       ),
-      child: Text(
-        message,
-        style: const TextStyle(
-          fontSize: 13.5,
-          height: 1.5,
-          color: AppColors.textSecondary,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(
+              fontSize: 13.5,
+              height: 1.5,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (onRetry != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: retryKey,
+                onPressed: onRetry,
+                child: const Text('다시 시도'),
+              ),
+            ),
+        ],
       ),
     );
   }

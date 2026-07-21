@@ -43,8 +43,10 @@ class FeedPostDetailScreen extends StatefulWidget {
 }
 
 class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
-  late final Stream<CommunityPost?> _postStream = widget.communityService
-      .watchPost(widget.postId);
+  /// stream error 재시도를 위해 다시 구독할 수 있어야 하므로 final이 아니다.
+  late Stream<CommunityPost?> _postStream = widget.communityService.watchPost(
+    widget.postId,
+  );
   late final Stream<List<CommunityComment>> _commentsStream = widget
       .communityService
       .watchComments(postId: widget.postId);
@@ -86,6 +88,13 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
   }
 
   void _onCommentChanged() => setState(() {});
+
+  /// 게시물 stream이 오류로 끊겼을 때만 사용자가 직접 다시 구독한다.
+  void _retryPost() {
+    setState(() {
+      _postStream = widget.communityService.watchPost(widget.postId);
+    });
+  }
 
   String? get _currentUid => widget.authService.currentUser?.uid;
 
@@ -261,7 +270,7 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        title: const Text('게시물'),
+        title: const Text('피드 게시물'),
       ),
       body: SafeArea(
         child: StreamBuilder<CommunityPost?>(
@@ -275,7 +284,20 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
               );
             }
 
-            final post = snap.hasError ? null : snap.data;
+            // stream 오류와 "삭제/숨김"은 사용자에게 다른 상황이다.
+            // 전자는 다시 시도할 수 있고, 후자는 되돌릴 수 없다.
+            if (snap.hasError) {
+              return Padding(
+                padding: const EdgeInsets.all(20),
+                child: CommunityUnavailableNotice(
+                  message: '게시물을 불러오지 못했어요.',
+                  retryKey: const ValueKey('feed-detail-retry'),
+                  onRetry: _retryPost,
+                ),
+              );
+            }
+
+            final post = snap.data;
             final hidden =
                 post != null &&
                 _audience.isExcluded(authorUid: post.authorUid, selfUid: uid);

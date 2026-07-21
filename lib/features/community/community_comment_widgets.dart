@@ -11,6 +11,9 @@ import 'lounge/lounge_widgets.dart';
 /// 위젯 key 체계는 바꾸지 않고, 화면별 접두사([keyPrefix])만 다르게 준다.
 /// 누가 공감했는지는 어디에도 표시하지 않는다.
 
+/// 공감 버튼 높이. 전역 버튼 theme의 무한 폭 minimumSize를 대체할 때 쓴다.
+const double _reactionButtonHeight = 44;
+
 /// 공감 버튼 + 공감/댓글 수.
 class CommunityReactionBar extends StatelessWidget {
   final String keyPrefix;
@@ -40,6 +43,13 @@ class CommunityReactionBar extends StatelessWidget {
           children: [
             OutlinedButton.icon(
               key: ValueKey('$keyPrefix-reaction-button'),
+              // 전역 outlinedButtonTheme의 minimumSize도 폭이 double.infinity라
+              // Row 안에서는 그대로 무한 폭 제약이 된다. 폭은 내용에 맞추고
+              // 높이만 유지한다.
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(0, _reactionButtonHeight),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
               onPressed: onToggle,
               icon: Icon(
                 reacted
@@ -216,6 +226,11 @@ class CommunityCommentTile extends StatelessWidget {
   }
 }
 
+/// 댓글 등록 버튼의 고정 크기. 전역 버튼 theme의 무한 폭 minimumSize가
+/// Row 안에서 그대로 적용되지 않도록 local style에서 덮어쓴다.
+const double _submitButtonWidth = 72;
+const double _submitButtonHeight = 48;
+
 /// 하단 댓글 입력줄. 키보드가 올라와도 가려지지 않게 viewInsets를 더한다.
 class CommunityCommentInput extends StatelessWidget {
   final String keyPrefix;
@@ -268,16 +283,33 @@ class CommunityCommentInput extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          FilledButton(
-            key: ValueKey('$keyPrefix-comment-submit'),
-            onPressed: canSubmit ? onSubmit : null,
-            child: submitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('등록'),
+          // 전역 filledButtonTheme의 minimumSize가 Size.fromHeight(48),
+          // 즉 폭이 double.infinity다. Row의 non-flex 자식은 unbounded width
+          // 제약을 받으므로 그대로 두면 "BoxConstraints forces an infinite
+          // width" assertion이 난다. 여기서만 폭을 명시적으로 고정한다.
+          SizedBox(
+            width: _submitButtonWidth,
+            height: _submitButtonHeight,
+            child: FilledButton(
+              key: ValueKey('$keyPrefix-comment-submit'),
+              style: FilledButton.styleFrom(
+                minimumSize: Size.zero,
+                fixedSize: const Size(_submitButtonWidth, _submitButtonHeight),
+                maximumSize: const Size(_submitButtonWidth, _submitButtonHeight),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              onPressed: canSubmit ? onSubmit : null,
+              child: submitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('등록'),
+                    ),
+            ),
           ),
         ],
       ),

@@ -32,12 +32,34 @@ class _FeedImageCache {
       _entries[storagePath] = cached;
       return cached;
     }
-    final future = mediaService.loadFeedImageBytes(storagePath: storagePath);
+    // 진행 중인 요청은 계속 공유해 중복 다운로드를 막되(dedup), **성공한
+    // bytes만** 캐시에 남긴다. 실패(null/empty/예외)를 캐시에 남기면 IAM이나
+    // 네트워크가 복구된 뒤에도 같은 실패가 영구히 재생되기 때문이다.
+    late final Future<Uint8List?> future;
+    future = mediaService
+        .loadFeedImageBytes(storagePath: storagePath)
+        .then((bytes) {
+          if (bytes == null || bytes.isEmpty) {
+            _evictIfSame(storagePath, future);
+          }
+          return bytes;
+        })
+        .onError<Object>((error, stack) {
+          _evictIfSame(storagePath, future);
+          return null;
+        });
     _entries[storagePath] = future;
     while (_entries.length > maxEntries) {
       _entries.remove(_entries.keys.first);
     }
     return future;
+  }
+
+  /// 그 사이에 다른 요청이 자리를 차지했다면 건드리지 않는다.
+  static void _evictIfSame(String storagePath, Future<Uint8List?> future) {
+    if (identical(_entries[storagePath], future)) {
+      _entries.remove(storagePath);
+    }
   }
 
   /// 게시물이 삭제되는 등으로 더 이상 유효하지 않은 항목을 버린다.
@@ -78,11 +100,29 @@ class _FeedStorageImageState extends State<FeedStorageImage> {
     storagePath: widget.storagePath,
   );
 
+  /// 재시도 중복 탭 방지. 자동 재시도는 하지 않는다.
+  bool _retrying = false;
+
+  void _retry() {
+    if (_retrying) return;
+    _retrying = true;
+    _FeedImageCache.evict([widget.storagePath]);
+    final future = _load();
+    // 화살표 본문으로 쓰면 대입식이 Future를 반환해 setState가 거부한다.
+    setState(() {
+      _future = future;
+    });
+    future.whenComplete(() {
+      if (mounted) _retrying = false;
+    });
+  }
+
   @override
   void didUpdateWidget(FeedStorageImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 경로가 바뀔 때만 다시 읽는다(단순 rebuild로는 재요청하지 않는다).
     if (oldWidget.storagePath != widget.storagePath) {
+      _retrying = false;
       _future = _load();
     }
   }
@@ -101,10 +141,10 @@ class _FeedStorageImageState extends State<FeedStorageImage> {
         final bytes = snap.data;
         if (bytes == null || bytes.isEmpty) {
           // 실패 이유(권한/네트워크/삭제)는 구분해 보여주지 않는다.
-          return _FeedImagePlaceholder(
+          return _FeedImageUnavailable(
             key: const ValueKey('feed-image-unavailable'),
             height: widget.height,
-            icon: Icons.image_not_supported_outlined,
+            onRetry: _retry,
           );
         }
         return Image.memory(
@@ -120,6 +160,47 @@ class _FeedStorageImageState extends State<FeedStorageImage> {
           ),
         );
       },
+    );
+  }
+}
+
+/// 이미지를 읽지 못했을 때의 중립 placeholder + 수동 재시도.
+class _FeedImageUnavailable extends StatelessWidget {
+  final double? height;
+  final VoidCallback onRetry;
+
+  const _FeedImageUnavailable({super.key, this.height, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      width: double.infinity,
+      color: AppColors.background,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.image_not_supported_outlined,
+            size: 28,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '사진을 불러오지 못했어요.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            key: const ValueKey('feed-image-retry'),
+            onPressed: onRetry,
+            child: const Text('다시 시도'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dating_app/core/theme/app_theme.dart';
 import 'package:dating_app/features/community/feed/feed_compose_screen.dart';
 import 'package:dating_app/features/community/feed/feed_post_detail_screen.dart';
 import 'package:dating_app/features/community/feed/feed_screen.dart';
@@ -240,6 +241,7 @@ class _FakeCommunityService extends Fake implements CommunityService {
 
   void emitPosts(List<CommunityPost> posts) => _posts.add(posts);
   void emitPost(CommunityPost? post) => _post.add(post);
+  void emitPostError() => _post.addError(StateError('firestore raw'));
   void emitComments(List<CommunityComment> comments) => _comments.add(comments);
 
   @override
@@ -431,6 +433,7 @@ Future<_Ctx> _pumpFeed(
 
   await tester.pumpWidget(
     MaterialApp(
+      theme: AppTheme.light,
       home: FeedScreen(
         authService: _FakeAuthService(),
         communityService: c,
@@ -464,6 +467,7 @@ Future<_Ctx> _pumpCompose(
 
   await tester.pumpWidget(
     MaterialApp(
+      theme: AppTheme.light,
       home: FeedComposeScreen(
         authService: _FakeAuthService(),
         communityService: c,
@@ -495,6 +499,7 @@ Future<_Ctx> _pumpDetail(
 
   await tester.pumpWidget(
     MaterialApp(
+      theme: AppTheme.light,
       home: FeedPostDetailScreen(
         postId: kPostId,
         authService: _FakeAuthService(),
@@ -862,6 +867,69 @@ void main() {
   });
 
   group('19~24, 26. 피드 상세', () {
+
+    testWidgets('A-2. AppBar 제목이 "피드 게시물"이다', (tester) async {
+      final ctx = await _pumpDetail(tester);
+      ctx.community.emitPost(_feedPost());
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('피드 게시물'), findsOneWidget);
+      expect(find.text('게시물'), findsNothing);
+    });
+
+    testWidgets('A-5. 이미지·본문·공감 bar·댓글·입력줄이 모두 그려진다', (tester) async {
+      final media = _FakeMediaService();
+      final post = _feedPost(imageCount: 2, reactionCount: 4, commentCount: 1);
+      for (final path in post.imagePaths) {
+        media.storedImages[path] = _imageBytes();
+      }
+      final ctx = await _pumpDetail(tester, media: media);
+      ctx.community.emitPost(post);
+      await tester.pump();
+      await tester.pump();
+      ctx.community.emitComments([_comment(text: '첫 댓글')]);
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('feed-detail-post')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-detail-gallery')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-reaction-button')), findsOneWidget);
+
+      // 댓글 목록은 이미지 아래에 있어 뷰포트 밖일 수 있다.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('feed-comment-list')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const ValueKey('feed-comment-list')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-comment-input')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-comment-submit')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      _expectNoRawPaths(tester);
+    });
+
+    testWidgets('A-4. stream 오류는 다시 시도할 수 있는 상태로 구분한다', (tester) async {
+      final ctx = await _pumpDetail(tester);
+      ctx.community.emitPostError();
+      await tester.pump();
+
+      expect(find.text('게시물을 불러오지 못했어요.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-detail-retry')), findsOneWidget);
+      expect(find.textContaining('firestore raw'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('feed-detail-retry')));
+      await tester.pump();
+      expect(find.text('이 게시물은 더 이상 볼 수 없어요.'), findsNothing);
+    });
+
+    testWidgets('A-4. 문서 없음은 되돌릴 수 없는 상태로 안내한다', (tester) async {
+      final ctx = await _pumpDetail(tester);
+      ctx.community.emitPost(null);
+      await tester.pump();
+
+      expect(find.text('이 게시물은 더 이상 볼 수 없어요.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-detail-retry')), findsNothing);
+    });
     testWidgets('19. 여러 이미지를 PageView로 보여준다', (tester) async {
       final media = _FakeMediaService();
       final post = _feedPost(imageCount: 3);
