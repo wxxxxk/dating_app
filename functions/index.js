@@ -46,6 +46,9 @@ const {
   deleteMyAccountCore,
   toHttpsError: toAccountDeletionHttpsError,
 } = require('./lib/account_deletion');
+const {
+  reviewPhotoVerificationCore,
+} = require('./lib/photo_verification_review');
 const { tokensForRecipient } = require('./lib/push_tokens');
 
 setGlobalOptions({ region: 'asia-northeast3' });
@@ -3388,6 +3391,25 @@ exports.syncAuthVerificationBadges = onCall(async (request) => {
     request,
     auth: admin.auth(),
     db,
+    HttpsError,
+    serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+    logger: console,
+  });
+});
+
+// ============================================================================
+// Phase 3-2: 사진 인증 수동 검토 (admin 전용)
+// ============================================================================
+//
+// 일반 사용자는 photoVerificationRequests 문서를 pending으로 만들 수만 있고,
+// verifications.photo 배지는 이 함수(Admin SDK)만 켤 수 있다.
+// 자동 얼굴 인식/생체 판정은 하지 않는다 — 운영자의 수동 검토 결과만 반영한다.
+
+exports.reviewPhotoVerification = onCall(async (request) => {
+  return reviewPhotoVerificationCore({
+    request,
+    db,
+    storageBucket: admin.storage().bucket(),
     HttpsError,
     serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
     logger: console,

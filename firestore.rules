@@ -811,6 +811,57 @@ service cloud.firestore {
       }
     }
 
+    // photoVerificationRequests/{uid} (Phase 3-2):
+    //
+    // 사진 인증 "요청" 문서다. 인증 배지(users/publicProfiles의
+    // verifications.photo)는 여전히 서버 전용이며, 이 문서를 만든다고 배지가
+    // 켜지지 않는다. 승인/반려는 admin 전용 callable(Admin SDK)이 Rules를
+    // 우회해 처리한다.
+    //
+    // - read: 본인 요청만.
+    // - create: 본인 uid로 pending 요청만. 검토 필드(reviewedAt/rejectionReason)는
+    //   반드시 null이어야 하고, storagePath는 본인 Storage 경로여야 한다.
+    // - update: 반려(rejected) 상태에서 새 사진으로 재제출하는 경우만 허용.
+    //   pending/approved 상태에서는 클라이언트가 손댈 수 없다.
+    // - delete: 항상 금지.
+    match /photoVerificationRequests/{uid} {
+      function requestKeys() {
+        return [
+          'uid', 'status', 'storagePath', 'submittedAt', 'updatedAt',
+          'reviewedAt', 'rejectionReason', 'schemaVersion'
+        ];
+      }
+      // 새 제출(최초/재제출) 공통 형태. 시각은 서버 시각만 허용한다.
+      function validSubmission() {
+        let data = request.resource.data;
+        return data.keys().hasOnly(requestKeys()) &&
+          data.keys().hasAll(requestKeys()) &&
+          data.uid == uid &&
+          data.status == 'pending' &&
+          data.storagePath is string &&
+          data.storagePath.matches('^photoVerification/' + uid + '/[^/]+$') &&
+          data.submittedAt == request.time &&
+          data.updatedAt == request.time &&
+          data.reviewedAt == null &&
+          data.rejectionReason == null &&
+          data.schemaVersion == 1;
+      }
+
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      allow create: if request.auth != null &&
+        request.auth.uid == uid &&
+        validSubmission();
+
+      // 재제출: 반려된 요청에만, 새 pending 제출 형태로만 허용한다.
+      allow update: if request.auth != null &&
+        request.auth.uid == uid &&
+        resource.data.status == 'rejected' &&
+        validSubmission();
+
+      allow delete: if false;
+    }
+
     // collectionGroup('swipes') 조회용 규칙:
     // 받은 좋아요 화면은 users/{다른유저}/swipes/{내uid} 문서를 collectionGroup으로
     // 읽는다. 남의 스와이프 전체를 열지 않고, targetUid가 본인인 문서만 허용한다.

@@ -304,7 +304,11 @@ test('한쪽 불일치 시 두 문서 모두 canonical update', async () => {
   });
 });
 
-test('기존 true photo도 false로 교정', async () => {
+// Phase 3-2부터 photo 배지의 소유자는 이 함수가 아니라 사진 인증 수동 검토
+// (reviewPhotoVerification, Admin SDK)다. Auth 기반 동기화가 승인된 배지를
+// 지우지 않도록 비공개 프로필의 현재 photo 값을 보존한다.
+// (클라이언트는 rules상 verifications를 직접 쓸 수 없으므로 위조 위험은 없다.)
+test('승인된 photo 배지는 Auth 동기화가 덮어쓰지 않는다', async () => {
   const db = createFakeDb({
     userData: { verifications: { email: false, phone: false, photo: true } },
     publicData: { verifications: { email: false, phone: false, photo: true } },
@@ -313,21 +317,45 @@ test('기존 true photo도 false로 교정', async () => {
   assert.deepEqual(result.verifications, {
     email: false,
     phone: false,
-    photo: false,
+    photo: true,
+  });
+  // 바뀔 값이 없으므로 write도 발생하지 않는다.
+  assert.deepEqual(db.calls.committedUpdates, []);
+});
+
+test('photo는 보존하면서 email/phone은 Auth 기준으로 교정한다', async () => {
+  const db = createFakeDb({
+    userData: { verifications: { email: false, phone: false, photo: true } },
+    publicData: { verifications: { email: false, phone: false, photo: true } },
+  });
+  const { result } = await callSync({
+    db,
+    userRecord: { email: 'user@example.test', emailVerified: true },
+  });
+  assert.deepEqual(result.verifications, {
+    email: true,
+    phone: false,
+    photo: true,
   });
   for (const update of db.calls.committedUpdates) {
-    assert.equal(update.payload.verifications.photo, false);
+    assert.equal(update.payload.verifications.photo, true);
+    assert.equal(update.payload.verifications.email, true);
   }
 });
 
 test('transaction 실패 시 partial write 없음', async () => {
+  // 실제로 write가 필요한 상황(email 교정)을 만들어 update 경로를 태운다.
   const db = createFakeDb({
-    userData: { verifications: { email: false, phone: false, photo: true } },
-    publicData: { verifications: { email: false, phone: false, photo: true } },
+    userData: { verifications: { email: false, phone: false, photo: false } },
+    publicData: { verifications: { email: false, phone: false, photo: false } },
     throwOnUpdate: true,
   });
   await assert.rejects(
-    () => callSync({ db }),
+    () =>
+      callSync({
+        db,
+        userRecord: { email: 'user@example.test', emailVerified: true },
+      }),
     (error) => error.code === 'internal',
   );
   assert.deepEqual(db.calls.committedUpdates, []);

@@ -7,6 +7,8 @@ import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
+import '../../models/photo_verification_request.dart';
+import '../../services/verification/photo_verification_service.dart';
 import '../../services/auth/account_deletion_service.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/charm/charm_service.dart';
@@ -32,6 +34,7 @@ import '../profile/profile_edit_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
 import '../safety/blocked_users_screen.dart';
+import '../verification/photo_verification_screen.dart';
 
 /// 홈 화면 — 내 프로필을 카드 형태로 표시한다 (M2.5).
 ///
@@ -88,6 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // fortune_hub_screen.dart와 같은 패턴 — 상태 없는 서비스 래퍼라 화면마다
   // 로컬로 만들어 쓴다. app.dart의 전역 주입 체인에 추가할 필요가 없다.
   final _idealTypeService = IdealTypeService();
+  // 상태 없는 서비스 래퍼라 화면 로컬로 둔다(app.dart 주입 체인 변경 불필요).
+  final _photoVerificationService = PhotoVerificationService();
 
   @override
   void initState() {
@@ -319,6 +324,22 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _verificationLoading = false);
     }
+  }
+
+  /// 사진 인증 화면으로 이동한다. 인증 배지는 서버 승인 후에만 반영되므로
+  /// 여기서는 요청 화면만 열고 verifications를 직접 건드리지 않는다.
+  Future<void> _openPhotoVerification() async {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhotoVerificationScreen(
+          uid: uid,
+          service: _photoVerificationService,
+        ),
+      ),
+    );
   }
 
   Future<void> _openPhoneVerification() async {
@@ -598,6 +619,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     onSendEmail: _sendEmailVerification,
                     onRefreshEmail: _refreshEmailVerification,
                     onVerifyPhone: _openPhoneVerification,
+                    photoRequestStream: _photoVerificationService.watchRequest(
+                      widget.authService.currentUser?.uid ?? '',
+                    ),
+                    onVerifyPhoto: _openPhotoVerification,
                   ),
                   const SizedBox(height: 24),
 
@@ -1163,12 +1188,19 @@ class _VerificationSection extends StatelessWidget {
   final VoidCallback onRefreshEmail;
   final VoidCallback onVerifyPhone;
 
+  /// 사진 인증 요청 상태 스트림. 공개 배지의 최종 진실은 어디까지나
+  /// verifications.photo이고, 이 스트림은 "검토 중/재제출 필요" 안내에만 쓴다.
+  final Stream<PhotoVerificationRequest?> photoRequestStream;
+  final VoidCallback onVerifyPhoto;
+
   const _VerificationSection({
     required this.verifications,
     required this.loading,
     required this.onSendEmail,
     required this.onRefreshEmail,
     required this.onVerifyPhone,
+    required this.photoRequestStream,
+    required this.onVerifyPhoto,
   });
 
   @override
@@ -1237,17 +1269,93 @@ class _VerificationSection extends StatelessWidget {
               label: const Text('전화 인증하기'),
             ),
           ],
-          if (verifications.email && verifications.phone)
-            const Text(
-              '사진 인증은 다음 단계에서 연결할 수 있게 자리만 준비해뒀어요.',
-              style: TextStyle(
+          if (!verifications.email || !verifications.phone)
+            const SizedBox(height: 14),
+          _PhotoVerificationRow(
+            verified: verifications.photo,
+            requestStream: photoRequestStream,
+            onTap: onVerifyPhoto,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 인증 현황 카드의 사진 인증 행.
+///
+/// 공개 배지(verifications.photo)가 true면 무조건 "인증 완료"로 본다.
+/// 요청 상태(pending/rejected)는 진행 안내 용도로만 쓰고, request status만으로
+/// 인증 완료를 표시하지 않는다.
+class _PhotoVerificationRow extends StatelessWidget {
+  final bool verified;
+  final Stream<PhotoVerificationRequest?> requestStream;
+  final VoidCallback onTap;
+
+  const _PhotoVerificationRow({
+    required this.verified,
+    required this.requestStream,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (verified) {
+      return const Row(
+        key: ValueKey('home-photo-verification-done'),
+        children: [
+          Icon(Icons.verified_rounded, size: 17, color: AppColors.mintDeep),
+          SizedBox(width: 6),
+          Text(
+            '사진 인증 완료',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.mintDeep,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return StreamBuilder<PhotoVerificationRequest?>(
+      stream: requestStream,
+      builder: (context, snap) {
+        final request = snap.data;
+        final pending = request?.isPending ?? false;
+        final rejected = request?.isRejected ?? false;
+        return Column(
+          key: const ValueKey('home-photo-verification-row'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              pending
+                  ? '사진 인증을 검토하고 있어요. 결과가 나오면 배지에 반영돼요.'
+                  : rejected
+                  ? '사진 인증이 반려됐어요. 안내를 확인하고 다시 제출해주세요.'
+                  : '사진 인증을 완료하면 프로필에 사진 인증 배지가 표시돼요.',
+              style: const TextStyle(
                 fontSize: 13,
                 color: AppColors.textSecondary,
                 height: 1.4,
               ),
             ),
-        ],
-      ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const ValueKey('home-photo-verification-button'),
+              onPressed: onTap,
+              icon: const Icon(Icons.photo_camera_rounded, size: 17),
+              label: Text(
+                pending
+                    ? '검토 중'
+                    : rejected
+                    ? '다시 제출 필요'
+                    : '사진 인증하기',
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

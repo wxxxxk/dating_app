@@ -10,6 +10,31 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // photoVerification/{uid}/{fileName} (Phase 3-2):
+    //
+    // 사진 인증용 셀피. **공개 프로필 사진과 완전히 분리된 비공개 경로다** —
+    // users/{uid} 경로와 달리 다른 사용자는 읽을 수 없다.
+    // 운영 검토가 끝나면 Admin SDK가 Rules를 우회해 삭제한다.
+    //
+    // - read: 본인만(제출 상태 확인용).
+    // - create: 본인만, 5MB 이하 이미지, 허용 확장자/MIME만.
+    // - update/delete: 항상 금지(덮어쓰기 대신 새 uploadId로 재제출한다).
+    match /photoVerification/{uid}/{fileName} {
+      function validVerificationImage() {
+        return request.resource.size <= 5 * 1024 * 1024 &&
+          request.resource.contentType in [
+            'image/jpeg', 'image/png', 'image/heic', 'image/heif'
+          ] &&
+          fileName.matches('.*\\.(jpg|jpeg|png|heic|heif)$');
+      }
+
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null &&
+        request.auth.uid == uid &&
+        validVerificationImage();
+      allow update, delete: if false;
+    }
+
   }
 }
 

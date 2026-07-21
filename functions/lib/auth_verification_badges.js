@@ -26,6 +26,9 @@ function safeUidHash(uid) {
   return crypto.createHash('sha256').update(String(uid)).digest('hex').slice(0, 8);
 }
 
+// Firebase Auth로 확인 가능한 배지는 email/phone뿐이다. photo는 Auth가 아니라
+// 사진 인증 수동 검토(Phase 3-2, reviewPhotoVerification)가 소유하므로 여기서
+// 파생하지 않고, 동기화 시 기존 저장값을 그대로 보존한다.
 function deriveAuthVerificationBadges(userRecord) {
   const email =
     typeof userRecord?.email === 'string' &&
@@ -140,23 +143,26 @@ async function syncAuthVerificationBadgesCore({
       const currentPublicVerifications = normalizeVerificationMap(
         publicSnap.data()?.verifications,
       );
-      const usersChanged = !verificationsEqual(currentUserVerifications, verifications);
+      // photo는 이 함수의 소유가 아니다 — 승인된 사진 인증 배지를 덮어쓰지
+      // 않도록 비공개 프로필에 저장된 현재 값을 그대로 유지한다.
+      const merged = { ...verifications, photo: currentUserVerifications.photo };
+      const usersChanged = !verificationsEqual(currentUserVerifications, merged);
       const publicChanged = !verificationsEqual(
         currentPublicVerifications,
-        verifications,
+        merged,
       );
 
       if (!usersChanged && !publicChanged) {
-        return { changed: false, writesPerformed: 0 };
+        return { changed: false, writesPerformed: 0, verifications: merged };
       }
 
-      transaction.update(userRef, { verifications });
-      const publicUpdate = { verifications };
+      transaction.update(userRef, { verifications: merged });
+      const publicUpdate = { verifications: merged };
       if (publicChanged && typeof serverTimestamp === 'function') {
         publicUpdate.profileUpdatedAt = serverTimestamp();
       }
       transaction.update(publicRef, publicUpdate);
-      return { changed: true, writesPerformed: 2 };
+      return { changed: true, writesPerformed: 2, verifications: merged };
     });
 
     if (logger?.log) {
@@ -168,7 +174,7 @@ async function syncAuthVerificationBadgesCore({
     }
 
     return {
-      verifications,
+      verifications: result.verifications,
       changed: result.changed,
       writesPerformed: result.writesPerformed,
     };
