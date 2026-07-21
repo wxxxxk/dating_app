@@ -2,7 +2,13 @@
 
 const crypto = require('crypto');
 
-const VERIFICATION_KEYS = Object.freeze(['email', 'phone', 'photo']);
+const VERIFICATION_KEYS = Object.freeze([
+  'email',
+  'phone',
+  'photo',
+  'work',
+  'school',
+]);
 const DISALLOWED_REQUEST_KEYS = Object.freeze([
   'uid',
   'targetUid',
@@ -26,8 +32,8 @@ function safeUidHash(uid) {
   return crypto.createHash('sha256').update(String(uid)).digest('hex').slice(0, 8);
 }
 
-// Firebase Auth로 확인 가능한 배지는 email/phone뿐이다. photo는 Auth가 아니라
-// 사진 인증 수동 검토(Phase 3-2, reviewPhotoVerification)가 소유하므로 여기서
+// Firebase Auth로 확인 가능한 배지는 email/phone뿐이다. photo는 사진 인증
+// (Phase 3-2), work/school은 소속 인증(Phase 3-3) 수동 검토가 소유하므로 여기서
 // 파생하지 않고, 동기화 시 기존 저장값을 그대로 보존한다.
 function deriveAuthVerificationBadges(userRecord) {
   const email =
@@ -44,14 +50,17 @@ function deriveAuthVerificationBadges(userRecord) {
     typeof userRecord?.phoneNumber === 'string' &&
     userRecord.phoneNumber.trim() !== '' &&
     hasPhoneProvider;
-  return { email, phone, photo: false };
+  return { email, phone, photo: false, work: false, school: false };
 }
 
+// 기존 3-key(email/phone/photo) 문서는 work/school이 없으므로 false로 읽는다.
 function normalizeVerificationMap(value) {
   return {
     email: value?.email === true,
     phone: value?.phone === true,
     photo: value?.photo === true,
+    work: value?.work === true,
+    school: value?.school === true,
   };
 }
 
@@ -143,9 +152,15 @@ async function syncAuthVerificationBadgesCore({
       const currentPublicVerifications = normalizeVerificationMap(
         publicSnap.data()?.verifications,
       );
-      // photo는 이 함수의 소유가 아니다 — 승인된 사진 인증 배지를 덮어쓰지
-      // 않도록 비공개 프로필에 저장된 현재 값을 그대로 유지한다.
-      const merged = { ...verifications, photo: currentUserVerifications.photo };
+      // photo/work/school은 이 함수의 소유가 아니다(각각 사진 인증·소속 인증
+      // 수동 검토가 소유). 승인된 배지를 덮어쓰지 않도록 비공개 프로필에
+      // 저장된 현재 값을 그대로 유지하고, Auth 기반 email/phone만 교정한다.
+      const merged = {
+        ...verifications,
+        photo: currentUserVerifications.photo,
+        work: currentUserVerifications.work,
+        school: currentUserVerifications.school,
+      };
       const usersChanged = !verificationsEqual(currentUserVerifications, merged);
       const publicChanged = !verificationsEqual(
         currentPublicVerifications,

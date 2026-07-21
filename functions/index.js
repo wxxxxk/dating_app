@@ -47,6 +47,9 @@ const {
   toHttpsError: toAccountDeletionHttpsError,
 } = require('./lib/account_deletion');
 const {
+  reviewAffiliationVerificationCore,
+} = require('./lib/affiliation_verification_review');
+const {
   reviewPhotoVerificationCore,
 } = require('./lib/photo_verification_review');
 const { tokensForRecipient } = require('./lib/push_tokens');
@@ -3407,6 +3410,25 @@ exports.syncAuthVerificationBadges = onCall(async (request) => {
 
 exports.reviewPhotoVerification = onCall(async (request) => {
   return reviewPhotoVerificationCore({
+    request,
+    db,
+    storageBucket: admin.storage().bucket(),
+    HttpsError,
+    serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+    logger: console,
+  });
+});
+
+// ============================================================================
+// Phase 3-3: 직장·학교 소속 인증 수동 검토 (admin 전용)
+// ============================================================================
+//
+// 일반 사용자는 users/{uid}/affiliationVerificationRequests/{type} 문서를
+// pending으로 만들 수만 있고, verifications.work/school 배지는 이 함수
+// (Admin SDK)만 켤 수 있다. OCR·자동 판정은 하지 않는다.
+
+exports.reviewAffiliationVerification = onCall(async (request) => {
+  return reviewAffiliationVerificationCore({
     request,
     db,
     storageBucket: admin.storage().bucket(),

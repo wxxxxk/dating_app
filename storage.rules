@@ -35,6 +35,30 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // affiliationVerification/{uid}/{type}/{fileName} (Phase 3-3):
+    //
+    // 직장·학교 소속 증빙. 사진 인증과 같은 owner-only 비공개 경로이며,
+    // 검토가 끝나면 Admin SDK가 Rules를 우회해 삭제한다.
+    // 파일명에는 기관명 등 개인정보를 넣지 않는다(uploadId만).
+    match /affiliationVerification/{uid}/{type}/{fileName} {
+      function validAffiliationImage() {
+        return type in ['work', 'school'] &&
+          request.resource.size <= 5 * 1024 * 1024 &&
+          request.resource.contentType in [
+            'image/jpeg', 'image/png', 'image/heic', 'image/heif'
+          ] &&
+          fileName.matches('.*\\.(jpg|jpeg|png|heic|heif)$');
+      }
+
+      allow read: if request.auth != null &&
+        request.auth.uid == uid &&
+        type in ['work', 'school'];
+      allow create: if request.auth != null &&
+        request.auth.uid == uid &&
+        validAffiliationImage();
+      allow update, delete: if false;
+    }
+
   }
 }
 

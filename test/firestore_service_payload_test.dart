@@ -139,11 +139,17 @@ void main() {
       final payload = FirestoreService.buildClientCreatableUserFields(
         buildUserProfile(),
       );
+      // Phase 3-3에서 work/school이 추가됐다. 어떤 배지도 true로 시작하지
+      // 않는다는 계약은 그대로다(rules도 false만 허용).
       expect(payload['verifications'], {
         'email': false,
         'phone': false,
         'photo': false,
+        'work': false,
+        'school': false,
       });
+      final verifications = payload['verifications'] as Map<String, dynamic>;
+      expect(verifications.values.every((value) => value == false), isTrue);
     });
   });
 

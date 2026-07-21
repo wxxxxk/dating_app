@@ -36,6 +36,17 @@ class VerificationBadges extends StatelessWidget {
         label: '사진',
         verified: verifications.photo,
       ),
+      // 직장·학교는 승인된 경우에만 의미가 있어 기관명 없이 배지만 노출한다.
+      _VerificationBadgeData(
+        icon: Icons.badge_rounded,
+        label: '직장',
+        verified: verifications.work,
+      ),
+      _VerificationBadgeData(
+        icon: Icons.school_rounded,
+        label: '학교',
+        verified: verifications.school,
+      ),
     ].where((badge) => showUnverified || badge.verified).toList();
 
     if (badges.isEmpty) return const SizedBox.shrink();

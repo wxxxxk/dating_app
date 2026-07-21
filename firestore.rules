@@ -159,17 +159,30 @@ service cloud.firestore {
           );
       }
 
+      // 신규 계정의 초기 인증 map. email/phone/photo는 필수(모두 false),
+      // work/school(Phase 3-3)은 선택이며 있으면 false여야 한다 — 기존 3-key
+      // 문서/구버전 앱과 신버전 앱(5-key)을 모두 허용하기 위함이다.
+      // 어느 값도 true로 시작할 수 없고, owner update는 verifications 자체를
+      // 건드릴 수 없다(userOwnerUpdateKeys에 없음).
       function initialVerificationsValid(data) {
         return 'verifications' in data &&
           data.verifications is map &&
-          data.verifications.keys().hasOnly(['email', 'phone', 'photo']) &&
+          data.verifications.keys().hasOnly([
+            'email', 'phone', 'photo', 'work', 'school'
+          ]) &&
           data.verifications.keys().hasAll(['email', 'phone', 'photo']) &&
           data.verifications.email is bool &&
           data.verifications.email == false &&
           data.verifications.phone is bool &&
           data.verifications.phone == false &&
           data.verifications.photo is bool &&
-          data.verifications.photo == false;
+          data.verifications.photo == false &&
+          (!('work' in data.verifications) ||
+            (data.verifications.work is bool &&
+              data.verifications.work == false)) &&
+          (!('school' in data.verifications) ||
+            (data.verifications.school is bool &&
+              data.verifications.school == false));
       }
 
       function discoveryFilterValid(data) {
@@ -384,6 +397,78 @@ service cloud.firestore {
           request.resource.data.reason is string &&
           request.resource.data.createdAt == request.time;
         allow update, delete: if false;
+      }
+
+      // users/{uid}/affiliationVerificationRequests/{type} (Phase 3-3):
+      //
+      // 직장·학교 소속 인증 "요청" 문서다(문서 id가 곧 type). 인증 배지
+      // (verifications.work/school)는 서버 전용이며, 이 문서를 만든다고 배지가
+      // 켜지지 않는다. 승인/반려는 admin 전용 callable(Admin SDK)이 Rules를
+      // 우회해 처리한다.
+      //
+      // 기관명·상세 소속은 이 문서에만 저장되고 publicProfiles로 복사되지 않는다.
+      // storagePath는 본인 type 경로만 허용하고 공개 URL은 저장하지 않는다.
+      match /affiliationVerificationRequests/{type} {
+        function affiliationKeys() {
+          return [
+            'uid', 'type', 'institutionName', 'affiliationDetail', 'proofType',
+            'status', 'storagePath', 'submittedAt', 'updatedAt', 'reviewedAt',
+            'rejectionReason', 'schemaVersion'
+          ];
+        }
+        // type과 증빙 유형 조합(work+student_id 같은 교차 조합은 거부).
+        function proofTypeValid(data) {
+          return (data.type == 'work' &&
+              data.proofType in ['employee_id', 'employment_certificate']) ||
+            (data.type == 'school' &&
+              data.proofType in ['student_id', 'enrollment_certificate']);
+        }
+        // 새 제출(최초/재제출) 공통 형태. 시각은 서버 시각만 허용한다.
+        function validSubmission() {
+          let data = request.resource.data;
+          return type in ['work', 'school'] &&
+            data.keys().hasOnly(affiliationKeys()) &&
+            data.keys().hasAll(affiliationKeys()) &&
+            data.uid == uid &&
+            data.type == type &&
+            data.status == 'pending' &&
+            data.institutionName is string &&
+            data.institutionName.size() >= 2 &&
+            data.institutionName.size() <= 80 &&
+            data.affiliationDetail is string &&
+            data.affiliationDetail.size() <= 80 &&
+            data.proofType is string &&
+            proofTypeValid(data) &&
+            data.storagePath is string &&
+            data.storagePath.matches(
+              '^affiliationVerification/' + uid + '/' + type + '/[^/]+$'
+            ) &&
+            data.submittedAt == request.time &&
+            data.updatedAt == request.time &&
+            data.reviewedAt == null &&
+            data.rejectionReason == null &&
+            data.schemaVersion == 1;
+        }
+
+        allow read: if request.auth != null &&
+          request.auth.uid == uid &&
+          type in ['work', 'school'];
+
+        allow create: if request.auth != null &&
+          request.auth.uid == uid &&
+          validSubmission();
+
+        // 재제출: 반려된 요청에만, 새 pending 제출 형태로만 허용한다.
+        // 같은 이미지를 재사용하지 못하도록 새 storagePath를 요구한다.
+        allow update: if request.auth != null &&
+          request.auth.uid == uid &&
+          resource.data.status == 'rejected' &&
+          validSubmission() &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.type == resource.data.type &&
+          request.resource.data.storagePath != resource.data.storagePath;
+
+        allow delete: if false;
       }
     }
 

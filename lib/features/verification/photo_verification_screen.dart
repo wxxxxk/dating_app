@@ -30,6 +30,10 @@ class PhotoVerificationScreen extends StatefulWidget {
 }
 
 class _PhotoVerificationScreenState extends State<PhotoVerificationScreen> {
+  /// build()에서 만들면 setState(촬영·동의 등)마다 새 스트림이 만들어져 로딩
+  /// 상태로 되돌아간다. 화면 수명 동안 하나만 유지한다.
+  late final Stream<PhotoVerificationRequest?> _requestStream = widget.service
+      .watchRequest(widget.uid);
   XFile? _captured;
   bool _consented = false;
   bool _submitting = false;
@@ -98,7 +102,7 @@ class _PhotoVerificationScreenState extends State<PhotoVerificationScreen> {
       ),
       body: SafeArea(
         child: StreamBuilder<PhotoVerificationRequest?>(
-          stream: widget.service.watchRequest(widget.uid),
+          stream: _requestStream,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {

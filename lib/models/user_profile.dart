@@ -69,31 +69,57 @@ class VerificationStatus {
   final bool phone;
   final bool photo;
 
+  /// 직장 인증(Phase 3-3). 서버(admin 검토)만 true로 바꿀 수 있다.
+  final bool work;
+
+  /// 학교 인증(Phase 3-3). 서버(admin 검토)만 true로 바꿀 수 있다.
+  final bool school;
+
   const VerificationStatus({
     this.email = false,
     this.phone = false,
     this.photo = false,
+    this.work = false,
+    this.school = false,
   });
 
+  /// 기존 문서(email/phone/photo 3-key)에는 work/school 필드가 없다.
+  /// 누락은 false로 읽어 하위 호환을 유지한다(강제 backfill 없음).
   factory VerificationStatus.fromMap(Map<String, dynamic>? map) {
     return VerificationStatus(
       email: map?['email'] == true,
       phone: map?['phone'] == true,
       photo: map?['photo'] == true,
+      work: map?['work'] == true,
+      school: map?['school'] == true,
     );
   }
 
   Map<String, dynamic> toFirestore() {
-    return {'email': email, 'phone': phone, 'photo': photo};
+    return {
+      'email': email,
+      'phone': phone,
+      'photo': photo,
+      'work': work,
+      'school': school,
+    };
   }
 
-  bool get hasAny => email || phone || photo;
+  bool get hasAny => email || phone || photo || work || school;
 
-  VerificationStatus copyWith({bool? email, bool? phone, bool? photo}) {
+  VerificationStatus copyWith({
+    bool? email,
+    bool? phone,
+    bool? photo,
+    bool? work,
+    bool? school,
+  }) {
     return VerificationStatus(
       email: email ?? this.email,
       phone: phone ?? this.phone,
       photo: photo ?? this.photo,
+      work: work ?? this.work,
+      school: school ?? this.school,
     );
   }
 }

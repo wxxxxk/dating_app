@@ -7,7 +7,9 @@ import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
+import '../../models/affiliation_verification_request.dart';
 import '../../models/photo_verification_request.dart';
+import '../../services/verification/affiliation_verification_service.dart';
 import '../../services/verification/photo_verification_service.dart';
 import '../../services/auth/account_deletion_service.dart';
 import '../../services/auth/auth_service.dart';
@@ -34,6 +36,7 @@ import '../profile/profile_edit_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
 import '../safety/blocked_users_screen.dart';
+import '../verification/affiliation_verification_screen.dart';
 import '../verification/photo_verification_screen.dart';
 
 /// 홈 화면 — 내 프로필을 카드 형태로 표시한다 (M2.5).
@@ -93,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _idealTypeService = IdealTypeService();
   // 상태 없는 서비스 래퍼라 화면 로컬로 둔다(app.dart 주입 체인 변경 불필요).
   final _photoVerificationService = PhotoVerificationService();
+  final _affiliationVerificationService = AffiliationVerificationService();
 
   @override
   void initState() {
@@ -337,6 +341,24 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => PhotoVerificationScreen(
           uid: uid,
           service: _photoVerificationService,
+        ),
+      ),
+    );
+  }
+
+  /// 직장·학교 인증 화면으로 이동한다. 배지는 서버 승인 후에만 반영된다.
+  Future<void> _openAffiliationVerification(
+    AffiliationVerificationType type,
+  ) async {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AffiliationVerificationScreen(
+          uid: uid,
+          type: type,
+          service: _affiliationVerificationService,
         ),
       ),
     );
@@ -623,6 +645,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       widget.authService.currentUser?.uid ?? '',
                     ),
                     onVerifyPhoto: _openPhotoVerification,
+                    workRequestStream: _affiliationVerificationService
+                        .watchRequest(
+                          uid: widget.authService.currentUser?.uid ?? '',
+                          type: AffiliationVerificationType.work,
+                        ),
+                    schoolRequestStream: _affiliationVerificationService
+                        .watchRequest(
+                          uid: widget.authService.currentUser?.uid ?? '',
+                          type: AffiliationVerificationType.school,
+                        ),
+                    onVerifyAffiliation: _openAffiliationVerification,
                   ),
                   const SizedBox(height: 24),
 
@@ -1193,6 +1226,12 @@ class _VerificationSection extends StatelessWidget {
   final Stream<PhotoVerificationRequest?> photoRequestStream;
   final VoidCallback onVerifyPhoto;
 
+  /// 직장·학교 요청 상태 스트림. 공개 배지의 최종 진실은 verifications이고,
+  /// 이 스트림들은 "검토 중/다시 제출 필요" 안내에만 쓴다.
+  final Stream<AffiliationVerificationRequest?> workRequestStream;
+  final Stream<AffiliationVerificationRequest?> schoolRequestStream;
+  final void Function(AffiliationVerificationType type) onVerifyAffiliation;
+
   const _VerificationSection({
     required this.verifications,
     required this.loading,
@@ -1201,6 +1240,9 @@ class _VerificationSection extends StatelessWidget {
     required this.onVerifyPhone,
     required this.photoRequestStream,
     required this.onVerifyPhoto,
+    required this.workRequestStream,
+    required this.schoolRequestStream,
+    required this.onVerifyAffiliation,
   });
 
   @override
@@ -1275,6 +1317,21 @@ class _VerificationSection extends StatelessWidget {
             verified: verifications.photo,
             requestStream: photoRequestStream,
             onTap: onVerifyPhoto,
+          ),
+          const SizedBox(height: 14),
+          _AffiliationVerificationRow(
+            type: AffiliationVerificationType.work,
+            verified: verifications.work,
+            requestStream: workRequestStream,
+            onTap: () => onVerifyAffiliation(AffiliationVerificationType.work),
+          ),
+          const SizedBox(height: 14),
+          _AffiliationVerificationRow(
+            type: AffiliationVerificationType.school,
+            verified: verifications.school,
+            requestStream: schoolRequestStream,
+            onTap: () =>
+                onVerifyAffiliation(AffiliationVerificationType.school),
           ),
         ],
       ),
@@ -1351,6 +1408,101 @@ class _PhotoVerificationRow extends StatelessWidget {
                     : rejected
                     ? '다시 제출 필요'
                     : '사진 인증하기',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 인증 현황 카드의 직장·학교 인증 행.
+///
+/// 공개 배지(verifications.work/school)가 true면 "인증 완료"로 본다. 요청
+/// 상태(pending/rejected)는 진행 안내 용도로만 쓰고, request status만으로
+/// 인증 완료를 표시하지 않는다.
+class _AffiliationVerificationRow extends StatelessWidget {
+  final AffiliationVerificationType type;
+  final bool verified;
+  final Stream<AffiliationVerificationRequest?> requestStream;
+  final VoidCallback onTap;
+
+  const _AffiliationVerificationRow({
+    required this.type,
+    required this.verified,
+    required this.requestStream,
+    required this.onTap,
+  });
+
+  String get _label => affiliationVerificationTypeLabel(type);
+  String get _keyPrefix =>
+      'home-${affiliationVerificationTypeToString(type)}-verification';
+
+  @override
+  Widget build(BuildContext context) {
+    if (verified) {
+      return Row(
+        key: ValueKey('$_keyPrefix-done'),
+        children: [
+          Icon(
+            type == AffiliationVerificationType.work
+                ? Icons.badge_rounded
+                : Icons.school_rounded,
+            size: 17,
+            color: AppColors.mintDeep,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '$_label 완료',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.mintDeep,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return StreamBuilder<AffiliationVerificationRequest?>(
+      stream: requestStream,
+      builder: (context, snap) {
+        final request = snap.data;
+        final pending = request?.isPending ?? false;
+        final rejected = request?.isRejected ?? false;
+        return Column(
+          key: ValueKey('$_keyPrefix-row'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              pending
+                  ? '$_label 자료를 검토하고 있어요. 결과가 나오면 배지에 반영돼요.'
+                  : rejected
+                  ? '$_label 자료가 반려됐어요. 안내를 확인하고 다시 제출해주세요.'
+                  : '$_label을 완료하면 프로필에 인증 배지가 표시돼요.',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: ValueKey('$_keyPrefix-button'),
+              onPressed: onTap,
+              icon: Icon(
+                type == AffiliationVerificationType.work
+                    ? Icons.badge_outlined
+                    : Icons.school_outlined,
+                size: 17,
+              ),
+              label: Text(
+                pending
+                    ? '검토 중'
+                    : rejected
+                    ? '다시 제출 필요'
+                    : '인증하기',
               ),
             ),
           ],

@@ -137,7 +137,7 @@ test('verified email + email 존재 -> email true', () => {
       email: 'user@example.test',
       emailVerified: true,
     }),
-    { email: true, phone: false, photo: false },
+    { email: true, phone: false, photo: false, work: false, school: false },
   );
 });
 
@@ -192,6 +192,8 @@ test('photo는 항상 false이고 malformed userRecord도 모두 false', () => {
     email: false,
     phone: false,
     photo: false,
+    work: false,
+    school: false,
   });
   assert.deepEqual(
     deriveAuthVerificationBadges({
@@ -201,7 +203,7 @@ test('photo는 항상 false이고 malformed userRecord도 모두 false', () => {
       providerData: 'phone',
       photo: true,
     }),
-    { email: false, phone: false, photo: false },
+    { email: false, phone: false, photo: false, work: false, school: false },
   );
 });
 
@@ -301,6 +303,8 @@ test('한쪽 불일치 시 두 문서 모두 canonical update', async () => {
     email: true,
     phone: false,
     photo: false,
+    work: false,
+    school: false,
   });
 });
 
@@ -318,6 +322,8 @@ test('승인된 photo 배지는 Auth 동기화가 덮어쓰지 않는다', async
     email: false,
     phone: false,
     photo: true,
+    work: false,
+    school: false,
   });
   // 바뀔 값이 없으므로 write도 발생하지 않는다.
   assert.deepEqual(db.calls.committedUpdates, []);
@@ -336,6 +342,8 @@ test('photo는 보존하면서 email/phone은 Auth 기준으로 교정한다', a
     email: true,
     phone: false,
     photo: true,
+    work: false,
+    school: false,
   });
   for (const update of db.calls.committedUpdates) {
     assert.equal(update.payload.verifications.photo, true);
@@ -379,6 +387,8 @@ test('안전한 반환 payload만 제공', async () => {
     'email',
     'phone',
     'photo',
+    'school',
+    'work',
   ]);
   assert.equal(JSON.stringify(result).includes('user@example.test'), false);
   assert.equal(JSON.stringify(result).includes('+821012345678'), false);
