@@ -16,6 +16,8 @@ import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../safety/report_sheet.dart';
 import 'chat_appointment_widgets.dart';
+import 'chat_safety.dart';
+import 'chat_safety_widgets.dart';
 
 /// 매칭 상대와의 1:1 실시간 채팅 화면.
 ///
@@ -72,6 +74,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _unmatched = false;
   bool _unmatching = false;
   bool _submittingAppointment = false;
+  // 안전 가이드 배너 닫기는 이 화면 세션에만 반영한다(영구 저장하지 않음).
+  bool _safetyBannerDismissed = false;
+  // 민감정보 경고 시트가 열려 있는 동안 중복 전송 시도를 막는다.
+  bool _confirmingSafety = false;
   final Map<String, Stream<ChatAppointment?>> _appointmentStreams = {};
   String? _lastReadMarker;
   String? _latestConversationTipMessageId;
@@ -244,9 +250,45 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// 전송 진입점. 민감정보 가능성이 있으면 전송 전에 한 번 더 확인받는다.
+  ///
+  /// 경고 시트가 열려 있는 동안에는 입력창을 비우지 않는다 — 사용자가 "다시
+  /// 확인"을 고르면 작성 중이던 내용이 그대로 남아 있어야 한다.
   Future<void> _send() async {
     final text = _textController.text;
-    if (text.trim().isEmpty || _sending || _blocked || _unmatched) return;
+    if (text.trim().isEmpty ||
+        _sending ||
+        _confirmingSafety ||
+        _blocked ||
+        _unmatched) {
+      return;
+    }
+
+    final detection = detectChatSafetyRisks(text);
+    if (detection.hasRisk) {
+      setState(() => _confirmingSafety = true);
+      final bool? confirmed;
+      try {
+        confirmed = await showChatSafetyWarningSheet(
+          context: context,
+          risks: detection.risks,
+        );
+      } finally {
+        if (mounted) setState(() => _confirmingSafety = false);
+      }
+      // 취소(또는 시트 바깥 탭)면 전송하지 않고 입력 내용을 그대로 둔다.
+      if (confirmed != true || !mounted) return;
+      if (_blocked || _unmatched) return;
+    }
+
+    // 확인을 마쳤으므로 detector를 다시 거치지 않고 캡처한 원문만 전송한다.
+    await _performSend(text);
+  }
+
+  /// 실제 전송. [text]는 _send가 캡처한 원문이며 여기서 재탐지하지 않는다
+  /// (확인 후 경고가 반복되지 않게 하기 위함).
+  Future<void> _performSend(String text) async {
+    if (_sending) return;
 
     // 전송을 시작하는 순간 입력 중 표시는 내린다.
     _setLocalTyping(false);
@@ -606,6 +648,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     // 차단/매칭 해제 상태에서는 상대 접속 정보를 노출하지 않는다.
     final showPresence = !_checkingBlock && _presenceEnabled;
+    // 차단·매칭 해제 상태에서는 안내 배너를 띄우지 않는다(대화가 불가능하므로).
+    // 키보드가 올라온 동안에도 숨긴다 — 작은 화면에서 입력 중 표시·대화 코치
+    // 패널까지 함께 뜨면 세로 공간이 모자라고, 입력 중에는 안내가 방해가 된다.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final showSafetyBanner =
+        showPresence && !_safetyBannerDismissed && !keyboardOpen;
     final presence = showPresence ? _otherPresence : null;
     final now = DateTime.now();
     final otherOnline = presence?.isActuallyOnline(now: now) ?? false;
@@ -659,11 +707,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           PopupMenuButton<String>(
             tooltip: '안전 메뉴',
             onSelected: (value) {
+              if (value == 'safety_guide') showChatSafetyGuideSheet(context);
               if (value == 'report') _reportUser();
               if (value == 'block') _blockUser();
               if (value == 'unmatch') _confirmUnmatch();
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'safety_guide',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 18,
+                      color: AppColors.mintDeep,
+                    ),
+                    SizedBox(width: 8),
+                    Text('안전하게 대화하기'),
+                  ],
+                ),
+              ),
               const PopupMenuItem(value: 'report', child: Text('신고하기')),
               const PopupMenuItem(value: 'block', child: Text('차단하기')),
               if (!_unmatched)
@@ -685,6 +748,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ? const _BlockedChatState()
             : Column(
                 children: [
+                  ChatSafetyBannerSlot(
+                    visible: showSafetyBanner,
+                    onOpenGuide: () => showChatSafetyGuideSheet(context),
+                    onDismiss: () =>
+                        setState(() => _safetyBannerDismissed = true),
+                  ),
                   Expanded(child: _buildMessageList()),
                   _TypingSlot(isTyping: otherTyping),
                   _buildConversationCoach(),
