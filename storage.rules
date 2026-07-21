@@ -85,6 +85,11 @@ service firebase.storage {
         return 'communityFeed/' + uid + '/' + postId + '/' + fileName;
       }
       // Storage Rules → Firestore cross-service 조회.
+      //
+      // 한 번의 Rules 평가에서 읽을 수 있는 Firestore 문서는 최대 2개이고
+      // 읽을 때마다 Firestore 할당량·과금이 발생한다. 그래서 exists()+get()으로
+      // 같은 문서를 두 번 읽지 않고 get() 한 번만 쓴다. 게시물이 없으면 get()이
+      // null을 돌려주고 .data 접근이 평가 오류가 되어 그대로 거부된다.
       function postAllowsRead() {
         let post = firestore.get(
           /databases/(default)/documents/communityPosts/$(postId)
@@ -100,9 +105,6 @@ service firebase.storage {
 
       allow read: if request.auth != null &&
         validPostId() &&
-        firestore.exists(
-          /databases/(default)/documents/communityPosts/$(postId)
-        ) &&
         postAllowsRead();
 
       allow create: if request.auth != null &&
