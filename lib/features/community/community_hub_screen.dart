@@ -8,14 +8,14 @@ import '../../services/community/party_service.dart';
 import '../../services/privacy/contact_avoidance_service.dart';
 import '../../services/safety/safety_service.dart';
 import 'feed/feed_screen.dart';
+import 'group_chat/party_group_chat_list_screen.dart';
 import 'lounge/lounge_screen.dart';
 import 'party/party_square_screen.dart';
 
 /// 커뮤니티 홈(Phase 4-2) — 목적지 선택 화면.
 ///
-/// 네 목적지를 소개하고, 그중 라운지·피드·파티·스퀘어를 실제 화면으로
-/// 연결한다(그룹 채팅은 Phase 4-5). 목록은 여기서 구독하지 않는다 — 각
-/// 목적지 화면이 단독으로 구독한다.
+/// 네 목적지를 모두 실제 화면으로 연결한다(Phase 4-5에서 그룹 채팅까지 열림).
+/// 목록은 여기서 구독하지 않는다 — 각 목적지 화면이 단독으로 구독한다.
 class CommunityHubScreen extends StatelessWidget {
   final AuthService authService;
   final CommunityService communityService;
@@ -33,12 +33,6 @@ class CommunityHubScreen extends StatelessWidget {
     required this.safetyService,
     required this.contactAvoidanceService,
   });
-
-  void _showComingSoon(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
 
   void _openLounge(BuildContext context) {
     Navigator.of(context).push(
@@ -71,6 +65,19 @@ class CommunityHubScreen extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PartySquareScreen(
+          authService: authService,
+          partyService: partyService,
+          safetyService: safetyService,
+          contactAvoidanceService: contactAvoidanceService,
+        ),
+      ),
+    );
+  }
+
+  void _openGroupChatList(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PartyGroupChatListScreen(
           authService: authService,
           partyService: partyService,
           safetyService: safetyService,
@@ -169,11 +176,10 @@ class CommunityHubScreen extends StatelessWidget {
                 cardKey: const ValueKey('community-destination-group-chat'),
                 icon: Icons.groups_outlined,
                 title: '그룹 채팅',
-                description: '관심사가 맞는 사람들과 소규모로 대화해요',
-                statusLabel: '준비 중',
-                available: false,
-                onTap: () =>
-                    _showComingSoon(context, '그룹 채팅은 다음 단계에서 열릴 예정이에요.'),
+                description: '참여 중인 파티에서 함께 대화해요',
+                statusLabel: '이용 가능',
+                available: true,
+                onTap: () => _openGroupChatList(context),
               ),
             ],
           ),
@@ -183,8 +189,8 @@ class CommunityHubScreen extends StatelessWidget {
   }
 }
 
-/// 커뮤니티 목적지 카드. 준비 중인 목적지는 그렇게만 표시하고, 참여자 수·인기
-/// 순위 같은 가짜 지표를 만들지 않는다.
+/// 커뮤니티 목적지 카드. 참여자 수·인기 순위 같은 가짜 지표를 만들지 않는다.
+/// [available]은 아직 열리지 않은 목적지가 생길 때를 위해 남겨둔다.
 class _DestinationCard extends StatelessWidget {
   final Key cardKey;
   final IconData icon;

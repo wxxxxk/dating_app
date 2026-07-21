@@ -1338,6 +1338,94 @@ service cloud.firestore {
 
         allow create, update, delete: if false;
       }
+
+      // communityParties/{partyId}/groupMessages/{messageId} (Phase 4-5):
+      // 승인된 active 멤버만 읽을 수 있다. 권한의 source of truth는
+      // members 서브컬렉션이며, partyMemberships mirror는 보지 않는다
+      // (mirror가 뒤처져도 권한이 새지 않게 한다).
+      match /groupMessages/{messageId} {
+        function activeMemberOf(partyId) {
+          let path = /databases/$(database)/documents/communityParties/$(partyId)/members/$(request.auth.uid);
+          return exists(path) &&
+            get(path).data.status == 'active' &&
+            get(path).data.schemaVersion == 1;
+        }
+
+        function messageKeys() {
+          return [
+            'senderUid', 'senderSnapshot', 'text',
+            'status', 'createdAt', 'updatedAt', 'schemaVersion'
+          ];
+        }
+
+        // 작성자 snapshot은 커뮤니티와 동일한 공개 6개 필드만 담는다.
+        function senderSnapshotValid(data) {
+          let snapshot = data.senderSnapshot;
+          return snapshot is map &&
+            snapshot.keys().hasOnly([
+              'uid', 'displayName', 'photoUrl',
+              'photoVerified', 'workVerified', 'schoolVerified'
+            ]) &&
+            snapshot.keys().hasAll([
+              'uid', 'displayName', 'photoUrl',
+              'photoVerified', 'workVerified', 'schoolVerified'
+            ]) &&
+            snapshot.uid is string &&
+            snapshot.uid == data.senderUid &&
+            snapshot.displayName is string &&
+            snapshot.displayName.size() >= 1 &&
+            snapshot.displayName.size() <= 40 &&
+            snapshot.photoUrl is string &&
+            snapshot.photoUrl.size() <= 2048 &&
+            snapshot.photoVerified is bool &&
+            snapshot.workVerified is bool &&
+            snapshot.schoolVerified is bool;
+        }
+
+        function messageShapeValid() {
+          let data = resource.data;
+          return data.keys().hasOnly(messageKeys()) &&
+            data.keys().hasAll(messageKeys()) &&
+            data.senderUid is string &&
+            data.senderUid.size() > 0 &&
+            senderSnapshotValid(data) &&
+            data.text is string &&
+            data.text.size() >= 1 &&
+            data.text.size() <= 1000 &&
+            data.createdAt is timestamp &&
+            data.updatedAt is timestamp &&
+            data.schemaVersion == 1;
+        }
+
+        // get은 문서 하나를 직접 읽으므로 형태까지 엄격히 검증한다.
+        allow get: if request.auth != null &&
+          partyReadable(partyId) &&
+          activeMemberOf(partyId) &&
+          resource.data.status == 'active' &&
+          messageShapeValid();
+
+        // list는 쿼리 제약으로 보장 가능한 조건만 둔다. 따라서 클라이언트는
+        // status == 'active' 필터 없이 대화를 훑을 수 없다.
+        allow list: if request.auth != null &&
+          partyReadable(partyId) &&
+          activeMemberOf(partyId) &&
+          resource.data.status == 'active';
+
+        // 전송·삭제·신고는 전부 서버 callable(Admin SDK) 전용이다.
+        allow create, update, delete: if false;
+      }
+    }
+
+    // partyMessageReports/{reportId} (Phase 4-5): 운영 검토 전용.
+    // 신고 생성은 reportPartyGroupMessage callable(Admin SDK)만 한다.
+    match /partyMessageReports/{reportId} {
+      allow read, write: if false;
+    }
+
+    // partyMessageWriteLimits/{uid} (Phase 4-5): 서버 전용 rate limit 상태.
+    // 본인도 읽거나 지울 수 없다(우회 방지).
+    match /partyMessageWriteLimits/{uid} {
+      allow read, write: if false;
     }
 
     // partyReports/{reportId} (Phase 4-4): 운영 검토 전용.

@@ -5,8 +5,10 @@ import '../../../models/community/community_party.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../services/community/community_service.dart';
 import '../../../services/community/party_service.dart';
+import '../../../services/privacy/contact_avoidance_service.dart';
 import '../../../services/safety/safety_service.dart';
 import '../community_report_sheet.dart';
+import '../group_chat/party_group_chat_screen.dart';
 import '../community_text_guard.dart';
 import '../lounge/lounge_widgets.dart';
 import 'party_widgets.dart';
@@ -24,6 +26,7 @@ class PartyDetailScreen extends StatefulWidget {
   final AuthService authService;
   final PartyService partyService;
   final SafetyService safetyService;
+  final ContactAvoidanceService contactAvoidanceService;
 
   const PartyDetailScreen({
     super.key,
@@ -31,6 +34,7 @@ class PartyDetailScreen extends StatefulWidget {
     required this.authService,
     required this.partyService,
     required this.safetyService,
+    required this.contactAvoidanceService,
   });
 
   @override
@@ -166,6 +170,21 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// 그룹 채팅으로 이동한다. 최종 자격 판정은 서버·Rules가 한다.
+  void _openGroupChat() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PartyGroupChatScreen(
+          partyId: widget.partyId,
+          authService: widget.authService,
+          partyService: widget.partyService,
+          safetyService: widget.safetyService,
+          contactAvoidanceService: widget.contactAvoidanceService,
+        ),
+      ),
+    );
+  }
+
   // ── 신고 ────────────────────────────────────────────────────────────────
 
   Future<void> _report(CommunityParty party) async {
@@ -265,8 +284,6 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
                 _PartyHeader(party: party),
                 const SizedBox(height: 14),
                 const PartySafetyNotice(),
-                const SizedBox(height: 10),
-                const PartyGroupChatNotice(),
                 const SizedBox(height: 16),
                 if (isHost)
                   _HostActions(
@@ -275,6 +292,7 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
                     busy: _busy,
                     onReview: _review,
                     onCancel: _cancelParty,
+                    onOpenGroupChat: _openGroupChat,
                   )
                 else
                   _ParticipantActions(
@@ -287,6 +305,7 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
                     onWithdraw: _withdraw,
                     onLeave: _leave,
                     onReport: () => _report(party),
+                    onOpenGroupChat: _openGroupChat,
                   ),
               ],
             );
@@ -380,6 +399,7 @@ class _HostActions extends StatelessWidget {
   final Future<void> Function(String requesterUid, {required bool approve})
   onReview;
   final VoidCallback onCancel;
+  final VoidCallback onOpenGroupChat;
 
   const _HostActions({
     required this.party,
@@ -387,6 +407,7 @@ class _HostActions extends StatelessWidget {
     required this.busy,
     required this.onReview,
     required this.onCancel,
+    required this.onOpenGroupChat,
   });
 
   @override
@@ -394,6 +415,14 @@ class _HostActions extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 호스트는 members/{hostUid} 문서를 갖고 있으므로 항상 입장할 수 있다.
+        FilledButton.icon(
+          key: const ValueKey('party-open-group-chat'),
+          onPressed: busy ? null : onOpenGroupChat,
+          icon: const Icon(Icons.groups_outlined, size: 18),
+          label: const Text('그룹 채팅 들어가기'),
+        ),
+        const SizedBox(height: 16),
         const Text(
           '참여 요청',
           style: TextStyle(
@@ -529,6 +558,7 @@ class _ParticipantActions extends StatelessWidget {
   final VoidCallback onWithdraw;
   final VoidCallback onLeave;
   final VoidCallback onReport;
+  final VoidCallback onOpenGroupChat;
 
   const _ParticipantActions({
     required this.party,
@@ -540,6 +570,7 @@ class _ParticipantActions extends StatelessWidget {
     required this.onWithdraw,
     required this.onLeave,
     required this.onReport,
+    required this.onOpenGroupChat,
   });
 
   @override
@@ -555,17 +586,25 @@ class _ParticipantActions extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (isMember)
+                if (isMember) ...[
                   _StateBanner(
                     stateKey: 'party-state-joined',
                     label: '참여 중',
                     description: '호스트가 승인한 파티예요.',
-                  )
-                else if (pending)
+                  ),
+                  FilledButton.icon(
+                    key: const ValueKey('party-open-group-chat'),
+                    onPressed: busy ? null : onOpenGroupChat,
+                    icon: const Icon(Icons.groups_outlined, size: 18),
+                    label: const Text('그룹 채팅 들어가기'),
+                  ),
+                  const SizedBox(height: 4),
+                ] else if (pending)
+                  // 승인 전에는 대화에 들어갈 수 없다는 것을 분명히 알린다.
                   _StateBanner(
                     stateKey: 'party-state-pending',
                     label: '승인 대기',
-                    description: '호스트가 확인하면 알려드릴게요.',
+                    description: '참여 승인 후 그룹 채팅을 이용할 수 있어요.',
                   ),
                 if (!isMember && !pending) ...[
                   if (party.acceptsJoinRequests) ...[

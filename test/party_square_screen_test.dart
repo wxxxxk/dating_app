@@ -425,6 +425,7 @@ Future<_Ctx> _pumpDetail(
         authService: _FakeAuthService(),
         partyService: p,
         safetyService: s,
+        contactAvoidanceService: a,
       ),
     ),
   );
@@ -706,14 +707,8 @@ void main() {
       expect(find.byKey(const ValueKey('party-detail-body')), findsOneWidget);
       expect(find.text('한강 산책 같이 해요'), findsOneWidget);
       expect(find.byKey(const ValueKey('party-safety-notice')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('party-group-chat-notice')),
-        findsOneWidget,
-      );
-      expect(
-        find.text('파티 그룹 채팅은 아직 준비 중이에요. 지금은 파티 안에서 대화할 수 없어요.'),
-        findsOneWidget,
-      );
+      // Phase 4-5: 비멤버에게는 그룹 채팅 버튼을 보여주지 않는다.
+      expect(find.byKey(const ValueKey('party-open-group-chat')), findsNothing);
       expect(tester.takeException(), isNull);
       _expectNoSensitiveText(tester);
     });
@@ -789,6 +784,30 @@ void main() {
 
       expect(ctx.party.calls, contains('leave'));
       expect(find.text('파티에서 나왔어요.'), findsOneWidget);
+    });
+
+    testWidgets('B-4. 참여 중이면 그룹 채팅 버튼이 보인다', (tester) async {
+      final ctx = await _pumpDetail(tester);
+      ctx.party.emitParty('p1', _party());
+      await tester.pump();
+      ctx.party.emitIsMember(true);
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('party-open-group-chat')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('B-4. 승인 대기 중에는 채팅 대신 안내만 보인다', (tester) async {
+      final ctx = await _pumpDetail(tester);
+      ctx.party.emitParty('p1', _party());
+      await tester.pump();
+      ctx.party.emitMyRequest(_joinRequest());
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('party-open-group-chat')), findsNothing);
+      expect(find.text('참여 승인 후 그룹 채팅을 이용할 수 있어요.'), findsOneWidget);
     });
 
     testWidgets('마감된 파티는 참여 요청을 보낼 수 없다', (tester) async {
@@ -886,6 +905,11 @@ void main() {
       expect(find.byKey(const ValueKey('party-join-button')), findsNothing);
       expect(find.byKey(const ValueKey('party-leave-button')), findsNothing);
       expect(find.byKey(const ValueKey('party-report-button')), findsNothing);
+      // 호스트도 members 문서를 갖고 있으므로 채팅에 들어갈 수 있다.
+      expect(
+        find.byKey(const ValueKey('party-open-group-chat')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const ValueKey('party-cancel-button')));
       await tester.pumpAndSettle();

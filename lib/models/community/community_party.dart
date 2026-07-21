@@ -363,3 +363,64 @@ class CommunityPartyJoinRequest {
     );
   }
 }
+
+/// communityParties/{partyId}/groupMessages/{messageId} 문서 모델(Phase 4-5).
+///
+/// 표시에 쓰는 값은 저장된 공개 snapshot과 본문·시각뿐이다 — UID·전화번호·
+/// 기관명·정확 위치·membership 내부 정보는 담지 않는다.
+class PartyGroupMessage {
+  static const int textMaxLength = 1000;
+  static const int supportedSchemaVersion = 1;
+
+  final String id;
+  final String senderUid;
+  final CommunityAuthorSnapshot sender;
+  final String text;
+  final DateTime? createdAt;
+
+  const PartyGroupMessage({
+    required this.id,
+    required this.senderUid,
+    required this.sender,
+    required this.text,
+    required this.createdAt,
+  });
+
+  /// 필수 필드가 malformed거나 removed면 null을 반환한다(부분 렌더링 방지).
+  ///
+  /// **알 수 없는 status를 active로 오인하지 않는다** — 모르면 표시하지 않는
+  /// 쪽(fail-closed)으로 처리한다.
+  static PartyGroupMessage? fromMap(String id, Map<String, dynamic>? data) {
+    if (id.isEmpty || data == null) return null;
+
+    if (data['status'] != 'active') return null;
+
+    final schemaVersion = data['schemaVersion'];
+    if (schemaVersion is! int || schemaVersion != supportedSchemaVersion) {
+      return null;
+    }
+
+    final senderUid = data['senderUid'];
+    if (senderUid is! String || senderUid.isEmpty) return null;
+
+    final sender = CommunityAuthorSnapshot.fromMap(
+      data['senderSnapshot'] is Map
+          ? Map<String, dynamic>.from(data['senderSnapshot'] as Map)
+          : null,
+    );
+    if (sender == null) return null;
+
+    final text = data['text'];
+    if (text is! String || text.isEmpty || text.length > textMaxLength) {
+      return null;
+    }
+
+    return PartyGroupMessage(
+      id: id,
+      senderUid: senderUid,
+      sender: sender,
+      text: text,
+      createdAt: _timestampOf(data['createdAt']),
+    );
+  }
+}

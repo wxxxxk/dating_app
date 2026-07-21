@@ -40,6 +40,17 @@ class PartyService {
   static const String cancelPartyCallable = 'cancelCommunityParty';
   static const String reportPartyCallable = 'reportCommunityParty';
 
+  // Phase 4-5: 그룹 채팅.
+  static const String groupMessagesSubcollection = 'groupMessages';
+  static const int defaultMessageLimit = 100;
+
+  static const String sendMessageCallable = 'sendPartyGroupMessage';
+  static const String deleteMessageCallable = 'deletePartyGroupMessage';
+  static const String reportMessageCallable = 'reportPartyGroupMessage';
+
+  /// 서버가 "연락처 공유 확인이 필요하다"고 알릴 때 details에 담는 고정 code.
+  static const String ackRequiredErrorCode = 'party_chat/ack_required';
+
   DocumentReference<Map<String, dynamic>> _partyRef(String partyId) =>
       _db.collection(collectionPath).doc(partyId);
 
@@ -144,6 +155,24 @@ class PartyService {
         .map((snap) => snap.exists);
   }
 
+  /// 파티 그룹 채팅 메시지를 오래된 순으로 구독한다.
+  ///
+  /// 쿼리 조건(status)은 firestore.rules의 list 조건과 일치해야 한다 —
+  /// 전체를 읽어와 클라이언트에서 거르지 않는다.
+  Stream<List<PartyGroupMessage>> watchGroupMessages({
+    required String partyId,
+    int limit = defaultMessageLimit,
+  }) {
+    if (partyId.isEmpty) return Stream.value(const <PartyGroupMessage>[]);
+    return _partyRef(partyId)
+        .collection(groupMessagesSubcollection)
+        .where('status', isEqualTo: 'active')
+        .orderBy('createdAt')
+        .limit(limit)
+        .snapshots()
+        .map(parseGroupMessages);
+  }
+
   // ── 쓰기(전부 서버 callable) ─────────────────────────────────────────────
 
   /// 파티를 만들고 새 partyId를 돌려준다.
@@ -224,6 +253,51 @@ class PartyService {
     });
   }
 
+  /// 그룹 채팅 메시지를 보내고 새 messageId를 돌려준다.
+  ///
+  /// [safetyAcknowledged]는 클라이언트가 연락처 공유 경고를 보여주고 사용자가
+  /// 계속하기를 고른 경우에만 true다. 서버가 최종 판정한다.
+  Future<String> sendGroupMessage({
+    required String partyId,
+    required String text,
+    bool safetyAcknowledged = false,
+  }) async {
+    final data = await _call(sendMessageCallable, {
+      'partyId': partyId,
+      'text': text,
+      'safetyAcknowledged': safetyAcknowledged,
+    });
+    final messageId = data['messageId'];
+    if (messageId is! String || messageId.isEmpty) {
+      throw const CommunityActionError(CommunityService.genericErrorMessage);
+    }
+    return messageId;
+  }
+
+  Future<void> deleteGroupMessage({
+    required String partyId,
+    required String messageId,
+  }) async {
+    await _call(deleteMessageCallable, {
+      'partyId': partyId,
+      'messageId': messageId,
+    });
+  }
+
+  Future<void> reportGroupMessage({
+    required String partyId,
+    required String messageId,
+    required String reason,
+    String? detail,
+  }) async {
+    await _call(reportMessageCallable, {
+      'partyId': partyId,
+      'messageId': messageId,
+      'reason': reason,
+      'detail': detail?.trim() ?? '',
+    });
+  }
+
   /// callable 호출 공통 처리. raw Firebase 오류는 밖으로 내보내지 않고,
   /// 입력 text/uid도 로그로 남기지 않는다.
   Future<Map<Object?, Object?>> _call(
@@ -252,6 +326,15 @@ class PartyService {
   static CommunityActionError mapPartyException(
     FirebaseFunctionsException e,
   ) {
+    final details = e.details;
+    if (details is Map && details['code'] == ackRequiredErrorCode) {
+      // 연락처 공유 확인이 필요한 경우다 — 화면이 경고를 띄우고 다시 보낸다.
+      return PartyContactAckRequired(
+        e.message?.trim().isNotEmpty == true
+            ? e.message!.trim()
+            : PartyContactAckRequired.defaultMessage,
+      );
+    }
     switch (e.code) {
       case 'permission-denied':
         return const CommunityActionError('지금은 이 파티에 참여할 수 없어요.');
@@ -300,6 +383,22 @@ class PartyService {
     return List<CommunityPartyMembership>.unmodifiable(memberships);
   }
 
+  /// 스냅샷 → 표시 가능한 메시지 목록(순수 함수).
+  /// malformed 문서와 removed 메시지는 조용히 건너뛴다.
+  static List<PartyGroupMessage> parseGroupMessages(
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    final messages = <PartyGroupMessage>[];
+    final seen = <String>{};
+    for (final doc in snapshot.docs) {
+      final message = PartyGroupMessage.fromMap(doc.id, doc.data());
+      if (message == null) continue;
+      if (!seen.add(message.id)) continue;
+      messages.add(message);
+    }
+    return List<PartyGroupMessage>.unmodifiable(messages);
+  }
+
   static List<CommunityPartyJoinRequest> parseJoinRequests(
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) {
@@ -344,4 +443,16 @@ class PartyReviewResult {
       status: status,
     );
   }
+}
+
+/// 연락처·외부 메신저 언급이 있어 사용자 확인이 필요한 상태(Phase 4-5).
+///
+/// 실패가 아니라 "한 번 더 확인하고 다시 보내라"는 신호다. 화면이 경고를
+/// 보여주고 사용자가 계속하기를 고르면 safetyAcknowledged: true로 재전송한다.
+class PartyContactAckRequired extends CommunityActionError {
+  static const String defaultMessage =
+      '연락처를 공유하면 원하지 않는 연락을 받을 수 있어요.\n'
+      '파티 참여자에게만 보내는 내용인지 다시 확인해주세요.';
+
+  const PartyContactAckRequired(super.message);
 }

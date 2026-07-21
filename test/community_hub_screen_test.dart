@@ -184,20 +184,34 @@ void main() {
       ]) {
         expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
       }
-      // Phase 4-4: 라운지·피드·파티는 이용 가능, 그룹 채팅만 준비 중.
-      expect(find.text('이용 가능'), findsNWidgets(3));
-      expect(find.text('준비 중'), findsOneWidget);
+      // Phase 4-5: 네 목적지가 모두 열렸다.
+      expect(find.text('이용 가능'), findsNWidgets(4));
+      expect(find.text('준비 중'), findsNothing);
 
-      // 10. 준비 중인 그룹 채팅만 안내를 띄운다.
+      // 10. 더 이상 준비 중 안내를 띄우는 목적지가 없다.
+      for (final message in [
+        '그룹 채팅은 다음 단계에서 열릴 예정이에요.',
+        '파티·스퀘어는 다음 단계에서 열릴 예정이에요.',
+        '피드는 다음 단계에서 열릴 예정이에요.',
+      ]) {
+        expect(find.text(message), findsNothing);
+      }
+    });
+
+    testWidgets('B-3. 그룹 채팅 카드는 PartyGroupChatListScreen을 연다', (tester) async {
+      await _pump(tester);
+
       await tester.tap(
         find.byKey(const ValueKey('community-destination-group-chat')),
       );
+      // 실제 서비스라 목록 stream은 끝나지 않는다. settle 대신 프레임만 넘긴다.
       await tester.pump();
-      await tester.pump();
-      expect(find.text('그룹 채팅은 다음 단계에서 열릴 예정이에요.'), findsOneWidget);
-      // 파티·피드는 더 이상 준비 중 안내를 띄우지 않는다.
-      expect(find.text('파티·스퀘어는 다음 단계에서 열릴 예정이에요.'), findsNothing);
-      expect(find.text('피드는 다음 단계에서 열릴 예정이에요.'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(
+        find.byKey(const ValueKey('party-group-chat-list-screen')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('B-1. 파티·스퀘어 카드는 PartySquareScreen을 연다', (tester) async {

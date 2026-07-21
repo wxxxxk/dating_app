@@ -101,6 +101,43 @@ Future<CommunityReportOutcome?> showPartyReportSheet(
   );
 }
 
+/// 파티 그룹 채팅 메시지 신고 시트(Phase 4-5).
+///
+/// 사유 allowlist·차단 분리 계약은 게시물·파티 신고와 동일하다. 신고만으로
+/// 메시지가 지워지거나 멤버가 빠지지 않는다 — 차단은 체크했을 때만 별도로 한다.
+Future<CommunityReportOutcome?> showPartyMessageReportSheet(
+  BuildContext context, {
+  required PartyService partyService,
+  required SafetyService safetyService,
+  required String currentUid,
+  required String partyId,
+  required String messageId,
+  required String reportedUid,
+}) {
+  return showModalBottomSheet<CommunityReportOutcome>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: AppColors.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+    ),
+    builder: (_) => CommunityReportSheet(
+      title: '메시지 신고',
+      blockLabel: '신고 후 이 사용자 차단',
+      safetyService: safetyService,
+      currentUid: currentUid,
+      reportedUid: reportedUid,
+      onSubmit: (reason, detail) => partyService.reportGroupMessage(
+        partyId: partyId,
+        messageId: messageId,
+        reason: reason,
+        detail: detail,
+      ),
+    ),
+  );
+}
+
 class CommunityReportSheet extends StatefulWidget {
   final String title;
   final String blockLabel;

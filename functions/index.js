@@ -77,6 +77,11 @@ const {
   cancelCommunityPartyCore,
   reportCommunityPartyCore,
 } = require('./lib/community_party');
+const {
+  sendPartyGroupMessageCore,
+  deletePartyGroupMessageCore,
+  reportPartyGroupMessageCore,
+} = require('./lib/community_party_chat');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
@@ -3626,6 +3631,18 @@ exports.withdrawPartyJoinRequest = partyCallable(withdrawPartyJoinRequestCore);
 exports.leaveCommunityParty = partyCallable(leaveCommunityPartyCore);
 exports.cancelCommunityParty = partyCallable(cancelCommunityPartyCore);
 exports.reportCommunityParty = partyCallable(reportCommunityPartyCore);
+
+// ============================================================================
+// Phase 4-5: 파티 기반 그룹 채팅 (메시지 전송·삭제·신고)
+// ============================================================================
+//
+// 권한의 source of truth는 communityParties/{partyId}/members/{uid}다.
+// partyMemberships mirror만으로 판단하지 않는다. 커뮤니티와 같은 오류 계약
+// (__communitySafeError)을 쓰므로 같은 wrapper를 재사용한다.
+
+exports.sendPartyGroupMessage = communityCallable(sendPartyGroupMessageCore);
+exports.deletePartyGroupMessage = communityCallable(deletePartyGroupMessageCore);
+exports.reportPartyGroupMessage = communityCallable(reportPartyGroupMessageCore);
 
 // ============================================================================
 // Phase 0-G-2B: 회원 탈퇴 서버 처리

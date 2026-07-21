@@ -8,6 +8,7 @@ const {
 } = require('./account_deletion_plan');
 const { cleanupCommunityContentForUser } = require('./community');
 const { cleanupPartyDataForUser } = require('./community_party');
+const { cleanupPartyChatDataForUser } = require('./community_party_chat');
 
 const FUNCTION_NAME = 'deleteMyAccount';
 const CONFIRMATION_TEXT = 'DELETE_MY_ACCOUNT';
@@ -1104,6 +1105,13 @@ async function deleteMyAccountCore({
           deletedIdentifier,
           serverTimestamp,
         });
+        // Phase 4-5: 그룹 채팅 메시지는 soft remove + 작성자 익명화.
+        const partyChat = await cleanupPartyChatDataForUser({
+          db,
+          uid,
+          deletedIdentifier,
+          serverTimestamp,
+        });
         const usage = await cleanupUsageState({ db, uid });
         return {
           ...shared,
@@ -1112,6 +1120,7 @@ async function deleteMyAccountCore({
           ...jelly,
           ...community,
           ...party,
+          ...partyChat,
           ...usage,
         };
       },

@@ -83,6 +83,7 @@ class _PartySquareScreenState extends State<PartySquareScreen> {
           authService: widget.authService,
           partyService: widget.partyService,
           safetyService: widget.safetyService,
+          contactAvoidanceService: widget.contactAvoidanceService,
         ),
       ),
     );
