@@ -236,13 +236,14 @@ PartyGroupMessage _message({
   String senderUid = kOther,
   String name = '참여자',
   String text = '오늘 3시에 만나요',
+  DateTime? createdAt,
 }) {
   return PartyGroupMessage(
     id: id,
     senderUid: senderUid,
     sender: _author(senderUid, name: name),
     text: text,
-    createdAt: DateTime(2026, 7, 20, 15),
+    createdAt: createdAt ?? DateTime(2026, 7, 20, 15),
   );
 }
 
@@ -482,7 +483,10 @@ void main() {
       await tester.pump();
 
       expect(find.text('한강 산책 같이 해요'), findsOneWidget);
-      expect(find.byKey(const ValueKey('party-safety-notice')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('party-chat-safety-banner')),
+        findsOneWidget,
+      );
       expect(
         find.byKey(const ValueKey('party-chat-message-m1')),
         findsOneWidget,
@@ -575,7 +579,7 @@ void main() {
       ctx.party.emitMessages(const []);
       await tester.pump();
 
-      final button = tester.widget<FilledButton>(
+      final button = tester.widget<IconButton>(
         find.byKey(const ValueKey('party-chat-send')),
       );
       expect(button.onPressed, isNull);
@@ -587,7 +591,7 @@ void main() {
       await tester.pump();
       expect(
         tester
-            .widget<FilledButton>(find.byKey(const ValueKey('party-chat-send')))
+            .widget<IconButton>(find.byKey(const ValueKey('party-chat-send')))
             .onPressed,
         isNull,
       );
@@ -727,7 +731,11 @@ void main() {
       ]);
       await tester.pump();
 
-      await tester.tap(find.byKey(const ValueKey('party-chat-menu-mine')));
+      // 항상 보이는 점 세 개 버튼은 없다. 길게 눌러야 메뉴가 뜬다.
+      expect(find.text('삭제하기'), findsNothing);
+      await tester.longPress(
+        find.byKey(const ValueKey('party-chat-message-mine')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('삭제하기'), findsOneWidget);
       expect(find.text('신고하기'), findsNothing);
@@ -749,7 +757,10 @@ void main() {
       ctx.party.emitMessages([_message()]);
       await tester.pump();
 
-      await tester.tap(find.byKey(const ValueKey('party-chat-menu-m1')));
+      expect(find.text('신고하기'), findsNothing);
+      await tester.longPress(
+        find.byKey(const ValueKey('party-chat-message-m1')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('신고하기'), findsOneWidget);
       expect(find.text('삭제하기'), findsNothing);
@@ -780,7 +791,7 @@ void main() {
   });
 
   group('레이아웃', () {
-    testWidgets('전송 버튼은 폭 64~80·높이 48이고 exception이 없다', (tester) async {
+    testWidgets('전송 버튼은 48x48 원형 아이콘이고 exception이 없다', (tester) async {
       final ctx = await _pumpChat(tester, viewport: const Size(360, 720));
       ctx.party.emitParty(kPartyId, _party());
       await tester.pump();
@@ -791,15 +802,16 @@ void main() {
       final size = tester.getSize(
         find.byKey(const ValueKey('party-chat-send')),
       );
-      expect(size.width, greaterThanOrEqualTo(64));
-      expect(size.width, lessThanOrEqualTo(80));
+      expect(size.width, 48, reason: '무한 폭 회귀 방지 — 크기가 고정돼야 한다');
       expect(size.height, 48);
 
       final button = tester.getRect(
         find.byKey(const ValueKey('party-chat-send')),
       );
       expect(button.right, lessThanOrEqualTo(360));
-      expect(find.text('전송'), findsOneWidget);
+      // 글자형 '전송' 버튼이 아니라 send 아이콘이다.
+      expect(find.text('전송'), findsNothing);
+      expect(find.byIcon(Icons.send_rounded), findsOneWidget);
     });
 
     testWidgets('작은 화면 + 키보드에서도 overflow가 없다', (tester) async {
@@ -839,6 +851,223 @@ void main() {
       expect(tester.takeException(), isNull);
       ctx.party.sendGate!.complete();
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('작은 세로 화면에서도 overflow가 없다', (tester) async {
+      final ctx = await _pumpChat(tester, viewport: const Size(360, 480));
+      ctx.party.emitParty(kPartyId, _party());
+      await tester.pump();
+      ctx.party.emitMessages([
+        _message(text: '가' * 300),
+        _message(id: 'm2', senderUid: kMe, name: '나', text: '좋아요'),
+      ]);
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  // Phase 4-7 — 게시물 댓글형 카드에서 대화방 말풍선으로 바꾼 UX 계약.
+  group('B-19. 대화방 UX', () {
+    /// 메시지 두 건(상대 → 나)을 띄운 기본 상태.
+    Future<_Ctx> pumpConversation(
+      WidgetTester tester, {
+      List<PartyGroupMessage>? messages,
+      Size viewport = const Size(360, 720),
+    }) async {
+      final ctx = await _pumpChat(tester, viewport: viewport);
+      ctx.party.emitParty(kPartyId, _party());
+      await tester.pump();
+      ctx.party.emitMessages(
+        messages ??
+            [
+              _message(text: '오늘 3시에 만나요'),
+              _message(id: 'm2', senderUid: kMe, name: '나', text: '좋아요'),
+            ],
+      );
+      await tester.pump();
+      return ctx;
+    }
+
+    testWidgets('1~2. 본인은 오른쪽, 상대는 왼쪽에 정렬된다', (tester) async {
+      await pumpConversation(tester);
+
+      const center = 360 / 2;
+      expect(
+        tester.getCenter(find.text('좋아요')).dx,
+        greaterThan(center),
+        reason: '본인 메시지는 오른쪽',
+      );
+      expect(
+        tester.getCenter(find.text('오늘 3시에 만나요')).dx,
+        lessThan(center),
+        reason: '상대 메시지는 왼쪽',
+      );
+    });
+
+    testWidgets('3~4. 이름·프로필은 상대 메시지에만 붙는다', (tester) async {
+      await pumpConversation(tester);
+
+      // 상대 그룹 첫 메시지에는 이름과 아바타가 있다.
+      expect(find.text('참여자'), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsOneWidget);
+      // 본인 메시지에는 이름이 없다.
+      expect(find.text('나'), findsNothing);
+    });
+
+    testWidgets('5. 같은 사람의 5분 이내 연속 메시지는 한 그룹이다', (tester) async {
+      await pumpConversation(
+        tester,
+        messages: [
+          _message(id: 'a1', text: '안녕하세요', createdAt: DateTime(2026, 1, 5, 15)),
+          _message(
+            id: 'a2',
+            text: '반가워요',
+            createdAt: DateTime(2026, 1, 5, 15, 3),
+          ),
+        ],
+      );
+
+      // 이름·프로필은 그룹 첫 메시지에만.
+      expect(find.text('참여자'), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsOneWidget);
+      // 시간은 그룹 마지막에만.
+      expect(find.text('15:03'), findsOneWidget);
+      expect(find.text('15:00'), findsNothing);
+    });
+
+    testWidgets('6. 발신자가 바뀌면 그룹이 끊긴다', (tester) async {
+      await pumpConversation(
+        tester,
+        messages: [
+          _message(id: 'a1', text: '안녕하세요', createdAt: DateTime(2026, 1, 5, 15)),
+          _message(
+            id: 'b1',
+            senderUid: kAvoided,
+            name: '다른참여자',
+            text: '반가워요',
+            createdAt: DateTime(2026, 1, 5, 15, 1),
+          ),
+        ],
+      );
+
+      expect(find.text('참여자'), findsOneWidget);
+      expect(find.text('다른참여자'), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsNWidgets(2));
+      // 앞 메시지도 그룹의 마지막이므로 시간이 붙는다.
+      expect(find.text('15:00'), findsOneWidget);
+      expect(find.text('15:01'), findsOneWidget);
+    });
+
+    testWidgets('7. 5분을 넘기면 같은 사람이어도 그룹이 끊긴다', (tester) async {
+      await pumpConversation(
+        tester,
+        messages: [
+          _message(id: 'a1', text: '안녕하세요', createdAt: DateTime(2026, 1, 5, 15)),
+          _message(
+            id: 'a2',
+            text: '아직 계신가요',
+            createdAt: DateTime(2026, 1, 5, 15, 6),
+          ),
+        ],
+      );
+
+      expect(find.text('참여자'), findsNWidgets(2));
+      expect(find.text('15:00'), findsOneWidget);
+      expect(find.text('15:06'), findsOneWidget);
+    });
+
+    testWidgets('8. 날짜가 바뀌면 구분선이 들어간다', (tester) async {
+      await pumpConversation(
+        tester,
+        messages: [
+          _message(id: 'd1', text: '어제 이야기', createdAt: DateTime(2026, 1, 5, 15)),
+          _message(id: 'd2', text: '오늘 이야기', createdAt: DateTime(2026, 1, 6, 9)),
+        ],
+      );
+
+      expect(find.byKey(const ValueKey('party-chat-date-20260105')), findsOne);
+      expect(find.byKey(const ValueKey('party-chat-date-20260106')), findsOne);
+      expect(find.text('1월 5일'), findsOneWidget);
+      expect(find.text('1월 6일'), findsOneWidget);
+    });
+
+    testWidgets('10. 긴 메시지도 말풍선 최대 폭을 넘지 않는다', (tester) async {
+      const long = '가나다라마바사아자차카타파하';
+      await pumpConversation(
+        tester,
+        messages: [_message(id: 'long', text: long * 20)],
+      );
+
+      final width = tester.getSize(find.text(long * 20)).width;
+      expect(
+        width,
+        lessThanOrEqualTo(360 * 0.78),
+        reason: '전체 폭 카드가 아니라 말풍선이어야 한다',
+      );
+    });
+
+    testWidgets('13. 항상 보이는 popup menu는 없다', (tester) async {
+      await pumpConversation(tester);
+
+      expect(find.byType(PopupMenuButton<String>), findsNothing);
+      expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
+    });
+
+    testWidgets('14~15. 입력창은 둥근 surface, 전송은 원형 아이콘이다', (tester) async {
+      await pumpConversation(tester);
+
+      final field = tester.widget<TextField>(
+        find.byKey(const ValueKey('party-chat-input')),
+      );
+      expect(field.decoration?.filled, isTrue);
+      expect(field.decoration?.hintText, '메시지를 입력하세요');
+      expect(field.minLines, 1);
+      expect(field.maxLines, 4);
+      expect(field.maxLength, PartyGroupMessage.textMaxLength);
+      expect(field.textInputAction, TextInputAction.send);
+      final border = field.decoration?.border;
+      expect(border, isA<OutlineInputBorder>());
+      expect(
+        (border! as OutlineInputBorder).borderRadius.topLeft.x,
+        greaterThan(0),
+      );
+
+      expect(find.byIcon(Icons.send_rounded), findsOneWidget);
+    });
+
+    testWidgets('7장. 안전 안내는 얇은 배너이고 닫을 수 있다', (tester) async {
+      await pumpConversation(tester);
+
+      final banner = find.byKey(const ValueKey('party-chat-safety-banner'));
+      expect(banner, findsOneWidget);
+      // 대화 첫 화면을 밀어내지 않을 만큼 얇아야 한다.
+      expect(tester.getSize(banner).height, lessThanOrEqualTo(56));
+      expect(find.textContaining('연락처'), findsOneWidget);
+
+      await tester.tap(
+        find.byKey(const ValueKey('party-chat-safety-dismiss')),
+      );
+      await tester.pump();
+      expect(banner, findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('23. 취소된 파티는 대화방 UI 없이 안내만 남는다', (tester) async {
+      final ctx = await pumpConversation(tester);
+      ctx.party.emitParty(kPartyId, null);
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('party-chat-unavailable')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('party-chat-safety-banner')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('party-chat-send')), findsNothing);
+      expect(find.text('좋아요'), findsNothing);
     });
   });
 }
