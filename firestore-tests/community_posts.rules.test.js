@@ -217,48 +217,155 @@ test('12~14. 클라이언트는 게시물을 만들거나 고치거나 지울 �
   await assertFails(deleteDoc(postRef(aDb(), 'lounge1')));
 });
 
-// ── comments ────────────────────────────────────────────────────────────
-test('15~16. 댓글 서브컬렉션은 아직 열려 있지 않다', async () => {
-  await seedPost('lounge1', postDoc());
+// ── comments (Phase 4-2) ────────────────────────────────────────────────
+function commentDoc(postId, overrides = {}) {
+  return {
+    postId,
+    authorUid: AUTHOR,
+    authorSnapshot: authorSnapshot(),
+    text: '댓글이에요',
+    status: 'active',
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+function commentRef(db, postId, commentId) {
+  return doc(db, 'communityPosts', postId, 'comments', commentId);
+}
+
+async function seedComment(postId, commentId, data) {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(commentRef(ctx.firestore(), postId, commentId), data);
+  });
+}
+
+async function seedReaction(postId, uid) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(
-      doc(ctx.firestore(), 'communityPosts', 'lounge1', 'comments', 'c1'),
-      {
-        postId: 'lounge1',
-        authorUid: AUTHOR,
-        authorSnapshot: authorSnapshot(),
-        text: '댓글',
-        status: 'active',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        schemaVersion: 1,
-      },
+      doc(ctx.firestore(), 'communityPosts', postId, 'reactions', uid),
+      { uid, type: 'like', createdAt: Timestamp.now(), schemaVersion: 1 },
     );
   });
+}
 
-  const commentRef = doc(
-    aDb(),
-    'communityPosts',
-    'lounge1',
-    'comments',
-    'c1',
+test('15. active 댓글은 읽을 수 있고 서비스 쿼리도 통과한다', async () => {
+  await seedPost('lounge1', postDoc());
+  await seedComment('lounge1', 'c1', commentDoc('lounge1'));
+
+  await assertSucceeds(getDoc(commentRef(aDb(), 'lounge1', 'c1')));
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(aDb(), 'communityPosts', 'lounge1', 'comments'),
+        where('status', '==', 'active'),
+        orderBy('createdAt'),
+      ),
+    ),
   );
-  await assertFails(getDoc(commentRef));
+  // 비로그인·status 필터 없는 조회는 거부된다.
+  await assertFails(getDoc(commentRef(anonDb(), 'lounge1', 'c1')));
   await assertFails(
     getDocs(collection(aDb(), 'communityPosts', 'lounge1', 'comments')),
   );
-  await assertFails(updateDoc(commentRef, { text: '수정' }));
-  await assertFails(deleteDoc(commentRef));
+});
+
+test('16~17. removed 댓글과 비활성 부모의 댓글은 읽을 수 없다', async () => {
+  await seedPost('lounge1', postDoc());
+  await seedPost('removedPost', postDoc({ status: 'removed' }));
+  await seedComment('lounge1', 'removed', commentDoc('lounge1', { status: 'removed' }));
+  await seedComment('removedPost', 'c1', commentDoc('removedPost'));
+
+  await assertFails(getDoc(commentRef(aDb(), 'lounge1', 'removed')));
+  await assertFails(getDoc(commentRef(aDb(), 'removedPost', 'c1')));
   await assertFails(
-    setDoc(doc(aDb(), 'communityPosts', 'lounge1', 'comments', 'c2'), {
-      postId: 'lounge1',
-      authorUid: A,
-      text: '새 댓글',
-      status: 'active',
+    getDocs(
+      query(
+        collection(aDb(), 'communityPosts', 'removedPost', 'comments'),
+        where('status', '==', 'active'),
+        orderBy('createdAt'),
+      ),
+    ),
+  );
+  // 형태가 깨진 댓글도 get으로 읽히지 않는다.
+  await seedComment('lounge1', 'bad', commentDoc('lounge1', { schemaVersion: 2 }));
+  await assertFails(getDoc(commentRef(aDb(), 'lounge1', 'bad')));
+});
+
+test('18~19. 클라이언트는 댓글을 만들거나 고치거나 지울 수 없다', async () => {
+  await seedPost('lounge1', postDoc());
+  await seedComment('lounge1', 'c1', commentDoc('lounge1'));
+
+  await assertFails(
+    setDoc(commentRef(aDb(), 'lounge1', 'c2'), {
+      ...commentDoc('lounge1', { authorUid: A, authorSnapshot: authorSnapshot({ uid: A }) }),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(updateDoc(commentRef(aDb(), 'lounge1', 'c1'), { text: '수정' }));
+  await assertFails(deleteDoc(commentRef(aDb(), 'lounge1', 'c1')));
+});
+
+// ── reactions (Phase 4-2) ───────────────────────────────────────────────
+test('20~23. 본인 공감 문서만 읽을 수 있고 목록·쓰기는 막힌다', async () => {
+  await seedPost('lounge1', postDoc());
+  await seedReaction('lounge1', A);
+  await seedReaction('lounge1', AUTHOR);
+
+  const mine = doc(aDb(), 'communityPosts', 'lounge1', 'reactions', A);
+  const theirs = doc(aDb(), 'communityPosts', 'lounge1', 'reactions', AUTHOR);
+
+  await assertSucceeds(getDoc(mine));
+  // 다른 사람의 공감 여부는 확인할 수 없다.
+  await assertFails(getDoc(theirs));
+  // 공감한 사용자 목록도 훑을 수 없다.
+  await assertFails(
+    getDocs(collection(aDb(), 'communityPosts', 'lounge1', 'reactions')),
+  );
+  await assertFails(
+    setDoc(doc(aDb(), 'communityPosts', 'lounge1', 'reactions', A), {
+      uid: A,
+      type: 'like',
+      createdAt: serverTimestamp(),
       schemaVersion: 1,
     }),
+  );
+  await assertFails(deleteDoc(mine));
+});
+
+// ── server-only collections (Phase 4-2) ─────────────────────────────────
+test('24~25. communityReports·communityWriteLimits는 클라이언트가 접근할 수 없다', async () => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'communityReports', 'r1'), {
+      reporterUid: A,
+      reportedUid: AUTHOR,
+      targetType: 'post',
+      postId: 'lounge1',
+      commentId: '',
+      reason: 'spam_scam',
+      createdAt: Timestamp.now(),
+      schemaVersion: 1,
+    });
+    await setDoc(doc(db, 'communityWriteLimits', A), {
+      lastPostAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      schemaVersion: 1,
+    });
+  });
+
+  await assertFails(getDoc(doc(aDb(), 'communityReports', 'r1')));
+  await assertFails(getDocs(collection(aDb(), 'communityReports')));
+  await assertFails(
+    setDoc(doc(aDb(), 'communityReports', 'r2'), { reporterUid: A }),
+  );
+  await assertFails(getDoc(doc(aDb(), 'communityWriteLimits', A)));
+  await assertFails(deleteDoc(doc(aDb(), 'communityWriteLimits', A)));
+  await assertFails(
+    setDoc(doc(aDb(), 'communityWriteLimits', A), { lastPostAt: null }),
   );
 });
 

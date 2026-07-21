@@ -118,6 +118,19 @@ class FakeDocRef {
     this.db.operations.push(`delete:${this.path}`);
     this.db.docs.delete(this.path);
   }
+
+  /** 서브컬렉션 문서에서 부모 문서를 찾는 경로(커뮤니티 카운트 보정에서 사용). */
+  get parent() {
+    const parts = this.path.split('/');
+    return {
+      id: parts.at(-2),
+      path: parts.slice(0, -1).join('/'),
+      parent:
+        parts.length > 2
+          ? new FakeDocRef(this.db, parts.slice(0, -2).join('/'))
+          : null,
+    };
+  }
 }
 
 class FakeCollectionRef {
@@ -1242,4 +1255,98 @@ test('3-4A: 기존 match/message/report 익명화 계약은 그대로다', async
   assert.equal(message.text, 'other body must stay');
 
   assert.ok(ctx.db.docs.get('reports/r1'), '신고는 보존된다');
+});
+
+// ── Phase 4-2: 커뮤니티 데이터 수명주기 ────────────────────────────────────
+
+function communitySeed() {
+  return {
+    ...seed(),
+    'communityPosts/mine': {
+      surface: 'lounge',
+      authorUid: UID,
+      authorSnapshot: { uid: UID, displayName: 'Secret Name', photoUrl: 'p' },
+      text: 'my lounge post',
+      status: 'active',
+      visibility: 'authenticated',
+      reactionCount: 0,
+      commentCount: 0,
+      schemaVersion: 1,
+    },
+    'communityPosts/theirs': {
+      surface: 'lounge',
+      authorUid: OTHER,
+      authorSnapshot: { uid: OTHER, displayName: 'Other', photoUrl: '' },
+      text: 'other lounge post',
+      status: 'active',
+      visibility: 'authenticated',
+      reactionCount: 1,
+      commentCount: 1,
+      schemaVersion: 1,
+    },
+    'communityPosts/theirs/comments/c1': {
+      postId: 'theirs',
+      authorUid: UID,
+      authorSnapshot: { uid: UID, displayName: 'Secret Name' },
+      text: 'my comment',
+      status: 'active',
+      schemaVersion: 1,
+    },
+    [`communityPosts/theirs/reactions/${UID}`]: { uid: UID, type: 'like' },
+    'communityReports/rep-mine': {
+      reporterUid: UID,
+      reportedUid: OTHER,
+      targetType: 'post',
+      postId: 'theirs',
+      commentId: '',
+      reason: 'other',
+    },
+    'communityReports/rep-others': {
+      reporterUid: OTHER,
+      reportedUid: UID,
+      targetType: 'post',
+      postId: 'mine',
+      commentId: '',
+      reason: 'other',
+    },
+  };
+}
+
+test('4-2: 탈퇴 시 커뮤니티 게시물/댓글은 익명 soft remove, 반응은 삭제된다', async () => {
+  const ctx = await runDelete({ seed: communitySeed() });
+
+  const post = ctx.db.docs.get('communityPosts/mine');
+  assert.ok(post, '게시물 문서는 보존된다(운영 검토 참조)');
+  assert.equal(post.status, 'removed');
+  assert.equal(post.authorUid, DELETED_ID);
+  assert.equal(post.authorSnapshot.uid, DELETED_ID);
+  assert.equal(post.authorSnapshot.displayName, '탈퇴한 사용자');
+  assert.equal(post.authorSnapshot.photoUrl, '');
+
+  const comment = ctx.db.docs.get('communityPosts/theirs/comments/c1');
+  assert.equal(comment.status, 'removed');
+  assert.equal(comment.authorUid, DELETED_ID);
+  assert.equal(comment.authorSnapshot.displayName, '탈퇴한 사용자');
+
+  // 상대 게시물은 유지되고 카운트만 안전하게 줄어든다.
+  const theirs = ctx.db.docs.get('communityPosts/theirs');
+  assert.equal(theirs.status, 'active');
+  assert.equal(theirs.commentCount, 0);
+  assert.equal(theirs.reactionCount, 0);
+  assert.equal(ctx.db.docs.has(`communityPosts/theirs/reactions/${UID}`), false);
+
+  // 신고는 보존하되 신고자만 pseudonym으로 바꾼다.
+  assert.equal(ctx.db.docs.get('communityReports/rep-mine').reporterUid, DELETED_ID);
+  assert.equal(ctx.db.docs.get('communityReports/rep-others').reporterUid, OTHER);
+
+  // Auth 삭제는 여전히 마지막이다.
+  assert.deepEqual(ctx.auth.deleted, [UID]);
+  const job = ctx.db.docs.get(`_accountDeletionJobs/${UID_HASH}`);
+  assert.equal(job.status, 'COMPLETED');
+
+  // 로그에 raw UID/본문이 남지 않는다.
+  const logged = JSON.stringify(ctx.loggerRecords);
+  assert.equal(logged.includes(UID), false);
+  assert.equal(logged.includes('my lounge post'), false);
+  assert.equal(logged.includes('my comment'), false);
 });

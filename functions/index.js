@@ -59,6 +59,14 @@ const {
   reviewPhotoVerificationCore,
 } = require('./lib/photo_verification_review');
 const { tokensForRecipient } = require('./lib/push_tokens');
+const {
+  createLoungePostCore,
+  createCommunityCommentCore,
+  toggleCommunityReactionCore,
+  deleteCommunityPostCore,
+  deleteCommunityCommentCore,
+  reportCommunityContentCore,
+} = require('./lib/community');
 
 setGlobalOptions({ region: 'asia-northeast3' });
 
@@ -3527,6 +3535,43 @@ exports.verifyJellyPurchase = onCall(async (request) => {
     throw toHttpsError(error, HttpsError);
   }
 });
+
+// ============================================================================
+// Phase 4-2: 라운지 커뮤니티 (게시물·댓글·공감·삭제·신고)
+// ============================================================================
+//
+// 커뮤니티 write는 전부 서버 전용이다(firestore.rules는 client write 차단).
+// 작성자 snapshot은 publicProfiles에서만 만들고, 공개 글의 전화번호/인증번호/
+// 송금 요청은 서버가 거부한다. 응답에는 uid·본문·내부 경로를 담지 않는다.
+
+/** core가 던진 안전한 HttpsError만 그대로 통과시키고 나머지는 감싼다. */
+function toCommunityHttpsError(error) {
+  if (error?.__communitySafeError === true) return error;
+  return new HttpsError('internal', '잠시 후 다시 시도해주세요.');
+}
+
+function communityCallable(core) {
+  return onCall(async (request) => {
+    try {
+      return await core({
+        request,
+        db,
+        HttpsError,
+        serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+        logger: console,
+      });
+    } catch (error) {
+      throw toCommunityHttpsError(error);
+    }
+  });
+}
+
+exports.createLoungePost = communityCallable(createLoungePostCore);
+exports.createCommunityComment = communityCallable(createCommunityCommentCore);
+exports.toggleCommunityReaction = communityCallable(toggleCommunityReactionCore);
+exports.deleteCommunityPost = communityCallable(deleteCommunityPostCore);
+exports.deleteCommunityComment = communityCallable(deleteCommunityCommentCore);
+exports.reportCommunityContent = communityCallable(reportCommunityContentCore);
 
 // ============================================================================
 // Phase 0-G-2B: 회원 탈퇴 서버 처리

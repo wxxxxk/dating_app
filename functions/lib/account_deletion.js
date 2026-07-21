@@ -6,6 +6,7 @@ const {
   SHARED_DATA_POLICY,
   planAccountDeletion,
 } = require('./account_deletion_plan');
+const { cleanupCommunityContentForUser } = require('./community');
 
 const FUNCTION_NAME = 'deleteMyAccount';
 const CONFIRMATION_TEXT = 'DELETE_MY_ACCOUNT';
@@ -1082,8 +1083,23 @@ async function deleteMyAccountCore({
           uidHash,
           serverTimestamp,
         });
+        // Phase 4-2: 커뮤니티 게시물/댓글은 soft remove + 작성자 익명화,
+        // 반응은 삭제하고 부모 카운트를 보정한다(재실행 안전).
+        const community = await cleanupCommunityContentForUser({
+          db,
+          uid,
+          deletedIdentifier,
+          serverTimestamp,
+        });
         const usage = await cleanupUsageState({ db, uid });
-        return { ...shared, ...reports, ...purchases, ...jelly, ...usage };
+        return {
+          ...shared,
+          ...reports,
+          ...purchases,
+          ...jelly,
+          ...community,
+          ...usage,
+        };
       },
     });
 
