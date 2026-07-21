@@ -14,6 +14,22 @@ const reportReasonLabels = {
   'other': '기타',
 };
 
+/// 메시지 신고 사유 key와 사용자 표시 라벨.
+///
+/// 사용자 전체 신고([reportReasonLabels])와 목적이 달라 별도로 둔다 — 사유
+/// key 집합이 서로 다르고, firestore.rules도 두 경로를 따로 검증한다.
+const messageReportReasonLabels = {
+  'abusive_language': '욕설·모욕',
+  'sexual_harassment': '성적 불쾌감',
+  'hate_threat': '혐오·협박',
+  'spam_scam': '사기·스팸',
+  'personal_info': '개인정보 요구·노출',
+  'other': '기타',
+};
+
+/// 신고 상세 내용 최대 길이(사용자 신고/메시지 신고 공통, rules와 동일 값).
+const int reportDetailMaxLength = 500;
+
 /// 차단 목록 화면에서 쓸 차단 사용자 뷰 모델.
 class BlockedUser {
   final String uid;
@@ -82,6 +98,89 @@ class SafetyService {
       if (detail != null && detail.trim().isNotEmpty) 'detail': detail.trim(),
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// 특정 메시지를 신고한다(Phase 2-4).
+  ///
+  /// **메시지 원문(text)은 저장하지 않는다.** 운영 검토는 matchId/messageId로
+  /// 원본 메시지를 참조한다(메시지는 update/delete가 금지돼 있어 보존된다).
+  /// 전화번호·계좌번호 같은 민감한 원문이 reports에 중복 적재되지 않게 하려는
+  /// 의도적인 설계다.
+  ///
+  /// 아래 검증은 오입력을 빨리 막기 위한 클라이언트 1차 방어이고, 최종 방어는
+  /// firestore.rules가 담당한다(실제 match participants·message.senderId 확인).
+  Future<void> reportMessage({
+    required String reporterUid,
+    required String reportedUid,
+    required String matchId,
+    required String messageId,
+    required String reason,
+    String? detail,
+  }) async {
+    await _db.collection('reports').add(
+      buildMessageReportDoc(
+        reporterUid: reporterUid,
+        reportedUid: reportedUid,
+        matchId: matchId,
+        messageId: messageId,
+        reason: reason,
+        detail: detail,
+        createdAt: FieldValue.serverTimestamp(),
+      ),
+    );
+  }
+
+  /// 메시지 신고 문서 payload(순수 함수). 입력 검증도 여기서 수행하므로 잘못된
+  /// 값은 Firestore write 전에 [ArgumentError]로 거부된다. [createdAt]은
+  /// 프로덕션에서 FieldValue.serverTimestamp(), 테스트에서는 고정 값을 넣는다.
+  ///
+  /// **메시지 원문(text)은 어떤 경우에도 포함하지 않는다.**
+  static Map<String, dynamic> buildMessageReportDoc({
+    required String reporterUid,
+    required String reportedUid,
+    required String matchId,
+    required String messageId,
+    required String reason,
+    required Object createdAt,
+    String? detail,
+  }) {
+    if (reporterUid.isEmpty) {
+      throw ArgumentError.value(reporterUid, 'reporterUid', '신고자 uid가 비어 있습니다.');
+    }
+    if (reportedUid.isEmpty) {
+      throw ArgumentError.value(reportedUid, 'reportedUid', '대상 uid가 비어 있습니다.');
+    }
+    if (reporterUid == reportedUid) {
+      throw ArgumentError.value(reportedUid, 'reportedUid', '자기 메시지는 신고할 수 없습니다.');
+    }
+    if (matchId.isEmpty) {
+      throw ArgumentError.value(matchId, 'matchId', 'matchId가 비어 있습니다.');
+    }
+    if (messageId.isEmpty) {
+      throw ArgumentError.value(messageId, 'messageId', 'messageId가 비어 있습니다.');
+    }
+    if (!messageReportReasonLabels.containsKey(reason)) {
+      throw ArgumentError.value(reason, 'reason', '허용되지 않는 신고 사유입니다.');
+    }
+    final trimmedDetail = detail?.trim() ?? '';
+    if (trimmedDetail.length > reportDetailMaxLength) {
+      throw ArgumentError.value(
+        trimmedDetail.length,
+        'detail',
+        '상세 내용은 $reportDetailMaxLength자까지 입력할 수 있습니다.',
+      );
+    }
+
+    return {
+      'reportType': 'message',
+      'reporterUid': reporterUid,
+      'reportedUid': reportedUid,
+      'matchId': matchId,
+      'messageId': messageId,
+      'reason': reason,
+      if (trimmedDetail.isNotEmpty) 'detail': trimmedDetail,
+      'createdAt': createdAt,
+    };
   }
 
   /// 내가 차단한 uid와 나를 차단한 uid를 모두 가져온다.

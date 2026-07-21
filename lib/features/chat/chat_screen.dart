@@ -14,6 +14,7 @@ import '../../services/chat/chat_service.dart';
 import '../../services/fortune/fortune_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
+import '../safety/message_report_sheet.dart';
 import '../safety/report_sheet.dart';
 import 'chat_appointment_widgets.dart';
 import 'chat_safety.dart';
@@ -78,6 +79,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _safetyBannerDismissed = false;
   // 민감정보 경고 시트가 열려 있는 동안 중복 전송 시도를 막는다.
   bool _confirmingSafety = false;
+  // 메시지 신고 제출 중 중복 제출을 막는다.
+  bool _reportingMessage = false;
+  // 이 화면 세션에서 이미 신고한 messageId. Firestore(메시지 문서)에는 신고
+  // 표시를 쓰지 않으므로 재진입하면 초기화되는 것이 정상이다.
+  final Set<String> _reportedMessageIdsThisSession = {};
   final Map<String, Stream<ChatAppointment?>> _appointmentStreams = {};
   String? _lastReadMarker;
   String? _latestConversationTipMessageId;
@@ -520,6 +526,71 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// 신고 가능한 메시지인가. 일반 텍스트 + 상대가 보낸 것만 허용한다.
+  /// 약속 카드/약속 응답 시스템 행과 내 메시지는 대상이 아니다(rules도 동일).
+  bool _canReportMessage(MessageModel message) {
+    return message.type == ChatMessageType.text &&
+        message.senderId.isNotEmpty &&
+        message.senderId != widget.currentUid;
+  }
+
+  /// 메시지 신고 흐름: 액션 시트 → 신고 폼 → 신고 적재 → (선택) 차단.
+  ///
+  /// 로그·오류 메시지 어디에도 메시지 원문이나 senderId를 남기지 않는다.
+  Future<void> _reportMessage(MessageModel message) async {
+    if (!_canReportMessage(message) || _reportingMessage) return;
+
+    if (_reportedMessageIdsThisSession.contains(message.id)) {
+      _showSnack('이미 신고한 메시지예요.');
+      return;
+    }
+
+    final wantsReport = await showMessageActionSheet(
+      context: context,
+      messagePreview: message.text,
+    );
+    if (wantsReport != true || !mounted) return;
+
+    final submission = await showMessageReportSheet(
+      context: context,
+      messagePreview: message.text,
+    );
+    if (submission == null || !mounted) return;
+
+    setState(() => _reportingMessage = true);
+    try {
+      await widget.safetyService.reportMessage(
+        reporterUid: widget.currentUid,
+        reportedUid: message.senderId,
+        matchId: widget.matchId,
+        messageId: message.id,
+        reason: submission.reason,
+        detail: submission.detail,
+      );
+      if (submission.blockUser) {
+        await widget.safetyService.blockUser(
+          currentUid: widget.currentUid,
+          blockedUid: message.senderId,
+        );
+      }
+      _reportedMessageIdsThisSession.add(message.id);
+      if (!mounted) return;
+      if (submission.blockUser) {
+        setState(() => _blocked = true);
+        _goOffline();
+      }
+      _showSnack(
+        submission.blockUser ? '메시지를 신고하고 사용자를 차단했어요.' : '메시지 신고가 접수되었어요.',
+      );
+    } catch (e) {
+      // 원문·발신자 정보는 로그에 남기지 않는다. messageId 참조만 남긴다.
+      _debugLog('[Safety] 메시지 신고 실패 matchId=${widget.matchId} messageId=${message.id}');
+      if (mounted) _showSnack('메시지 신고에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      if (mounted) setState(() => _reportingMessage = false);
+    }
+  }
+
   Future<void> _reportUser() async {
     final submission = await showReportSheet(context);
     if (submission == null) return;
@@ -838,11 +909,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     if (msg.isAppointmentResponse) {
       return AppointmentResponseRow(text: msg.text);
     }
-    return _MessageBubble(
+    final bubble = _MessageBubble(
       message: msg,
       isMine: msg.senderId == widget.currentUid,
       position: _bubblePosition(messages, index),
       showTime: _shouldShowTime(messages, index),
+    );
+    if (!_canReportMessage(msg)) return bubble;
+    // 상대의 일반 텍스트만 길게 눌러 신고할 수 있다.
+    return Semantics(
+      label: '상대 메시지, 길게 눌러 신고',
+      child: GestureDetector(
+        key: ValueKey('message-reportable-${msg.id}'),
+        behavior: HitTestBehavior.opaque,
+        onLongPress: () => _reportMessage(msg),
+        child: bubble,
+      ),
     );
   }
 
