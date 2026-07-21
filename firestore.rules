@@ -989,6 +989,94 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // communityPosts/{postId} (Phase 4-1):
+    //
+    // Lounge/Feed 공통 게시물. 이번 단계는 **읽기 전용**이다 —
+    // 작성·수정·삭제 계약은 Phase 4-2에서 별도로 연다(현재는 admin claim을
+    // 가진 클라이언트도 직접 쓸 수 없다).
+    //
+    // read는 로그인 사용자에게 active/authenticated 게시물만 허용하고,
+    // 문서 형태(shape)도 함께 확인해 깨진 문서가 목록에 섞이지 않게 한다.
+    // 클라이언트 쿼리는 status/visibility 필터를 반드시 포함해야 한다.
+    match /communityPosts/{postId} {
+      function postKeys() {
+        return [
+          'surface', 'authorUid', 'authorSnapshot', 'text', 'imageUrls',
+          'status', 'visibility', 'reactionCount', 'commentCount',
+          'createdAt', 'updatedAt', 'schemaVersion'
+        ];
+      }
+      // 작성자 snapshot은 공개 정보 6개 필드만 담는다(비공개 프로필 값 금지).
+      function authorSnapshotValid(data) {
+        let snapshot = data.authorSnapshot;
+        return snapshot is map &&
+          snapshot.keys().hasOnly([
+            'uid', 'displayName', 'photoUrl',
+            'photoVerified', 'workVerified', 'schoolVerified'
+          ]) &&
+          snapshot.keys().hasAll([
+            'uid', 'displayName', 'photoUrl',
+            'photoVerified', 'workVerified', 'schoolVerified'
+          ]) &&
+          snapshot.uid is string &&
+          snapshot.uid == data.authorUid &&
+          snapshot.displayName is string &&
+          snapshot.displayName.size() >= 1 &&
+          snapshot.displayName.size() <= 40 &&
+          snapshot.photoUrl is string &&
+          snapshot.photoUrl.size() <= 2048 &&
+          snapshot.photoVerified is bool &&
+          snapshot.workVerified is bool &&
+          snapshot.schoolVerified is bool;
+      }
+      // imageUrls는 Rules에서 size/type까지만 확인하고, 각 항목의 길이 검증은
+      // 클라이언트 parser가 방어한다(Rules 문법으로 안전하게 순회할 수 없다).
+      function postShapeValid() {
+        let data = resource.data;
+        return data.keys().hasOnly(postKeys()) &&
+          data.keys().hasAll(postKeys()) &&
+          data.surface in ['lounge', 'feed'] &&
+          data.authorUid is string &&
+          data.authorUid.size() > 0 &&
+          authorSnapshotValid(data) &&
+          data.text is string &&
+          data.text.size() >= 1 &&
+          data.text.size() <= 1000 &&
+          data.imageUrls is list &&
+          data.imageUrls.size() <= 4 &&
+          data.reactionCount is int &&
+          data.reactionCount >= 0 &&
+          data.commentCount is int &&
+          data.commentCount >= 0 &&
+          data.createdAt is timestamp &&
+          data.updatedAt is timestamp &&
+          data.schemaVersion == 1;
+      }
+
+      // get은 문서 하나를 직접 읽으므로 형태(shape)까지 엄격히 검증한다.
+      allow get: if request.auth != null &&
+        resource.data.status == 'active' &&
+        resource.data.visibility == 'authenticated' &&
+        postShapeValid();
+
+      // list(쿼리)는 rules 엔진이 "쿼리 제약으로 규칙을 보장할 수 있는지"로
+      // 판단한다. postShapeValid() 같은 조건은 쿼리로 보장할 수 없어 유효한
+      // 쿼리까지 전부 거부되므로, list에는 쿼리가 실제로 거는 조건만 둔다.
+      // 따라서 클라이언트는 status/visibility 필터 없이 목록을 훑을 수 없고,
+      // 형태가 깨진 문서 방어는 클라이언트 parser가 맡는다(CommunityPost).
+      allow list: if request.auth != null &&
+        resource.data.status == 'active' &&
+        resource.data.visibility == 'authenticated';
+
+      allow create, update, delete: if false;
+
+      // communityPosts/{postId}/comments/{commentId} (Phase 4-1):
+      // 모델만 정의하고 데이터 접근은 아직 열지 않는다.
+      match /comments/{commentId} {
+        allow read, write: if false;
+      }
+    }
+
     // collectionGroup('swipes') 조회용 규칙:
     // 받은 좋아요 화면은 users/{다른유저}/swipes/{내uid} 문서를 collectionGroup으로
     // 읽는다. 남의 스와이프 전체를 열지 않고, targetUid가 본인인 문서만 허용한다.

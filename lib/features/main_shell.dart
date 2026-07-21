@@ -4,6 +4,8 @@ import '../core/theme/app_colors.dart';
 import '../services/auth/auth_service.dart';
 import '../services/chat/appointment_safety_service.dart';
 import '../services/chat/chat_presence_service.dart';
+import '../core/navigation/main_tab_index.dart';
+import '../services/community/community_service.dart';
 import '../services/privacy/contact_avoidance_service.dart';
 import '../services/chat/chat_service.dart';
 import '../services/charm/charm_service.dart';
@@ -16,6 +18,7 @@ import '../services/likes/likes_service.dart';
 import '../services/matches/matches_service.dart';
 import '../services/safety/safety_service.dart';
 import '../services/storage/storage_service.dart';
+import 'community/community_hub_screen.dart';
 import 'discovery/discovery_screen.dart';
 import 'fortune/fortune_hub_screen.dart';
 import 'home/home_screen.dart';
@@ -42,6 +45,7 @@ class MainShell extends StatefulWidget {
   final ChatPresenceService presenceService;
   final AppointmentSafetyService appointmentSafetyService;
   final ContactAvoidanceService contactAvoidanceService;
+  final CommunityService communityService;
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -61,6 +65,7 @@ class MainShell extends StatefulWidget {
     required this.presenceService,
     required this.appointmentSafetyService,
     required this.contactAvoidanceService,
+    required this.communityService,
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
@@ -75,7 +80,7 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
-  int _selectedIndex = 0;
+  int _selectedIndex = MainTabIndex.discovery;
   Stream<int>? _unreadMatchStream;
 
   @override
@@ -104,7 +109,8 @@ class _MainShellState extends State<MainShell> {
   void _applyPendingTabRequest() {
     final requestedIndex = widget.mainTabRequest.value;
     if (requestedIndex == null) return;
-    if (requestedIndex < 0 || requestedIndex > 3) {
+    // 커뮤니티 탭이 생기며 유효 범위가 0~4로 넓어졌다(MainTabIndex 참고).
+    if (!MainTabIndex.isValid(requestedIndex)) {
       widget.mainTabRequest.value = null;
       return;
     }
@@ -155,7 +161,14 @@ class _MainShellState extends State<MainShell> {
             firestoreService: widget.firestoreService,
             matchesService: widget.matchesService,
             fortuneService: widget.fortuneService,
-            onExploreTap: () => setState(() => _selectedIndex = 0),
+            onExploreTap: () =>
+                setState(() => _selectedIndex = MainTabIndex.discovery),
+          ),
+          CommunityHubScreen(
+            authService: widget.authService,
+            communityService: widget.communityService,
+            safetyService: widget.safetyService,
+            contactAvoidanceService: widget.contactAvoidanceService,
           ),
           HomeScreen(
             authService: widget.authService,
@@ -169,7 +182,8 @@ class _MainShellState extends State<MainShell> {
             jellyPurchaseService: widget.jellyPurchaseService,
             likesService: widget.likesService,
             safetyService: widget.safetyService,
-            onOpenDiscovery: () => setState(() => _selectedIndex = 0),
+            onOpenDiscovery: () =>
+                setState(() => _selectedIndex = MainTabIndex.discovery),
           ),
         ],
       ),
@@ -231,6 +245,14 @@ class _MainShellState extends State<MainShell> {
                 selected: true,
               ),
               label: '사주',
+            ),
+            const BottomNavigationBarItem(
+              icon: _NavIconPill(icon: Icons.forum_outlined, selected: false),
+              activeIcon: _NavIconPill(
+                icon: Icons.forum_rounded,
+                selected: true,
+              ),
+              label: '커뮤니티',
             ),
             const BottomNavigationBarItem(
               icon: _NavIconPill(

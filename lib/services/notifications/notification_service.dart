@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/chat/chat_screen.dart';
 import '../auth/auth_service.dart';
+import '../../core/navigation/main_tab_index.dart';
 import '../chat/appointment_safety_service.dart';
 import '../chat/chat_presence_service.dart';
 import '../chat/chat_service.dart';
@@ -201,7 +202,8 @@ class NotificationService {
   }
 
   void _openMatchesTab() {
-    _mainTabRequest.value = 1;
+    // 탭이 추가돼도 매칭 탭으로 정확히 이동하도록 상수를 쓴다.
+    _mainTabRequest.value = MainTabIndex.matches;
     final navigator = _navigatorKey.currentState;
     navigator?.popUntil((route) => route.isFirst);
   }
