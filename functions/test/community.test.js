@@ -403,7 +403,10 @@ test('13. 비활성/없는 부모 게시물에는 댓글을 달 수 없다', asy
   const db = createFakeDb({
     docs: baseDocs({
       'communityPosts/removed': activePost(OTHER, { status: 'removed' }),
-      'communityPosts/feed': activePost(OTHER, { surface: 'feed' }),
+      'communityPosts/removedFeed': activePost(OTHER, {
+        surface: 'feed',
+        status: 'removed',
+      }),
     }),
   });
   await expectError(
@@ -411,13 +414,35 @@ test('13. 비활성/없는 부모 게시물에는 댓글을 달 수 없다', asy
     'not-found',
   );
   await expectError(
-    createCommunityCommentCore(ctx(db, { data: { postId: 'feed', text: '댓글' } })),
+    createCommunityCommentCore(
+      ctx(db, { data: { postId: 'removedFeed', text: '댓글' } }),
+    ),
     'not-found',
   );
   await expectError(
     createCommunityCommentCore(ctx(db, { data: { postId: 'nope', text: '댓글' } })),
     'not-found',
   );
+});
+
+// Phase 4-3: 댓글·공감·신고·삭제는 active feed 게시물에서도 동작해야 한다
+// (Lounge 전용 계약을 두 표면 공통으로 일반화했다).
+test('Phase 4-3. active feed 게시물에도 댓글·공감을 달 수 있다', async () => {
+  const db = createFakeDb({
+    docs: baseDocs({ 'communityPosts/feed1': activePost(OTHER, { surface: 'feed' }) }),
+  });
+
+  const comment = await createCommunityCommentCore(
+    ctx(db, { data: { postId: 'feed1', text: '사진 좋네요' } }),
+  );
+  assert.ok(comment.commentId);
+  assert.equal(db.store.get('communityPosts/feed1').commentCount, 1);
+
+  const reaction = await toggleCommunityReactionCore(
+    ctx(db, { data: { postId: 'feed1' } }),
+  );
+  assert.equal(reaction.reacted, true);
+  assert.equal(reaction.reactionCount, 1);
 });
 
 test('15. 댓글 rate limit', async () => {

@@ -20,6 +20,9 @@ const PUBLIC_PROFILES_COLLECTION = 'publicProfiles';
 
 const SCHEMA_VERSION = 1;
 const SURFACE_LOUNGE = 'lounge';
+const SURFACE_FEED = 'feed';
+/** 상호작용(댓글·공감·신고·삭제)을 허용하는 표면. */
+const INTERACTABLE_SURFACES = Object.freeze([SURFACE_LOUNGE, SURFACE_FEED]);
 const VISIBILITY_AUTHENTICATED = 'authenticated';
 const STATUS_ACTIVE = 'active';
 const STATUS_REMOVED = 'removed';
@@ -30,6 +33,28 @@ const COMMENT_TEXT_MAX_LENGTH = 500;
 const REPORT_DETAIL_MAX_LENGTH = 500;
 const DISPLAY_NAME_MAX_LENGTH = 40;
 const PHOTO_URL_MAX_LENGTH = 2048;
+
+// ── Feed 이미지 제약(Phase 4-3) ────────────────────────────────────────────
+//
+// 이미지의 download URL·token은 Firestore에 저장하지 않는다. 내부 Storage
+// 경로만 저장하고, 표시할 때 인증된 사용자가 bytes를 읽는다.
+
+const FEED_STORAGE_ROOT = 'communityFeed';
+const FEED_MIN_IMAGES = 1;
+const FEED_MAX_IMAGES = 4;
+const FEED_IMAGE_PATH_MAX_LENGTH = 512;
+const FEED_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const FEED_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+
+/** HEIC/HEIF는 기기 간 decode 호환성 때문에 받지 않는다. */
+const FEED_ALLOWED_EXTENSIONS = Object.freeze(['jpg', 'jpeg', 'png']);
+const FEED_ALLOWED_CONTENT_TYPES = Object.freeze(['image/jpeg', 'image/png']);
+
+/** Firestore auto-ID 형식(20자리 영문·숫자)만 허용한다. */
+const AUTO_ID_PATTERN = /^[A-Za-z0-9]{20}$/;
+
+/** 이미지 파일명: {imageId}.{ext} 하나. 하위 경로·상대 경로는 허용하지 않는다. */
+const FEED_IMAGE_FILE_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}\.(jpg|jpeg|png)$/;
 
 /** 최소 작성 간격(서버 전용 rate limit). */
 const POST_COOLDOWN_MS = 10 * 1000;
@@ -60,6 +85,8 @@ const MESSAGES = Object.freeze({
   profileRequired: '프로필을 먼저 완성한 뒤 이용할 수 있어요.',
   notFound: '이미 삭제됐거나 볼 수 없는 글이에요.',
   permissionDenied: '권한이 없어요.',
+  invalidImages: '사진을 다시 선택한 뒤 올려주세요.',
+  alreadyExists: '이미 올라간 글이에요.',
 });
 
 // ── 오류 ───────────────────────────────────────────────────────────────────
@@ -241,6 +268,19 @@ function requireDocId(value, HttpsError) {
   return id;
 }
 
+/**
+ * 클라이언트가 미리 만든 문서 id. Firestore auto-ID 형식만 허용한다.
+ *
+ * Storage 경로에 그대로 들어가므로 임의 문자열을 받지 않는다(경로 조작·추측
+ * 가능한 짧은 id 방지).
+ */
+function requireAutoId(value, HttpsError) {
+  if (typeof value !== 'string' || !AUTO_ID_PATTERN.test(value)) {
+    throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidRequest);
+  }
+  return value;
+}
+
 /** 공개 글 금지 내용 확인. 원문·탐지 문자열은 로그/응답에 넣지 않는다. */
 function assertAllowedCommunityText({ text, uid, functionName, logger, HttpsError }) {
   const codes = detectForbiddenCommunityText(text);
@@ -289,14 +329,137 @@ async function loadAuthorSnapshot({ db, uid, HttpsError }) {
   return snapshot;
 }
 
-/** 라운지 게시물로서 상호작용 가능한 상태인지. */
+/** 댓글·공감·신고·삭제를 받을 수 있는 상태인지(lounge/feed 공통). */
 function isInteractablePost(data) {
   return (
     data != null &&
-    data.surface === SURFACE_LOUNGE &&
+    INTERACTABLE_SURFACES.includes(data.surface) &&
     data.status === STATUS_ACTIVE &&
     data.visibility === VISIBILITY_AUTHENTICATED
   );
+}
+
+// ── Feed 이미지 경로 검증 ──────────────────────────────────────────────────
+
+/** communityFeed/{uid}/{postId}/ (순수 함수). */
+function feedImagePathPrefix(uid, postId) {
+  return `${FEED_STORAGE_ROOT}/${uid}/${postId}/`;
+}
+
+/**
+ * 클라이언트가 보낸 imagePaths를 canonical 목록으로 검증한다(순수 함수).
+ *
+ * 모든 경로는 **호출자 본인의 uid + 이번 postId** 아래여야 한다. 다른
+ * 사용자의 파일이나 다른 게시물의 파일을 자기 글에 붙일 수 없다.
+ */
+function normalizeFeedImagePaths({ value, uid, postId, HttpsError }) {
+  if (!Array.isArray(value)) {
+    throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+  }
+  if (value.length < FEED_MIN_IMAGES || value.length > FEED_MAX_IMAGES) {
+    throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+  }
+
+  const prefix = feedImagePathPrefix(uid, postId);
+  const paths = [];
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    if (item.length === 0 || item.length > FEED_IMAGE_PATH_MAX_LENGTH) {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    if (!item.startsWith(prefix)) {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    const fileName = item.slice(prefix.length);
+    if (!FEED_IMAGE_FILE_NAME_PATTERN.test(fileName)) {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    // 같은 파일을 여러 번 넣어 개수 제한을 우회하지 못하게 한다.
+    if (paths.includes(item)) {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    paths.push(item);
+  }
+  return paths;
+}
+
+/**
+ * 업로드된 object의 실제 metadata를 확인한다.
+ *
+ * 클라이언트가 보낸 크기·형식을 믿지 않는다. 파일이 없거나 비었거나 형식·
+ * 용량이 어긋나면 거부한다. 경로·metadata 전체는 오류에 담지 않는다.
+ */
+async function assertFeedImageObjects({ bucket, paths, HttpsError }) {
+  if (!bucket || typeof bucket.file !== 'function') {
+    throw makeError(HttpsError, 'internal', MESSAGES.invalidRequest);
+  }
+
+  let totalBytes = 0;
+  for (const path of paths) {
+    let metadata;
+    try {
+      const [meta] = await bucket.file(path).getMetadata();
+      metadata = meta;
+    } catch (_) {
+      // 존재하지 않거나 읽지 못하는 object는 모두 같은 거부로 취급한다.
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+
+    const size = Number(metadata?.size ?? 0);
+    if (!Number.isFinite(size) || size <= 0 || size > FEED_MAX_IMAGE_BYTES) {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    if (!FEED_ALLOWED_CONTENT_TYPES.includes(metadata?.contentType)) {
+      throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+    }
+    totalBytes += size;
+  }
+
+  if (totalBytes > FEED_MAX_TOTAL_BYTES) {
+    throw makeError(HttpsError, 'invalid-argument', MESSAGES.invalidImages);
+  }
+  return { totalBytes };
+}
+
+/**
+ * 게시물로 이어지지 못한 업로드 object를 best-effort 삭제한다.
+ *
+ * 이미 검증이 끝난(=본인 uid + 이번 postId prefix) 경로만 지운다. 삭제 실패는
+ * 원래 오류를 덮지 않고 고정 category로만 남긴다(raw path·UID 금지).
+ */
+async function cleanupFeedImageObjects({ bucket, paths, logger, functionName, uid }) {
+  if (!bucket || !Array.isArray(paths) || paths.length === 0) return 0;
+  let deleted = 0;
+  let failed = 0;
+  for (const path of paths) {
+    try {
+      await bucket.file(path).delete();
+      deleted += 1;
+    } catch (_) {
+      // 이미 없으면 성공으로 본다(개수만 다르게 집계한다).
+      failed += 1;
+    }
+  }
+  if (failed > 0) {
+    safeLog(logger, functionName, {
+      step: 'draft_cleanup_partial',
+      callerHash: safeUidHash(uid),
+      imageCount: paths.length,
+    });
+  }
+  return deleted;
+}
+
+/** 로그에 남길 용량 구간(정확한 byte 수를 남기지 않는다). */
+function byteBucketOf(totalBytes) {
+  if (!Number.isFinite(totalBytes) || totalBytes <= 0) return 'unknown';
+  const mb = totalBytes / (1024 * 1024);
+  if (mb <= 1) return 'le_1mb';
+  if (mb <= 5) return 'le_5mb';
+  if (mb <= 10) return 'le_10mb';
+  return 'le_20mb';
 }
 
 function safeCount(value) {
@@ -366,6 +529,140 @@ async function createLoungePostCore({
   });
 
   return { postId: postRef.id };
+}
+
+// ── createFeedPost ─────────────────────────────────────────────────────────
+
+/**
+ * 이미지 게시물 작성(Phase 4-3).
+ *
+ * 클라이언트가 postId를 먼저 만들어 그 경로로 이미지를 올린 뒤 호출한다.
+ * 서버는 경로 소유자·object metadata를 다시 확인하고, 실패하면 아직 글로
+ * 이어지지 않은 업로드 파일을 best-effort로 정리한다.
+ *
+ * imageUrls는 **항상 빈 배열**로 저장한다(download URL 미저장 계약).
+ */
+async function createFeedPostCore({
+  request,
+  db,
+  bucket,
+  HttpsError,
+  serverTimestamp,
+  nowMs = Date.now,
+  logger = null,
+} = {}) {
+  const functionName = 'createFeedPost';
+  const uid = requireAuthUid(request, HttpsError);
+  const data = requireExactObject(
+    request?.data ?? {},
+    ['postId', 'text', 'imagePaths'],
+    HttpsError,
+  );
+
+  const postId = requireAutoId(data.postId, HttpsError);
+  const text = normalizeBodyText(data.text, POST_TEXT_MAX_LENGTH, HttpsError);
+
+  // 경로 검증이 끝나야 정리 대상으로 삼을 수 있다(임의 경로 삭제 금지).
+  const imagePaths = normalizeFeedImagePaths({
+    value: data.imagePaths,
+    uid,
+    postId,
+    HttpsError,
+  });
+
+  // 여기서부터의 실패는 "업로드는 됐지만 글은 못 만든" 상태이므로 정리한다.
+  // 금지 텍스트도 이 안에서 확인해, 거부된 글의 이미지가 남지 않게 한다.
+  let created = false;
+  let totalBytes = 0;
+  try {
+    assertAllowedCommunityText({ text, uid, functionName, logger, HttpsError });
+
+    const metadata = await assertFeedImageObjects({
+      bucket,
+      paths: imagePaths,
+      HttpsError,
+    });
+    totalBytes = metadata.totalBytes;
+
+    const authorSnapshot = await loadAuthorSnapshot({ db, uid, HttpsError });
+
+    const postRef = db.collection(POSTS_COLLECTION).doc(postId);
+    const limitRef = db.collection(WRITE_LIMITS_COLLECTION).doc(uid);
+    const now = nowMs();
+
+    await db.runTransaction(async (tx) => {
+      const existing = await tx.get(postRef);
+      if (existing.exists) {
+        const existingData = existing.data() || {};
+        // 응답만 유실된 재호출이면 같은 글을 그대로 성공 처리한다(멱등).
+        if (
+          existingData.authorUid === uid &&
+          existingData.surface === SURFACE_FEED
+        ) {
+          return;
+        }
+        throw makeError(HttpsError, 'already-exists', MESSAGES.alreadyExists);
+      }
+
+      const limitSnap = await tx.get(limitRef);
+      assertWithinRateLimit({
+        limitData: limitSnap.exists ? limitSnap.data() : null,
+        field: 'lastPostAt',
+        cooldownMs: POST_COOLDOWN_MS,
+        nowMs: now,
+        HttpsError,
+      });
+
+      tx.set(postRef, {
+        surface: SURFACE_FEED,
+        authorUid: uid,
+        authorSnapshot,
+        text,
+        // download URL은 어떤 경우에도 저장하지 않는다.
+        imageUrls: [],
+        imagePaths,
+        status: STATUS_ACTIVE,
+        visibility: VISIBILITY_AUTHENTICATED,
+        reactionCount: 0,
+        commentCount: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        schemaVersion: SCHEMA_VERSION,
+      });
+      tx.set(
+        limitRef,
+        {
+          lastPostAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          schemaVersion: SCHEMA_VERSION,
+        },
+        { merge: true },
+      );
+    });
+    created = true;
+  } catch (error) {
+    if (!created) {
+      // 정리 실패가 원래 오류를 덮지 않게 한다.
+      await cleanupFeedImageObjects({
+        bucket,
+        paths: imagePaths,
+        logger,
+        functionName,
+        uid,
+      });
+    }
+    throw error;
+  }
+
+  safeLog(logger, functionName, {
+    step: 'created',
+    callerHash: safeUidHash(uid),
+    imageCount: imagePaths.length,
+    byteBucket: byteBucketOf(totalBytes),
+  });
+
+  // 경로·본문·작성자 정보는 응답에 담지 않는다.
+  return { postId };
 }
 
 // ── createCommunityComment ─────────────────────────────────────────────────
@@ -495,6 +792,7 @@ async function toggleCommunityReactionCore({
 async function deleteCommunityPostCore({
   request,
   db,
+  bucket = null,
   HttpsError,
   serverTimestamp,
   logger = null,
@@ -506,6 +804,9 @@ async function deleteCommunityPostCore({
 
   const postRef = db.collection(POSTS_COLLECTION).doc(postId);
 
+  // soft delete가 끝난 뒤에만 실제 파일을 지운다(문서 상태가 먼저다).
+  let imagePathsToDelete = [];
+
   await db.runTransaction(async (tx) => {
     const postSnap = await tx.get(postRef);
     if (!postSnap.exists) {
@@ -516,6 +817,12 @@ async function deleteCommunityPostCore({
       throw makeError(HttpsError, 'permission-denied', MESSAGES.permissionDenied);
     }
     // 이미 지운 글은 멱등 성공. 댓글·반응·신고 참조는 그대로 보존한다.
+    // 남아 있을 수 있는 이미지 파일은 아래에서 다시 지운다(멱등).
+    imagePathsToDelete = safeOwnedFeedImagePaths({
+      postData,
+      uid,
+      postId,
+    });
     if (postData.status === STATUS_REMOVED) return;
     tx.update(postRef, {
       status: STATUS_REMOVED,
@@ -523,12 +830,45 @@ async function deleteCommunityPostCore({
     });
   });
 
+  // status가 removed로 바뀌는 순간 Storage Rules가 read를 막고, 여기서 실제
+  // 파일까지 지운다. 파일 삭제 실패는 soft delete를 되돌리지 않는다.
+  let imagesDeleted = 0;
+  if (imagePathsToDelete.length > 0) {
+    imagesDeleted = await cleanupFeedImageObjects({
+      bucket,
+      paths: imagePathsToDelete,
+      logger,
+      functionName,
+      uid,
+    });
+  }
+
   safeLog(logger, functionName, {
     step: 'removed',
     callerHash: safeUidHash(uid),
+    imageCount: imagesDeleted,
   });
 
   return { deleted: true };
+}
+
+/**
+ * 게시물 문서에 저장된 imagePaths 중 **본인 소유·이번 postId** 경로만 고른다.
+ *
+ * 문서가 어떤 이유로든 다른 경로를 담고 있어도 그 파일은 건드리지 않는다.
+ */
+function safeOwnedFeedImagePaths({ postData, uid, postId }) {
+  const raw = postData?.imagePaths;
+  if (!Array.isArray(raw)) return [];
+  const prefix = feedImagePathPrefix(uid, postId);
+  return raw.filter(
+    (path) =>
+      typeof path === 'string' &&
+      path.length > 0 &&
+      path.length <= FEED_IMAGE_PATH_MAX_LENGTH &&
+      path.startsWith(prefix) &&
+      FEED_IMAGE_FILE_NAME_PATTERN.test(path.slice(prefix.length)),
+  );
 }
 
 // ── deleteCommunityComment ─────────────────────────────────────────────────
@@ -823,6 +1163,15 @@ async function cleanupCommunityContentForUser({
 module.exports = {
   COMMENT_COOLDOWN_MS,
   COMMENT_TEXT_MAX_LENGTH,
+  FEED_MAX_IMAGES,
+  FEED_MAX_IMAGE_BYTES,
+  FEED_MAX_TOTAL_BYTES,
+  FEED_MIN_IMAGES,
+  FEED_STORAGE_ROOT,
+  SURFACE_FEED,
+  SURFACE_LOUNGE,
+  createFeedPostCore,
+  feedImagePathPrefix,
   DELETED_AUTHOR_DISPLAY_NAME,
   FORBIDDEN_TEXT_CODES,
   FORBIDDEN_TEXT_ERROR_CODE,

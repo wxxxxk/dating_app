@@ -19,6 +19,11 @@ Map<String, dynamic> _authorMap({String uid = 'authorA'}) => {
   'schoolVerified': true,
 };
 
+/// Phase 4-3: Feed 이미지 Storage 경로(테스트 기본 작성자 기준).
+String _feedPath(String postId, {String authorUid = 'authorA', int index = 1}) {
+  return 'communityFeed/$authorUid/$postId/image$index.jpg';
+}
+
 Map<String, dynamic> _postMap({
   String surface = 'lounge',
   String status = 'active',
@@ -27,6 +32,7 @@ Map<String, dynamic> _postMap({
   Map<String, dynamic>? author,
   Object? text = '오늘 날씨 좋네요',
   Object? imageUrls,
+  Object? imagePaths,
   Object? reactionCount = 3,
   Object? commentCount = 1,
   Object? schemaVersion = 1,
@@ -38,6 +44,7 @@ Map<String, dynamic> _postMap({
     'authorSnapshot': author ?? _authorMap(),
     'text': text,
     'imageUrls': ?imageUrls,
+    'imagePaths': ?imagePaths,
     'status': status,
     'visibility': visibility,
     'reactionCount': reactionCount,
@@ -243,8 +250,17 @@ void main() {
       expect(lounge.createdAt, _t);
       expect(lounge.isVisible, isTrue);
 
-      final feed = CommunityPost.fromMap('post2', _postMap(surface: 'feed'));
+      expect(lounge.imagePaths, isEmpty);
+      expect(lounge.hasImages, isFalse);
+
+      // Feed 게시물은 imagePaths가 1~4개 있어야 한다(Phase 4-3).
+      final feed = CommunityPost.fromMap(
+        'post2',
+        _postMap(surface: 'feed', imagePaths: [_feedPath('post2')]),
+      );
       expect(feed!.surface, CommunityPostSurface.feed);
+      expect(feed.imagePaths, [_feedPath('post2')]);
+      expect(feed.hasImages, isTrue);
     });
 
     test('3~5. 필수 필드가 어긋나면 거부한다', () {
@@ -287,17 +303,21 @@ void main() {
       expect(parsed!.createdAt, isNull);
     });
 
-    test('8. imageUrls는 불변이고 제약을 검증한다', () {
-      final parsed = CommunityPost.fromMap(
-        'p',
-        _postMap(imageUrls: ['https://example.test/1.jpg']),
-      );
-      expect(parsed!.imageUrls, ['https://example.test/1.jpg']);
+    test('8. imageUrls는 비어 있어야 하고 타입 제약을 지킨다', () {
+      // 없으면 빈 목록
+      final parsed = CommunityPost.fromMap('p', _postMap())!;
+      expect(parsed.imageUrls, isEmpty);
       expect(() => parsed.imageUrls.add('x'), throwsUnsupportedError);
 
-      // 없으면 빈 목록
-      expect(CommunityPost.fromMap('p', _postMap())!.imageUrls, isEmpty);
-      // 4개 초과 / 타입 오류 / 너무 긴 URL은 거부
+      // Phase 4-3: download URL은 저장하지 않는 계약이라 값이 있으면 거부한다.
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(imageUrls: ['https://example.test/1.jpg']),
+        ),
+        isNull,
+      );
+      // 4개 초과 / 타입 오류 / 너무 긴 URL은 그대로 거부
       expect(
         CommunityPost.fromMap('p', _postMap(imageUrls: List.filled(5, 'a'))),
         isNull,
@@ -308,6 +328,169 @@ void main() {
         CommunityPost.fromMap('p', _postMap(imageUrls: ['a' * 2049])),
         isNull,
       );
+    });
+
+    // ── Phase 4-3: Feed 이미지 계약 ──────────────────────────────────────
+    test('Feed 1~3. Lounge는 imagePaths가 없거나 비어야 하고 있으면 거부한다', () {
+      // 1. 기존 문서(필드 자체가 없음) 호환
+      expect(CommunityPost.fromMap('p', _postMap())!.imagePaths, isEmpty);
+      // 2. 빈 목록 허용
+      expect(
+        CommunityPost.fromMap('p', _postMap(imagePaths: <String>[]))!.imagePaths,
+        isEmpty,
+      );
+      // 3. 이미지가 붙은 Lounge 문서는 거부
+      expect(
+        CommunityPost.fromMap('p', _postMap(imagePaths: [_feedPath('p')])),
+        isNull,
+      );
+    });
+
+    test('Feed 4~8. Feed는 imagePaths가 1~4개여야 한다', () {
+      // 4~6. 1개·4개 정상
+      final one = CommunityPost.fromMap(
+        'p',
+        _postMap(surface: 'feed', imagePaths: [_feedPath('p')]),
+      );
+      expect(one!.imagePaths.length, 1);
+
+      final four = CommunityPost.fromMap(
+        'p',
+        _postMap(
+          surface: 'feed',
+          imagePaths: [
+            for (var i = 1; i <= 4; i++) _feedPath('p', index: i),
+          ],
+        ),
+      );
+      expect(four!.imagePaths.length, 4);
+
+      // 7. 0개 거부 (필드 없음 / 빈 목록 모두)
+      expect(CommunityPost.fromMap('p', _postMap(surface: 'feed')), isNull);
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(surface: 'feed', imagePaths: <String>[]),
+        ),
+        isNull,
+      );
+      // 8. 5개 거부
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: [
+              for (var i = 1; i <= 5; i++) _feedPath('p', index: i),
+            ],
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('Feed 9. imageUrls가 비어 있지 않은 Feed는 거부한다', () {
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: [_feedPath('p')],
+            imageUrls: ['https://example.test/a.jpg'],
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('Feed 10. 작성자·postId가 경로와 어긋나면 거부한다', () {
+      // 다른 사용자 경로
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: [_feedPath('p', authorUid: 'someoneElse')],
+          ),
+        ),
+        isNull,
+      );
+      // 다른 게시물 경로
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(surface: 'feed', imagePaths: [_feedPath('otherPost')]),
+        ),
+        isNull,
+      );
+      // prefix 밖 경로 / 하위 디렉터리 / 허용되지 않은 확장자
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(surface: 'feed', imagePaths: ['users/authorA/p/a.jpg']),
+        ),
+        isNull,
+      );
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: ['communityFeed/authorA/p/nested/a.jpg'],
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: ['communityFeed/authorA/p/a.heic'],
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('Feed 11~12. 중복 경로는 거부하고 목록은 불변이다', () {
+      // 11. 중복 경로
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: [_feedPath('p'), _feedPath('p')],
+          ),
+        ),
+        isNull,
+      );
+      // 타입 오류·길이 초과도 거부
+      expect(
+        CommunityPost.fromMap('p', _postMap(surface: 'feed', imagePaths: [1])),
+        isNull,
+      );
+      expect(
+        CommunityPost.fromMap('p', _postMap(surface: 'feed', imagePaths: 'a')),
+        isNull,
+      );
+      expect(
+        CommunityPost.fromMap(
+          'p',
+          _postMap(
+            surface: 'feed',
+            imagePaths: ['communityFeed/authorA/p/${'a' * 520}.jpg'],
+          ),
+        ),
+        isNull,
+      );
+
+      // 12. 불변 목록
+      final parsed = CommunityPost.fromMap(
+        'p',
+        _postMap(surface: 'feed', imagePaths: [_feedPath('p')]),
+      )!;
+      expect(() => parsed.imagePaths.add('x'), throwsUnsupportedError);
     });
 
     test('9. hidden/removed는 표시 대상이 아니다', () {

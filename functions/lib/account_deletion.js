@@ -256,15 +256,19 @@ async function inventoryRead(category, fn) {
  * - users/{uid}/                    프로필 사진·AI 이상형 이미지
  * - photoVerification/{uid}/        사진 인증 셀피 (Phase 3-2)
  * - affiliationVerification/{uid}/  직장·학교 증빙 (Phase 3-3)
+ * - communityFeed/{uid}/            커뮤니티 Feed 이미지 (Phase 4-3)
  *
  * 검토가 끝나면 보통 서버가 지우지만, 검토 전에 탈퇴하면 남으므로 여기서
- * 함께 정리한다. prefix 밖 경로가 나오면 listAllStorageFiles가 즉시 중단한다.
+ * 함께 정리한다. Feed 이미지도 게시물 삭제 때 지워지지만, 글이 남은 채로
+ * 탈퇴하면 여기서 마지막으로 정리한다.
+ * prefix 밖 경로가 나오면 listAllStorageFiles가 즉시 중단한다.
  */
 function storagePrefixesForUid(uid) {
   return [
     `users/${uid}/`,
     `photoVerification/${uid}/`,
     `affiliationVerification/${uid}/`,
+    `communityFeed/${uid}/`,
   ];
 }
 

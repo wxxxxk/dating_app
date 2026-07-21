@@ -999,12 +999,17 @@ service cloud.firestore {
     // 문서 형태(shape)도 함께 확인해 깨진 문서가 목록에 섞이지 않게 한다.
     // 클라이언트 쿼리는 status/visibility 필터를 반드시 포함해야 한다.
     match /communityPosts/{postId} {
+      // 필수 field 집합. imagePaths(Phase 4-3)는 optional이므로 hasAll에는
+      // 넣지 않고 hasOnly 쪽에서만 허용한다 — 기존 Lounge 문서와 호환된다.
       function postKeys() {
         return [
           'surface', 'authorUid', 'authorSnapshot', 'text', 'imageUrls',
           'status', 'visibility', 'reactionCount', 'commentCount',
           'createdAt', 'updatedAt', 'schemaVersion'
         ];
+      }
+      function postOptionalKeys() {
+        return ['imagePaths'];
       }
       // 작성자 snapshot은 공개 정보 6개 필드만 담는다(비공개 프로필 값 금지).
       function authorSnapshotValid(data) {
@@ -1029,11 +1034,25 @@ service cloud.firestore {
           snapshot.workVerified is bool &&
           snapshot.schoolVerified is bool;
       }
-      // imageUrls는 Rules에서 size/type까지만 확인하고, 각 항목의 길이 검증은
-      // 클라이언트 parser가 방어한다(Rules 문법으로 안전하게 순회할 수 없다).
+      // imageUrls/imagePaths는 Rules에서 size/type까지만 확인하고, 각 항목의
+      // 경로·길이 검증은 서버(createFeedPost)와 클라이언트 parser가 맡는다
+      // (Rules 문법으로 list의 각 문자열을 안전하게 순회할 수 없다).
+      //
+      // surface별 계약(Phase 4-3):
+      // - lounge: imageUrls·imagePaths 모두 비어 있다(텍스트 전용).
+      // - feed:   imageUrls는 비어 있고 imagePaths가 1~4개 있다.
+      function postImagesValid(data) {
+        // optional 필드이므로 dot 접근(없으면 null error) 대신 get(기본값)을 쓴다.
+        let paths = data.get('imagePaths', []);
+        return data.imageUrls is list &&
+          data.imageUrls.size() == 0 &&
+          paths is list &&
+          paths.size() <= 4 &&
+          (data.surface == 'feed' ? paths.size() >= 1 : paths.size() == 0);
+      }
       function postShapeValid() {
         let data = resource.data;
-        return data.keys().hasOnly(postKeys()) &&
+        return data.keys().hasOnly(postKeys().concat(postOptionalKeys())) &&
           data.keys().hasAll(postKeys()) &&
           data.surface in ['lounge', 'feed'] &&
           data.authorUid is string &&
@@ -1042,8 +1061,7 @@ service cloud.firestore {
           data.text is string &&
           data.text.size() >= 1 &&
           data.text.size() <= 1000 &&
-          data.imageUrls is list &&
-          data.imageUrls.size() <= 4 &&
+          postImagesValid(data) &&
           data.reactionCount is int &&
           data.reactionCount >= 0 &&
           data.commentCount is int &&

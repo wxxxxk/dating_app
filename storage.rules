@@ -59,6 +59,60 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // communityFeed/{uid}/{postId}/{fileName} (Phase 4-3):
+    //
+    // 커뮤니티 Feed 게시물 이미지. **download URL을 만들지 않는 경로다** —
+    // Firestore에는 이 내부 경로만 저장하고, 표시할 때 인증된 앱 사용자가
+    // bytes를 직접 읽는다. 그래서 read를 "인증만 하면 전부"로 열지 않고
+    // 대응 게시물이 실제로 살아 있는지 Firestore에서 확인한다.
+    //
+    // - create: 본인 폴더에만, 5MB 이하 jpg/png만.
+    // - read:   active/authenticated 상태인 본인 소유 feed 게시물이 그 경로를
+    //           imagePaths에 담고 있을 때만. 글이 삭제되면 즉시 막힌다.
+    // - update/delete: 항상 금지. 파일 삭제는 Admin SDK만 수행한다.
+    match /communityFeed/{uid}/{postId}/{fileName} {
+      // 클라이언트가 만든 Firestore auto-ID 형식만 받는다.
+      function validPostId() {
+        return postId.matches('^[A-Za-z0-9]{20}$');
+      }
+      function validFeedImage() {
+        return request.resource.size > 0 &&
+          request.resource.size <= 5 * 1024 * 1024 &&
+          request.resource.contentType in ['image/jpeg', 'image/png'] &&
+          fileName.matches('^[A-Za-z0-9_-]{1,64}\\.(jpg|jpeg|png)$');
+      }
+      function objectPath() {
+        return 'communityFeed/' + uid + '/' + postId + '/' + fileName;
+      }
+      // Storage Rules → Firestore cross-service 조회.
+      function postAllowsRead() {
+        let post = firestore.get(
+          /databases/(default)/documents/communityPosts/$(postId)
+        ).data;
+        return post.authorUid == uid &&
+          post.surface == 'feed' &&
+          post.status == 'active' &&
+          post.visibility == 'authenticated' &&
+          post.schemaVersion == 1 &&
+          post.imagePaths is list &&
+          post.imagePaths.hasAny([objectPath()]);
+      }
+
+      allow read: if request.auth != null &&
+        validPostId() &&
+        firestore.exists(
+          /databases/(default)/documents/communityPosts/$(postId)
+        ) &&
+        postAllowsRead();
+
+      allow create: if request.auth != null &&
+        request.auth.uid == uid &&
+        validPostId() &&
+        validFeedImage();
+
+      allow update, delete: if false;
+    }
+
   }
 }
 

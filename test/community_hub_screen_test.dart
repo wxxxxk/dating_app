@@ -6,6 +6,7 @@ import 'package:dating_app/features/community/community_hub_screen.dart';
 import 'package:dating_app/models/community/community_enums.dart';
 import 'package:dating_app/models/community/community_post.dart';
 import 'package:dating_app/services/auth/auth_service.dart';
+import 'package:dating_app/services/community/community_media_service.dart';
 import 'package:dating_app/services/community/community_service.dart';
 import 'package:dating_app/services/database/firestore_service.dart';
 import 'package:dating_app/services/privacy/contact_avoidance_service.dart';
@@ -128,6 +129,7 @@ _pump(
       home: CommunityHubScreen(
         authService: _FakeAuthService(),
         communityService: c,
+        mediaService: CommunityMediaService(),
         safetyService: _FakeSafetyService(blocked: blocked),
         contactAvoidanceService: a,
       ),
@@ -180,15 +182,19 @@ void main() {
       ]) {
         expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
       }
-      // Phase 4-2: 라운지는 이용 가능, 나머지는 준비 중 유지.
-      expect(find.text('이용 가능'), findsOneWidget);
-      expect(find.text('준비 중'), findsNWidgets(3));
+      // Phase 4-3: 라운지·피드는 이용 가능, 파티·그룹 채팅만 준비 중.
+      expect(find.text('이용 가능'), findsNWidgets(2));
+      expect(find.text('준비 중'), findsNWidgets(2));
 
       // 10. 준비 중 목적지는 안내만 한다.
-      await tester.tap(find.byKey(const ValueKey('community-destination-feed')));
+      await tester.tap(
+        find.byKey(const ValueKey('community-destination-party-square')),
+      );
       await tester.pump();
       await tester.pump();
-      expect(find.text('피드는 다음 단계에서 열릴 예정이에요.'), findsOneWidget);
+      expect(find.text('파티·스퀘어는 다음 단계에서 열릴 예정이에요.'), findsOneWidget);
+      // 피드는 더 이상 준비 중 안내를 띄우지 않는다.
+      expect(find.text('피드는 다음 단계에서 열릴 예정이에요.'), findsNothing);
     });
 
     testWidgets('9. 허브는 라운지 게시물을 직접 구독하지 않는다', (tester) async {

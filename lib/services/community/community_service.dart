@@ -48,6 +48,7 @@ class CommunityService {
   static const int defaultCommentLimit = 100;
 
   static const String createPostCallable = 'createLoungePost';
+  static const String createFeedPostCallable = 'createFeedPost';
   static const String createCommentCallable = 'createCommunityComment';
   static const String toggleReactionCallable = 'toggleCommunityReaction';
   static const String deletePostCallable = 'deleteCommunityPost';
@@ -148,6 +149,35 @@ class CommunityService {
       throw const CommunityActionError(genericErrorMessage);
     }
     return postId;
+  }
+
+  /// 새 게시물 id를 미리 만든다(Phase 4-3).
+  ///
+  /// Feed는 이미지를 먼저 업로드해야 하는데 Storage 경로에 postId가 들어가므로
+  /// 클라이언트가 Firestore auto-ID 형식의 id를 먼저 확보한다. 같은 id로
+  /// 다시 호출해도 서버가 멱등 처리한다.
+  String createPostId() => _db.collection(collectionPath).doc().id;
+
+  /// 이미지 게시물을 작성한다(Phase 4-3).
+  ///
+  /// [imagePaths]는 [CommunityMediaService]가 업로드하고 돌려준 내부 Storage
+  /// 경로다 — download URL은 만들지도, 보내지도 않는다. 서버가 각 object의
+  /// 소유자·크기·contentType을 다시 확인한다.
+  Future<String> createFeedPost({
+    required String postId,
+    required String text,
+    required List<String> imagePaths,
+  }) async {
+    final data = await _call(createFeedPostCallable, {
+      'postId': postId,
+      'text': text,
+      'imagePaths': imagePaths,
+    });
+    final createdId = data['postId'];
+    if (createdId is! String || createdId.isEmpty) {
+      throw const CommunityActionError(genericErrorMessage);
+    }
+    return createdId;
   }
 
   Future<String> createComment({

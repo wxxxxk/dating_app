@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/community/community_media_service.dart';
 import '../../services/community/community_service.dart';
 import '../../services/privacy/contact_avoidance_service.dart';
 import '../../services/safety/safety_service.dart';
+import 'feed/feed_screen.dart';
 import 'lounge/lounge_screen.dart';
 
 /// 커뮤니티 홈(Phase 4-2) — 목적지 선택 화면.
@@ -14,6 +16,7 @@ import 'lounge/lounge_screen.dart';
 class CommunityHubScreen extends StatelessWidget {
   final AuthService authService;
   final CommunityService communityService;
+  final CommunityMediaService mediaService;
   final SafetyService safetyService;
   final ContactAvoidanceService contactAvoidanceService;
 
@@ -21,6 +24,7 @@ class CommunityHubScreen extends StatelessWidget {
     super.key,
     required this.authService,
     required this.communityService,
+    required this.mediaService,
     required this.safetyService,
     required this.contactAvoidanceService,
   });
@@ -37,6 +41,20 @@ class CommunityHubScreen extends StatelessWidget {
         builder: (_) => LoungeScreen(
           authService: authService,
           communityService: communityService,
+          safetyService: safetyService,
+          contactAvoidanceService: contactAvoidanceService,
+        ),
+      ),
+    );
+  }
+
+  void _openFeed(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FeedScreen(
+          authService: authService,
+          communityService: communityService,
+          mediaService: mediaService,
           safetyService: safetyService,
           contactAvoidanceService: contactAvoidanceService,
         ),
@@ -114,10 +132,9 @@ class CommunityHubScreen extends StatelessWidget {
                 icon: Icons.photo_library_outlined,
                 title: '피드',
                 description: '일상과 취향을 사진과 함께 나눠요',
-                statusLabel: '준비 중',
-                available: false,
-                onTap: () =>
-                    _showComingSoon(context, '피드는 다음 단계에서 열릴 예정이에요.'),
+                statusLabel: '이용 가능',
+                available: true,
+                onTap: () => _openFeed(context),
               ),
               const SizedBox(height: 10),
               _DestinationCard(

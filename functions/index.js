@@ -61,6 +61,7 @@ const {
 const { tokensForRecipient } = require('./lib/push_tokens');
 const {
   createLoungePostCore,
+  createFeedPostCore,
   createCommunityCommentCore,
   toggleCommunityReactionCore,
   deleteCommunityPostCore,
@@ -3550,12 +3551,14 @@ function toCommunityHttpsError(error) {
   return new HttpsError('internal', '잠시 후 다시 시도해주세요.');
 }
 
-function communityCallable(core) {
+function communityCallable(core, { withBucket = false } = {}) {
   return onCall(async (request) => {
     try {
       return await core({
         request,
         db,
+        // Feed 이미지 object를 직접 확인·삭제해야 하는 core에만 넘긴다.
+        ...(withBucket ? { bucket: admin.storage().bucket() } : {}),
         HttpsError,
         serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
         logger: console,
@@ -3567,9 +3570,14 @@ function communityCallable(core) {
 }
 
 exports.createLoungePost = communityCallable(createLoungePostCore);
+exports.createFeedPost = communityCallable(createFeedPostCore, {
+  withBucket: true,
+});
 exports.createCommunityComment = communityCallable(createCommunityCommentCore);
 exports.toggleCommunityReaction = communityCallable(toggleCommunityReactionCore);
-exports.deleteCommunityPost = communityCallable(deleteCommunityPostCore);
+exports.deleteCommunityPost = communityCallable(deleteCommunityPostCore, {
+  withBucket: true,
+});
 exports.deleteCommunityComment = communityCallable(deleteCommunityCommentCore);
 exports.reportCommunityContent = communityCallable(reportCommunityContentCore);
 

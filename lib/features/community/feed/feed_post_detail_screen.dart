@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../models/community/community_comment.dart';
 import '../../../models/community/community_post.dart';
 import '../../../services/auth/auth_service.dart';
+import '../../../services/community/community_media_service.dart';
 import '../../../services/community/community_service.dart';
 import '../../../services/privacy/contact_avoidance_service.dart';
 import '../../../services/safety/safety_service.dart';
@@ -11,34 +12,37 @@ import '../community_audience_filter.dart';
 import '../community_comment_widgets.dart';
 import '../community_report_sheet.dart';
 import '../community_text_guard.dart';
-import 'lounge_widgets.dart';
+import '../lounge/lounge_widgets.dart';
+import 'feed_widgets.dart';
 
-/// 라운지 게시물 상세(Phase 4-2).
+/// 피드 게시물 상세(Phase 4-3).
 ///
-/// 게시물 본문 + 공감 + 댓글 목록/작성 + 신고·삭제를 담당한다.
+/// 이미지 1~4장 + 본문 + 공감 + 댓글 목록/작성 + 신고·삭제를 담당한다.
 /// 게시물이 삭제/숨김되거나 작성자와의 관계가 바뀌면 즉시 볼 수 없는 상태로
-/// 바뀌고, 이유(차단·지인 피하기)나 UID는 표시하지 않는다.
-class LoungePostDetailScreen extends StatefulWidget {
+/// 바뀌고, 이유(차단·지인 피하기)나 UID·Storage 경로는 표시하지 않는다.
+class FeedPostDetailScreen extends StatefulWidget {
   final String postId;
   final AuthService authService;
   final CommunityService communityService;
+  final CommunityMediaService mediaService;
   final SafetyService safetyService;
   final ContactAvoidanceService contactAvoidanceService;
 
-  const LoungePostDetailScreen({
+  const FeedPostDetailScreen({
     super.key,
     required this.postId,
     required this.authService,
     required this.communityService,
+    required this.mediaService,
     required this.safetyService,
     required this.contactAvoidanceService,
   });
 
   @override
-  State<LoungePostDetailScreen> createState() => _LoungePostDetailScreenState();
+  State<FeedPostDetailScreen> createState() => _FeedPostDetailScreenState();
 }
 
-class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
+class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
   late final Stream<CommunityPost?> _postStream = widget.communityService
       .watchPost(widget.postId);
   late final Stream<List<CommunityComment>> _commentsStream = widget
@@ -168,17 +172,19 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
 
   // ── 게시물 삭제/신고 ─────────────────────────────────────────────────────
 
-  Future<void> _deletePost() async {
+  Future<void> _deletePost(CommunityPost post) async {
     if (_busy) return;
     final confirmed = await _confirm(
-      title: '글을 삭제할까요?',
-      message: '삭제하면 라운지에서 바로 사라져요.',
+      title: '게시물을 삭제할까요?',
+      message: '삭제하면 사진도 함께 지워지고 다시 되돌릴 수 없어요.',
     );
     if (confirmed != true) return;
 
     _busy = true;
     try {
       await widget.communityService.deletePost(postId: widget.postId);
+      // 서버가 실제 파일을 지웠으므로 남은 bytes 캐시도 버린다.
+      evictFeedImageCache(post.imagePaths);
       if (!mounted) return;
       Navigator.of(context).pop();
     } on CommunityActionError catch (e) {
@@ -250,7 +256,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
   Widget build(BuildContext context) {
     final uid = _currentUid;
     return Scaffold(
-      key: const ValueKey('lounge-post-detail-screen'),
+      key: const ValueKey('feed-post-detail-screen'),
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
@@ -264,7 +270,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {
               return const Center(
-                key: ValueKey('lounge-detail-loading'),
+                key: ValueKey('feed-detail-loading'),
                 child: CircularProgressIndicator(),
               );
             }
@@ -290,10 +296,11 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
                     children: [
-                      _PostBody(
+                      _FeedPostBody(
                         post: post,
+                        mediaService: widget.mediaService,
                         isMine: isMine,
-                        onDelete: _deletePost,
+                        onDelete: () => _deletePost(post),
                         onReport: () => _report(
                           targetType: 'post',
                           reportedUid: post.authorUid,
@@ -301,7 +308,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                       ),
                       const SizedBox(height: 12),
                       CommunityReactionBar(
-                        keyPrefix: 'lounge',
+                        keyPrefix: 'feed',
                         reactionStream: _myReactionStream,
                         overrideReacted: _overrideReacted,
                         reactionCount:
@@ -311,7 +318,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                       ),
                       const SizedBox(height: 16),
                       CommunityCommentList(
-                        keyPrefix: 'lounge',
+                        keyPrefix: 'feed',
                         stream: _commentsStream,
                         selfUid: uid,
                         audience: _audience,
@@ -326,7 +333,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                   ),
                 ),
                 CommunityCommentInput(
-                  keyPrefix: 'lounge',
+                  keyPrefix: 'feed',
                   controller: _commentController,
                   submitting: _submittingComment,
                   onSubmit: _submitComment,
@@ -340,14 +347,16 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
   }
 }
 
-class _PostBody extends StatelessWidget {
+class _FeedPostBody extends StatelessWidget {
   final CommunityPost post;
+  final CommunityMediaService mediaService;
   final bool isMine;
   final VoidCallback onDelete;
   final VoidCallback onReport;
 
-  const _PostBody({
+  const _FeedPostBody({
     required this.post,
+    required this.mediaService,
     required this.isMine,
     required this.onDelete,
     required this.onReport,
@@ -356,9 +365,8 @@ class _PostBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      key: const ValueKey('lounge-detail-post'),
+      key: const ValueKey('feed-detail-post'),
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.card),
@@ -367,47 +375,125 @@ class _PostBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CommunityAuthorHeader(
-            author: post.author,
-            createdAt: post.createdAt,
-            trailing: SizedBox(
-              width: 32,
-              height: 32,
-              child: PopupMenuButton<String>(
-                key: const ValueKey('lounge-detail-post-menu'),
-                padding: EdgeInsets.zero,
-                icon: const Icon(
-                  Icons.more_horiz_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+            child: CommunityAuthorHeader(
+              author: post.author,
+              createdAt: post.createdAt,
+              trailing: SizedBox(
+                width: 32,
+                height: 32,
+                child: PopupMenuButton<String>(
+                  key: const ValueKey('feed-detail-post-menu'),
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(
+                    Icons.more_horiz_rounded,
+                    size: 18,
+                    color: AppColors.textSecondary,
+                  ),
+                  onSelected: (value) {
+                    if (value == 'delete') {
+                      onDelete();
+                    } else if (value == 'report') {
+                      onReport();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (isMine)
+                      const PopupMenuItem(value: 'delete', child: Text('삭제하기'))
+                    else
+                      const PopupMenuItem(value: 'report', child: Text('신고하기')),
+                  ],
                 ),
-                onSelected: (value) {
-                  if (value == 'delete') {
-                    onDelete();
-                  } else if (value == 'report') {
-                    onReport();
-                  }
-                },
-                itemBuilder: (_) => [
-                  if (isMine)
-                    const PopupMenuItem(value: 'delete', child: Text('삭제하기'))
-                  else
-                    const PopupMenuItem(value: 'report', child: Text('신고하기')),
-                ],
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            post.text,
-            style: const TextStyle(
-              fontSize: 14.5,
-              height: 1.6,
-              color: AppColors.textPrimary,
+          if (post.hasImages)
+            _FeedImageGallery(post: post, mediaService: mediaService),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Text(
+              post.text,
+              style: const TextStyle(
+                fontSize: 14.5,
+                height: 1.6,
+                color: AppColors.textPrimary,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 이미지 1~4장을 좌우로 넘겨 본다. 현재 위치를 인디케이터로 표시한다.
+class _FeedImageGallery extends StatefulWidget {
+  static const double height = 320;
+
+  final CommunityPost post;
+  final CommunityMediaService mediaService;
+
+  const _FeedImageGallery({required this.post, required this.mediaService});
+
+  @override
+  State<_FeedImageGallery> createState() => _FeedImageGalleryState();
+}
+
+class _FeedImageGalleryState extends State<_FeedImageGallery> {
+  final _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final paths = widget.post.imagePaths;
+    return Column(
+      children: [
+        SizedBox(
+          height: _FeedImageGallery.height,
+          child: PageView.builder(
+            key: const ValueKey('feed-detail-gallery'),
+            controller: _controller,
+            itemCount: paths.length,
+            onPageChanged: (index) => setState(() => _index = index),
+            itemBuilder: (context, index) => FeedStorageImage(
+              key: ValueKey('feed-detail-image-$index'),
+              mediaService: widget.mediaService,
+              storagePath: paths[index],
+              height: _FeedImageGallery.height,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+        if (paths.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            key: const ValueKey('feed-detail-indicator'),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < paths.length; i++) ...[
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i == _index
+                        ? AppColors.matchPrimary
+                        : AppColors.border,
+                  ),
+                ),
+                if (i != paths.length - 1) const SizedBox(width: 5),
+              ],
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

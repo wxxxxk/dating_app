@@ -5,6 +5,7 @@ import '../services/auth/auth_service.dart';
 import '../services/chat/appointment_safety_service.dart';
 import '../services/chat/chat_presence_service.dart';
 import '../core/navigation/main_tab_index.dart';
+import '../services/community/community_media_service.dart';
 import '../services/community/community_service.dart';
 import '../services/privacy/contact_avoidance_service.dart';
 import '../services/chat/chat_service.dart';
@@ -46,6 +47,7 @@ class MainShell extends StatefulWidget {
   final AppointmentSafetyService appointmentSafetyService;
   final ContactAvoidanceService contactAvoidanceService;
   final CommunityService communityService;
+  final CommunityMediaService communityMediaService;
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -66,6 +68,7 @@ class MainShell extends StatefulWidget {
     required this.appointmentSafetyService,
     required this.contactAvoidanceService,
     required this.communityService,
+    required this.communityMediaService,
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
@@ -167,6 +170,7 @@ class _MainShellState extends State<MainShell> {
           CommunityHubScreen(
             authService: widget.authService,
             communityService: widget.communityService,
+            mediaService: widget.communityMediaService,
             safetyService: widget.safetyService,
             contactAvoidanceService: widget.contactAvoidanceService,
           ),
