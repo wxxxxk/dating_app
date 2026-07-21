@@ -12,7 +12,9 @@ import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth/auth_service.dart';
 import 'services/chat/appointment_safety_service.dart';
 import 'services/chat/chat_presence_service.dart';
+import 'features/privacy/screen_protection_widgets.dart';
 import 'services/privacy/contact_avoidance_service.dart';
+import 'services/privacy/screen_protection_service.dart';
 import 'services/chat/chat_service.dart';
 import 'services/charm/charm_service.dart';
 import 'services/database/firestore_service.dart';
@@ -50,6 +52,7 @@ class _MyAppState extends State<MyApp> {
   late final ChatPresenceService _presenceService;
   late final AppointmentSafetyService _appointmentSafetyService;
   late final ContactAvoidanceService _contactAvoidanceService;
+  late final MethodChannelScreenProtectionService _screenProtectionService;
   late final CharmService _charmService;
   late final FortuneService _fortuneService;
   late final JellyService _jellyService;
@@ -72,6 +75,7 @@ class _MyAppState extends State<MyApp> {
     _presenceService = ChatPresenceService();
     _appointmentSafetyService = AppointmentSafetyService();
     _contactAvoidanceService = ContactAvoidanceService();
+    _screenProtectionService = MethodChannelScreenProtectionService();
     _charmService = CharmService();
     _fortuneService = FortuneService();
     _jellyService = JellyService();
@@ -107,6 +111,7 @@ class _MyAppState extends State<MyApp> {
     _authState.dispose();
     _mainTabRequest.dispose();
     unawaited(_notificationService.dispose());
+    unawaited(_screenProtectionService.dispose());
     super.dispose();
   }
 
@@ -128,6 +133,7 @@ class _MyAppState extends State<MyApp> {
         presenceService: _presenceService,
         appointmentSafetyService: _appointmentSafetyService,
         contactAvoidanceService: _contactAvoidanceService,
+        screenProtectionService: _screenProtectionService,
         charmService: _charmService,
         fortuneService: _fortuneService,
         jellyService: _jellyService,
@@ -202,6 +208,7 @@ class _AuthGate extends StatefulWidget {
   final ChatPresenceService presenceService;
   final AppointmentSafetyService appointmentSafetyService;
   final ContactAvoidanceService contactAvoidanceService;
+  final ScreenProtectionService screenProtectionService;
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -222,6 +229,7 @@ class _AuthGate extends StatefulWidget {
     required this.presenceService,
     required this.appointmentSafetyService,
     required this.contactAvoidanceService,
+    required this.screenProtectionService,
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
@@ -320,6 +328,19 @@ class _AuthGateState extends State<_AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    // 화면 캡처 보호(Phase 3-5)는 route가 아니라 로그인 상태 한 곳에서만
+    // 켜고 끈다. 인증 상태가 확정되기 전(initializing)에는 보호를 켠 상태로
+    // 두어(fail-closed) 첫 프레임이 노출되지 않게 한다.
+    final protectionEnabled =
+        widget.authState.initializing || widget.authState.isLoggedIn;
+    return ScreenProtectionCoordinator(
+      service: widget.screenProtectionService,
+      loggedIn: protectionEnabled,
+      child: _buildGate(context),
+    );
+  }
+
+  Widget _buildGate(BuildContext context) {
     // 인증 초기화 중, 또는 로그인 후 프로필 조회 중에는 로딩.
     if (widget.authState.initializing ||
         (widget.authState.isLoggedIn && !_profileChecked)) {

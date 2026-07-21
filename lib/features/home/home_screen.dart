@@ -37,6 +37,7 @@ import '../profile/profile_edit_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
 import '../privacy/contact_avoidance_screen.dart';
+import '../privacy/screen_protection_widgets.dart';
 import '../safety/blocked_users_screen.dart';
 import '../verification/affiliation_verification_screen.dart';
 import '../verification/photo_verification_screen.dart';
@@ -804,7 +805,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 6),
+                  ScreenProtectionInfoRow(
+                    onTap: () => showScreenProtectionInfoSheet(context),
+                  ),
+                  const SizedBox(height: 6),
                   PrimaryButton(
                     label: '차단 목록 관리',
                     outlined: true,
