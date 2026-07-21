@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 지인 피하기(Phase 3-4): 연락처 전화번호만 기기에서 읽어 해시로 변환한다.
+         이름·사진·이메일은 읽지 않고, 쓰기 권한도 요청하지 않는다. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 

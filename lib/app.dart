@@ -12,6 +12,7 @@ import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth/auth_service.dart';
 import 'services/chat/appointment_safety_service.dart';
 import 'services/chat/chat_presence_service.dart';
+import 'services/privacy/contact_avoidance_service.dart';
 import 'services/chat/chat_service.dart';
 import 'services/charm/charm_service.dart';
 import 'services/database/firestore_service.dart';
@@ -48,6 +49,7 @@ class _MyAppState extends State<MyApp> {
   late final ChatService _chatService;
   late final ChatPresenceService _presenceService;
   late final AppointmentSafetyService _appointmentSafetyService;
+  late final ContactAvoidanceService _contactAvoidanceService;
   late final CharmService _charmService;
   late final FortuneService _fortuneService;
   late final JellyService _jellyService;
@@ -69,6 +71,7 @@ class _MyAppState extends State<MyApp> {
     _chatService = ChatService();
     _presenceService = ChatPresenceService();
     _appointmentSafetyService = AppointmentSafetyService();
+    _contactAvoidanceService = ContactAvoidanceService();
     _charmService = CharmService();
     _fortuneService = FortuneService();
     _jellyService = JellyService();
@@ -124,6 +127,7 @@ class _MyAppState extends State<MyApp> {
         chatService: _chatService,
         presenceService: _presenceService,
         appointmentSafetyService: _appointmentSafetyService,
+        contactAvoidanceService: _contactAvoidanceService,
         charmService: _charmService,
         fortuneService: _fortuneService,
         jellyService: _jellyService,
@@ -153,6 +157,7 @@ class _MyAppState extends State<MyApp> {
                 chatService: _chatService,
                 presenceService: _presenceService,
                 appointmentSafetyService: _appointmentSafetyService,
+                contactAvoidanceService: _contactAvoidanceService,
                 charmService: _charmService,
                 fortuneService: _fortuneService,
                 jellyService: _jellyService,
@@ -196,6 +201,7 @@ class _AuthGate extends StatefulWidget {
   final ChatService chatService;
   final ChatPresenceService presenceService;
   final AppointmentSafetyService appointmentSafetyService;
+  final ContactAvoidanceService contactAvoidanceService;
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -215,6 +221,7 @@ class _AuthGate extends StatefulWidget {
     required this.chatService,
     required this.presenceService,
     required this.appointmentSafetyService,
+    required this.contactAvoidanceService,
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
@@ -348,6 +355,7 @@ class _AuthGateState extends State<_AuthGate> {
       chatService: widget.chatService,
       presenceService: widget.presenceService,
       appointmentSafetyService: widget.appointmentSafetyService,
+      contactAvoidanceService: widget.contactAvoidanceService,
       charmService: widget.charmService,
       fortuneService: widget.fortuneService,
       jellyService: widget.jellyService,

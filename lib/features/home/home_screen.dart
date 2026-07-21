@@ -9,6 +9,7 @@ import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../models/affiliation_verification_request.dart';
 import '../../models/photo_verification_request.dart';
+import '../../services/privacy/contact_avoidance_service.dart';
 import '../../services/verification/affiliation_verification_service.dart';
 import '../../services/verification/photo_verification_service.dart';
 import '../../services/auth/account_deletion_service.dart';
@@ -35,6 +36,7 @@ import '../jelly/jelly_shop_screen.dart';
 import '../profile/profile_edit_screen.dart';
 import '../profile/user_profile_screen.dart';
 import '../profile/widgets/verification_badge.dart';
+import '../privacy/contact_avoidance_screen.dart';
 import '../safety/blocked_users_screen.dart';
 import '../verification/affiliation_verification_screen.dart';
 import '../verification/photo_verification_screen.dart';
@@ -97,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // 상태 없는 서비스 래퍼라 화면 로컬로 둔다(app.dart 주입 체인 변경 불필요).
   final _photoVerificationService = PhotoVerificationService();
   final _affiliationVerificationService = AffiliationVerificationService();
+  final _contactAvoidanceService = ContactAvoidanceService();
 
   @override
   void initState() {
@@ -451,6 +454,26 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// 지인 피하기 화면. 전화 인증 여부는 서버에서도 다시 확인한다.
+  Future<void> _openContactAvoidance() async {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid == null) return;
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ContactAvoidanceScreen(
+          uid: uid,
+          service: _contactAvoidanceService,
+          phoneVerified: _profile?.verifications.phone ?? false,
+          onVerifyPhone: () {
+            Navigator.pop(context);
+            _openPhoneVerification();
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _openBlockedUsers() async {
     final uid = widget.authService.currentUser?.uid;
     if (uid == null) return;
@@ -765,6 +788,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: '프로필 편집',
                     outlined: true,
                     onPressed: _openEditScreen,
+                  ),
+                  const SizedBox(height: 12),
+                  PrimaryButton(
+                    key: const Key('open-contact-avoidance'),
+                    label: '지인 피하기',
+                    outlined: true,
+                    onPressed: _openContactAvoidance,
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '연락처에 있는 사람을 서로 추천에서 숨겨요',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   PrimaryButton(

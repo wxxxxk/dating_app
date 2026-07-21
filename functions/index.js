@@ -50,6 +50,11 @@ const {
   reviewAffiliationVerificationCore,
 } = require('./lib/affiliation_verification_review');
 const {
+  isContactAvoidancePair,
+  syncAvoidContactsCore,
+  syncPrivatePhoneIdentifier,
+} = require('./lib/contact_avoidance');
+const {
   reviewPhotoVerificationCore,
 } = require('./lib/photo_verification_review');
 const { tokensForRecipient } = require('./lib/push_tokens');
@@ -133,6 +138,10 @@ const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY');
 // 로컬 테스트는 functions/.secret.local(git-ignore 대상)에 FAL_KEY=... 로 둔다.
 const FAL_KEY = defineSecret('FAL_KEY');
 
+// Phase 3-4: 연락처 digest를 저장 가능한 값으로 바꾸는 pepper.
+// 이 값이 없으면 전화번호 해시 대조 자체가 불가능하다(코드·저장소에 값 없음).
+const CONTACT_AVOIDANCE_PEPPER = defineSecret('CONTACT_AVOIDANCE_PEPPER');
+
 /**
  * users/{uid}/swipes/{targetUid} 문서가 생성/수정될 때 실행.
  *
@@ -170,6 +179,13 @@ exports.onSwipeCreated = onDocumentWritten(
       .doc(targetUid)
       .collection('swipes')
       .doc(uid);
+
+    // Phase 3-4: 지인 피하기로 묶인 상대와는 새 매칭을 만들지 않는다.
+    // 클라이언트 필터를 우회해 swipe 문서를 만들어도 여기서 막힌다.
+    // 기존 매치는 건드리지 않는다(존재하면 위 멱등 분기로 그대로 유지).
+    if (await isContactAvoidancePair({ db, uidA: uid, uidB: targetUid })) {
+      return null;
+    }
 
     const created = await db.runTransaction(async (transaction) => {
       const [existing, currentSwipe, reverseSwipe] = await Promise.all([
@@ -3389,16 +3405,61 @@ exports.generateIdealTypeImageProviderPreview = onCall(
 // Phase 0-D: 인증 배지 서버 전용 동기화
 // ============================================================================
 
-exports.syncAuthVerificationBadges = onCall(async (request) => {
-  return syncAuthVerificationBadgesCore({
-    request,
-    auth: admin.auth(),
-    db,
-    HttpsError,
-    serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
-    logger: console,
-  });
-});
+exports.syncAuthVerificationBadges = onCall(
+  { secrets: [CONTACT_AVOIDANCE_PEPPER] },
+  async (request) => {
+    const result = await syncAuthVerificationBadgesCore({
+      request,
+      auth: admin.auth(),
+      db,
+      HttpsError,
+      serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+      logger: console,
+    });
+
+    // Phase 3-4: 전화 인증 상태에 맞춰 지인 피하기용 private 식별자를 갱신한다.
+    // 실패해도 배지 동기화 결과를 되돌리지 않는다(다음 호출에서 다시 시도).
+    try {
+      const userRecord = await admin.auth().getUser(request.auth.uid);
+      await syncPrivatePhoneIdentifier({
+        uid: request.auth.uid,
+        phoneNumber: userRecord?.phoneNumber,
+        phoneVerified: result?.verifications?.phone === true,
+        pepper: CONTACT_AVOIDANCE_PEPPER.value(),
+        db,
+        serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+      });
+    } catch (_) {
+      // uid hash 외 식별 정보를 남기지 않는다.
+      console.error('event=contact_identifier_sync result=error');
+    }
+
+    return result;
+  },
+);
+
+// ============================================================================
+// Phase 3-4: 연락처 기반 지인 피하기
+// ============================================================================
+//
+// 클라이언트는 정규화된 전화번호의 SHA-256 digest만 보낸다. 서버는 그 digest를
+// secret pepper로 HMAC해 privatePhoneIdentifiers와 대조하고, 매칭된 상대와
+// 양방향 숨김 pair를 만든다. 전화번호 원문·이름·digest는 저장하지 않는다.
+
+exports.syncAvoidContacts = onCall(
+  { secrets: [CONTACT_AVOIDANCE_PEPPER] },
+  async (request) => {
+    return syncAvoidContactsCore({
+      request,
+      db,
+      auth: admin.auth(),
+      pepper: CONTACT_AVOIDANCE_PEPPER.value(),
+      HttpsError,
+      serverTimestamp: admin.firestore.FieldValue.serverTimestamp,
+      logger: console,
+    });
+  },
+);
 
 // ============================================================================
 // Phase 3-2: 사진 인증 수동 검토 (admin 전용)

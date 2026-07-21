@@ -18,6 +18,7 @@ import '../../services/jelly/jelly_purchase_service.dart';
 import '../../services/jelly/jelly_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
+import '../../services/privacy/contact_avoidance_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
@@ -51,6 +52,7 @@ class DiscoveryScreen extends StatefulWidget {
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
   final SafetyService safetyService;
+  final ContactAvoidanceService contactAvoidanceService;
 
   const DiscoveryScreen({
     super.key,
@@ -65,6 +67,7 @@ class DiscoveryScreen extends StatefulWidget {
     required this.jellyService,
     required this.jellyPurchaseService,
     required this.safetyService,
+    required this.contactAvoidanceService,
   });
 
   @override
@@ -110,6 +113,18 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
 
   // ── 데이터 로드 ────────────────────────────────────────────────────────────
 
+  /// 지인 피하기 pair 상대 목록. 조회 실패는 Discovery 로딩을 막지 않는다.
+  Future<Set<String>> _loadAvoidedUids(String uid) async {
+    try {
+      return await widget.contactAvoidanceService
+          .watchAvoidedUids(uid)
+          .first
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return const <String>{};
+    }
+  }
+
   Future<void> _loadDiscovery() async {
     setState(() {
       _loading = true;
@@ -129,11 +144,14 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
       final blockedUids = await widget.safetyService.getBlockedRelationshipUids(
         uid,
       );
+      // 지인 피하기(Phase 3-4) 상대는 차단 UID와 합쳐 후보 조회 단계에서 뺀다 —
+      // 화면에 잠깐 보였다가 사라지는 flash를 만들지 않기 위해서다.
+      final avoidedUids = await _loadAvoidedUids(uid);
       final profiles = await widget.discoveryService.getDiscoveryProfiles(
         currentUid: uid,
         currentLocation: currentLocation,
         filter: filter,
-        excludedUids: blockedUids,
+        excludedUids: {...blockedUids, ...avoidedUids},
       );
       final photoUrls = profile?.photoUrls ?? const <String>[];
       if (mounted) {
