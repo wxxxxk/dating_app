@@ -4,11 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../models/appointment_safety_checkin.dart';
 import '../../models/chat_appointment.dart';
 import '../../models/chat_presence.dart';
 import '../../models/fortune_model.dart';
 import '../../models/message_model.dart';
 import '../../models/public_profile.dart';
+import '../../services/chat/appointment_safety_service.dart';
 import '../../services/chat/chat_presence_service.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/fortune/fortune_service.dart';
@@ -16,6 +18,7 @@ import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../safety/message_report_sheet.dart';
 import '../safety/report_sheet.dart';
+import 'appointment_safety_widgets.dart';
 import 'chat_appointment_widgets.dart';
 import 'chat_safety.dart';
 import 'chat_safety_widgets.dart';
@@ -30,6 +33,7 @@ class ChatScreen extends StatefulWidget {
   final String currentUid;
   final ChatService chatService;
   final ChatPresenceService presenceService;
+  final AppointmentSafetyService appointmentSafetyService;
   final FortuneService fortuneService;
   final MatchesService matchesService;
   final SafetyService safetyService;
@@ -41,6 +45,7 @@ class ChatScreen extends StatefulWidget {
     required this.currentUid,
     required this.chatService,
     required this.presenceService,
+    required this.appointmentSafetyService,
     required this.fortuneService,
     required this.matchesService,
     required this.safetyService,
@@ -85,6 +90,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   // 표시를 쓰지 않으므로 재진입하면 초기화되는 것이 정상이다.
   final Set<String> _reportedMessageIdsThisSession = {};
   final Map<String, Stream<ChatAppointment?>> _appointmentStreams = {};
+  // 카드 rebuild마다 checkin stream을 새로 만들지 않도록 캐시한다.
+  final Map<String, Stream<AppointmentSafetyCheckin?>> _appointmentSafetyStreams =
+      {};
+  // 안전 확인 제출 중 중복 제출을 막는다.
+  bool _submittingSafetyCheck = false;
   String? _lastReadMarker;
   String? _latestConversationTipMessageId;
   StreamSubscription<bool>? _unmatchedSub;
@@ -331,6 +341,90 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         appointmentId: appointmentId,
       ),
     );
+  }
+
+  /// appointmentId별 본인 checkin 스트림 캐시. 상대 것은 조회하지 않는다.
+  Stream<AppointmentSafetyCheckin?> _appointmentSafetyStream(
+    String appointmentId,
+  ) {
+    return _appointmentSafetyStreams.putIfAbsent(
+      appointmentId,
+      () => widget.appointmentSafetyService.watchCheckin(
+        matchId: widget.matchId,
+        appointmentId: appointmentId,
+        uid: widget.currentUid,
+      ),
+    );
+  }
+
+  /// 만남 전 체크리스트 → 완료 시각 기록. 체크 항목 값은 저장하지 않는다.
+  Future<void> _openPreSafetyCheck(String appointmentId) async {
+    if (_submittingSafetyCheck) return;
+    final completed = await showPreDateSafetySheet(context);
+    if (completed != true || !mounted) return;
+
+    setState(() => _submittingSafetyCheck = true);
+    try {
+      await widget.appointmentSafetyService.completePreCheck(
+        matchId: widget.matchId,
+        appointmentId: appointmentId,
+        uid: widget.currentUid,
+      );
+      if (mounted) _showSnack('만남 전 안전 확인을 기록했어요.');
+    } catch (e) {
+      _debugLog('[Safety] 사전 안전 확인 실패 appointmentId=$appointmentId error=$e');
+      if (mounted) _showSnack('안전 확인을 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      if (mounted) setState(() => _submittingSafetyCheck = false);
+    }
+  }
+
+  /// 만남 후 상태 기록. needsSupport면 곧바로 도움 안내를 연다.
+  Future<void> _openPostSafetyCheck(
+    String appointmentId,
+    DateTime scheduledAt,
+  ) async {
+    if (_submittingSafetyCheck) return;
+    final status = await showPostDateSafetySheet(context);
+    if (status == null || !mounted) return;
+
+    setState(() => _submittingSafetyCheck = true);
+    try {
+      await widget.appointmentSafetyService.completePostCheck(
+        matchId: widget.matchId,
+        appointmentId: appointmentId,
+        uid: widget.currentUid,
+        scheduledAt: scheduledAt,
+        status: status,
+      );
+      if (!mounted) return;
+      _showSnack('상태를 기록했어요.');
+      if (status == AppointmentPostSafetyStatus.needsSupport) {
+        await _openSupportActions();
+      }
+    } on AppointmentSafetyValidationError catch (e) {
+      // 검증 실패 문구는 사용자에게 보여줘도 안전한 고정 문구다.
+      if (mounted) _showSnack(e.message);
+    } catch (e) {
+      _debugLog('[Safety] 사후 안전 확인 실패 appointmentId=$appointmentId error=$e');
+      if (mounted) _showSnack('상태를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      if (mounted) setState(() => _submittingSafetyCheck = false);
+    }
+  }
+
+  /// 도움 안내 시트. 신고·차단을 자동 실행하지 않고 기존 흐름으로 연결만 한다.
+  Future<void> _openSupportActions() async {
+    final action = await showAppointmentSupportSheet(context);
+    if (action == null || !mounted) return;
+    switch (action) {
+      case AppointmentSupportAction.reportUser:
+        await _reportUser();
+      case AppointmentSupportAction.blockUser:
+        await _blockUser();
+      case AppointmentSupportAction.safetyGuide:
+        await showChatSafetyGuideSheet(context);
+    }
   }
 
   Future<void> _openAppointmentSheet() async {
@@ -898,12 +992,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget _buildMessageContent(List<MessageModel> messages, int index) {
     final msg = messages[index];
     if (msg.isAppointment) {
+      final appointmentId = msg.appointmentId!;
       return AppointmentMessageCard(
-        appointmentId: msg.appointmentId!,
+        appointmentId: appointmentId,
         currentUid: widget.currentUid,
-        stream: _appointmentStream(msg.appointmentId!),
-        onRespond: (status) =>
-            _respondToAppointment(msg.appointmentId!, status),
+        stream: _appointmentStream(appointmentId),
+        onRespond: (status) => _respondToAppointment(appointmentId, status),
+        // 안전 확인은 매칭 해제 후에도 본인에게 허용한다(차단 상태에서는 화면
+        // 자체가 _BlockedChatState로 바뀌어 카드가 보이지 않는다).
+        safetyCheckinStream: _appointmentSafetyStream(appointmentId),
+        onOpenPreSafetyCheck: () => _openPreSafetyCheck(appointmentId),
+        onOpenPostSafetyCheck: (scheduledAt) =>
+            _openPostSafetyCheck(appointmentId, scheduledAt),
+        onOpenSupportActions: _openSupportActions,
       );
     }
     if (msg.isAppointmentResponse) {

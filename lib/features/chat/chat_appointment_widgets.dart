@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../models/appointment_safety_checkin.dart';
 import '../../models/chat_appointment.dart';
 import '../../services/chat/chat_service.dart';
 
@@ -379,6 +380,23 @@ class AppointmentMessageCard extends StatefulWidget {
   /// appointment 로드 실패 시 안전 대체 문구.
   final String fallbackText;
 
+  // ── 안전 확인(Phase 2-5) ────────────────────────────────────────────────
+  //
+  // 아래 값들은 **본인 것만** 흘러들어온다. 상대의 안전 확인 상태는 rules에서
+  // 읽을 수 없고, 화면에도 표시하지 않는다.
+
+  /// 본인 안전 확인 상태 스트림. null이면 안전 영역을 표시하지 않는다.
+  final Stream<AppointmentSafetyCheckin?>? safetyCheckinStream;
+  final VoidCallback? onOpenPreSafetyCheck;
+
+  /// 만남 후 상태 확인. 카드가 이미 알고 있는 약속 시각을 함께 넘겨,
+  /// 호출부가 appointment 스트림을 다시 구독하지 않아도 되게 한다.
+  final void Function(DateTime scheduledAt)? onOpenPostSafetyCheck;
+  final VoidCallback? onOpenSupportActions;
+
+  /// 단계 판정 기준 시각. 테스트에서 주입한다.
+  final DateTime? now;
+
   const AppointmentMessageCard({
     super.key,
     required this.appointmentId,
@@ -386,6 +404,11 @@ class AppointmentMessageCard extends StatefulWidget {
     required this.stream,
     required this.onRespond,
     this.fallbackText = '약속을 불러오지 못했어요.',
+    this.safetyCheckinStream,
+    this.onOpenPreSafetyCheck,
+    this.onOpenPostSafetyCheck,
+    this.onOpenSupportActions,
+    this.now,
   });
 
   @override
@@ -570,13 +593,213 @@ class _AppointmentMessageCardState extends State<AppointmentMessageCard> {
           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         );
       case ChatAppointmentStatus.accepted:
-        return const SizedBox.shrink();
+        return _buildSafetySection(appointment);
       case ChatAppointmentStatus.declined:
         return const Text(
           '이번 약속은 성사되지 않았어요.',
           style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
         );
     }
+  }
+
+  /// 수락된 약속에만 붙는 안전 확인 영역. 참여자가 아니거나 스트림이 없으면
+  /// 아무것도 표시하지 않는다.
+  Widget _buildSafetySection(ChatAppointment appointment) {
+    final stream = widget.safetyCheckinStream;
+    final isParticipant =
+        appointment.isProposer(widget.currentUid) ||
+        appointment.isRecipient(widget.currentUid);
+    if (stream == null || !isParticipant) return const SizedBox.shrink();
+
+    return StreamBuilder<AppointmentSafetyCheckin?>(
+      stream: stream,
+      builder: (context, snap) {
+        return _AppointmentSafetySection(
+          appointmentId: widget.appointmentId,
+          scheduledAt: appointment.scheduledAt,
+          checkin: snap.data,
+          now: widget.now ?? DateTime.now(),
+          onOpenPreSafetyCheck: widget.onOpenPreSafetyCheck,
+          onOpenPostSafetyCheck: widget.onOpenPostSafetyCheck,
+          onOpenSupportActions: widget.onOpenSupportActions,
+        );
+      },
+    );
+  }
+}
+
+/// 약속 전·후 안전 확인 UI. 본인 상태만 보여주며, 한 번 기록한 결과를 다시
+/// 제출하는 버튼은 제공하지 않는다.
+class _AppointmentSafetySection extends StatelessWidget {
+  final String appointmentId;
+  final DateTime scheduledAt;
+  final AppointmentSafetyCheckin? checkin;
+  final DateTime now;
+  final VoidCallback? onOpenPreSafetyCheck;
+  final void Function(DateTime scheduledAt)? onOpenPostSafetyCheck;
+  final VoidCallback? onOpenSupportActions;
+
+  const _AppointmentSafetySection({
+    required this.appointmentId,
+    required this.scheduledAt,
+    required this.checkin,
+    required this.now,
+    required this.onOpenPreSafetyCheck,
+    required this.onOpenPostSafetyCheck,
+    required this.onOpenSupportActions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final phase = appointmentSafetyPhase(scheduledAt: scheduledAt, now: now);
+    final children = phase == AppointmentSafetyPhase.preDate
+        ? _preDateChildren()
+        : _postDateChildren();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.mintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.button),
+      ),
+      child: Column(
+        key: ValueKey('appointment-safety-section-$appointmentId'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  List<Widget> _preDateChildren() {
+    if (checkin?.hasCompletedPreCheck ?? false) {
+      return const [
+        _SafetyStatusRow(icon: Icons.verified_user_rounded, label: '안전 확인 완료'),
+        SizedBox(height: 4),
+        _SafetyHint('만남 전 준비를 확인했어요.'),
+      ];
+    }
+    return [
+      const _SafetyHint('만나기 전에 장소와 귀가 계획을 한 번 확인해보세요.'),
+      const SizedBox(height: 10),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton(
+          key: ValueKey('appointment-pre-safety-button-$appointmentId'),
+          onPressed: onOpenPreSafetyCheck,
+          child: const Text('만남 전 안전 확인'),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _postDateChildren() {
+    final status = checkin?.postStatus;
+    if (status == null) {
+      return [
+        const _SafetyHint('만남을 마친 뒤 현재 상태를 알려주세요.'),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            key: ValueKey('appointment-post-safety-button-$appointmentId'),
+            onPressed: onOpenPostSafetyCheck == null
+                ? null
+                : () => onOpenPostSafetyCheck!(scheduledAt),
+            child: const Text('만남 후 상태 확인'),
+          ),
+        ),
+      ];
+    }
+
+    switch (status) {
+      case AppointmentPostSafetyStatus.safe:
+        return const [
+          _SafetyStatusRow(
+            icon: Icons.check_circle_rounded,
+            label: '무사히 돌아왔다고 기록했어요',
+          ),
+        ];
+      case AppointmentPostSafetyStatus.cancelled:
+        return const [
+          _SafetyStatusRow(
+            icon: Icons.event_busy_rounded,
+            label: '만남이 취소되었다고 기록했어요',
+          ),
+        ];
+      case AppointmentPostSafetyStatus.needsSupport:
+        return [
+          const _SafetyStatusRow(
+            icon: Icons.support_rounded,
+            label: '도움이 필요한 상태로 기록했어요',
+            color: AppColors.error,
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              key: ValueKey('appointment-support-button-$appointmentId'),
+              onPressed: onOpenSupportActions,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+              ),
+              child: const Text('신고·차단 도움 보기'),
+            ),
+          ),
+        ];
+    }
+  }
+}
+
+class _SafetyStatusRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _SafetyStatusRow({
+    required this.icon,
+    required this.label,
+    this.color = AppColors.mintDeep,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SafetyHint extends StatelessWidget {
+  final String text;
+
+  const _SafetyHint(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 12.5,
+        height: 1.4,
+        color: AppColors.textSecondary,
+      ),
+    );
   }
 }
 

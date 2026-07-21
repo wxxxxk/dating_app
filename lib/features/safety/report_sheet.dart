@@ -46,88 +46,98 @@ class _ReportSheetState extends State<_ReportSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    // 작은 화면·키보드 노출 상황에서 내용이 잘리지 않도록 스크롤 가능하게 한다
+    // (기능·데이터 계약은 그대로, 레이아웃만 감싼다).
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(AppRadius.chip),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(AppRadius.chip),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              '신고하기',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+              const SizedBox(height: 18),
+              const Text(
+                '신고하기',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            ...reportReasonLabels.entries.map((entry) {
-              final selected = _reason == entry.key;
-              return ListTile(
+              const SizedBox(height: 14),
+              ...reportReasonLabels.entries.map((entry) {
+                final selected = _reason == entry.key;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    selected
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    color: selected
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
+                  ),
+                  title: Text(entry.value),
+                  onTap: () => setState(() => _reason = entry.key),
+                );
+              }),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _detailController,
+                maxLines: 3,
+                maxLength: reportDetailMaxLength,
+                decoration: const InputDecoration(
+                  labelText: '상세 내용 (선택)',
+                  hintText: '상황을 간단히 적어주세요',
+                ),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: _blockUser,
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  selected
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  color: selected ? AppColors.primary : AppColors.textSecondary,
-                ),
-                title: Text(entry.value),
-                onTap: () => setState(() => _reason = entry.key),
-              );
-            }),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _detailController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '상세 내용 (선택)',
-                hintText: '상황을 간단히 적어주세요',
+                title: const Text('신고 후 이 사용자 차단'),
+                subtitle: const Text('차단하면 서로 볼 수 없어요.'),
+                onChanged: (value) =>
+                    setState(() => _blockUser = value ?? true),
               ),
-            ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              value: _blockUser,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('신고 후 이 사용자 차단'),
-              subtitle: const Text('차단하면 서로 볼 수 없어요.'),
-              onChanged: (value) => setState(() => _blockUser = value ?? true),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  foregroundColor: AppColors.surface,
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: AppColors.surface,
+                  ),
+                  onPressed: () {
+                    Navigator.pop(
+                      context,
+                      ReportSubmission(
+                        reason: _reason,
+                        detail: _detailController.text.trim().isEmpty
+                            ? null
+                            : _detailController.text.trim(),
+                        blockUser: _blockUser,
+                      ),
+                    );
+                  },
+                  child: const Text('신고 제출'),
                 ),
-                onPressed: () {
-                  Navigator.pop(
-                    context,
-                    ReportSubmission(
-                      reason: _reason,
-                      detail: _detailController.text.trim().isEmpty
-                          ? null
-                          : _detailController.text.trim(),
-                      blockUser: _blockUser,
-                    ),
-                  );
-                },
-                child: const Text('신고 제출'),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

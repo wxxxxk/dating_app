@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
 import '../services/auth/auth_service.dart';
+import '../services/chat/appointment_safety_service.dart';
 import '../services/chat/chat_presence_service.dart';
 import '../services/chat/chat_service.dart';
 import '../services/charm/charm_service.dart';
@@ -38,6 +39,7 @@ class MainShell extends StatefulWidget {
   final MatchesService matchesService;
   final ChatService chatService;
   final ChatPresenceService presenceService;
+  final AppointmentSafetyService appointmentSafetyService;
   final CharmService charmService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -55,6 +57,7 @@ class MainShell extends StatefulWidget {
     required this.matchesService,
     required this.chatService,
     required this.presenceService,
+    required this.appointmentSafetyService,
     required this.charmService,
     required this.fortuneService,
     required this.jellyService,
@@ -123,6 +126,7 @@ class _MainShellState extends State<MainShell> {
             matchesService: widget.matchesService,
             chatService: widget.chatService,
             presenceService: widget.presenceService,
+            appointmentSafetyService: widget.appointmentSafetyService,
             fortuneService: widget.fortuneService,
             jellyService: widget.jellyService,
             jellyPurchaseService: widget.jellyPurchaseService,
@@ -133,6 +137,7 @@ class _MainShellState extends State<MainShell> {
             matchesService: widget.matchesService,
             chatService: widget.chatService,
             presenceService: widget.presenceService,
+            appointmentSafetyService: widget.appointmentSafetyService,
             firestoreService: widget.firestoreService,
             fortuneService: widget.fortuneService,
             jellyService: widget.jellyService,

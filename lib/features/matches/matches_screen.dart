@@ -6,6 +6,7 @@ import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/chat/appointment_safety_service.dart';
 import '../../services/chat/chat_presence_service.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
@@ -37,6 +38,7 @@ class MatchesScreen extends StatefulWidget {
   final MatchesService matchesService;
   final ChatService chatService;
   final ChatPresenceService presenceService;
+  final AppointmentSafetyService appointmentSafetyService;
   final FirestoreService firestoreService;
   final FortuneService fortuneService;
   final JellyService jellyService;
@@ -51,6 +53,7 @@ class MatchesScreen extends StatefulWidget {
     required this.matchesService,
     required this.chatService,
     required this.presenceService,
+    required this.appointmentSafetyService,
     required this.firestoreService,
     required this.fortuneService,
     required this.jellyService,
@@ -163,6 +166,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           currentUid: uid,
           chatService: widget.chatService,
           presenceService: widget.presenceService,
+          appointmentSafetyService: widget.appointmentSafetyService,
           fortuneService: widget.fortuneService,
           matchesService: widget.matchesService,
           safetyService: widget.safetyService,
@@ -244,6 +248,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
           matchesService: widget.matchesService,
           chatService: widget.chatService,
           presenceService: widget.presenceService,
+          appointmentSafetyService: widget.appointmentSafetyService,
           fortuneService: widget.fortuneService,
           jellyService: widget.jellyService,
           jellyPurchaseService: widget.jellyPurchaseService,

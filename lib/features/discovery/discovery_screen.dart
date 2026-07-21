@@ -8,6 +8,7 @@ import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
 import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/chat/appointment_safety_service.dart';
 import '../../services/chat/chat_presence_service.dart';
 import '../../services/chat/chat_service.dart';
 import '../../services/database/firestore_service.dart';
@@ -45,6 +46,7 @@ class DiscoveryScreen extends StatefulWidget {
   final MatchesService matchesService;
   final ChatService chatService;
   final ChatPresenceService presenceService;
+  final AppointmentSafetyService appointmentSafetyService;
   final FortuneService fortuneService;
   final JellyService jellyService;
   final JellyPurchaseService jellyPurchaseService;
@@ -58,6 +60,7 @@ class DiscoveryScreen extends StatefulWidget {
     required this.matchesService,
     required this.chatService,
     required this.presenceService,
+    required this.appointmentSafetyService,
     required this.fortuneService,
     required this.jellyService,
     required this.jellyPurchaseService,
@@ -287,6 +290,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen> {
           currentUid: uid,
           chatService: widget.chatService,
           presenceService: widget.presenceService,
+          appointmentSafetyService: widget.appointmentSafetyService,
           fortuneService: widget.fortuneService,
           matchesService: widget.matchesService,
           safetyService: widget.safetyService,

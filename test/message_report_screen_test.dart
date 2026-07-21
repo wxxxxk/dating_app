@@ -10,6 +10,7 @@ import 'package:dating_app/models/chat_appointment.dart';
 import 'package:dating_app/models/chat_presence.dart';
 import 'package:dating_app/models/message_model.dart';
 import 'package:dating_app/models/public_profile.dart';
+import 'package:dating_app/services/chat/appointment_safety_service.dart';
 import 'package:dating_app/services/chat/chat_presence_service.dart';
 import 'package:dating_app/services/chat/chat_service.dart';
 import 'package:dating_app/services/database/firestore_service.dart';
@@ -264,6 +265,7 @@ Future<_FakeSafetyService> _pumpChat(
         currentUid: kMe,
         chatService: _FakeChatService(messages: messages ?? _defaultMessages),
         presenceService: presenceService ?? _FakePresenceService(),
+        appointmentSafetyService: AppointmentSafetyService(),
         fortuneService: FortuneService(),
         matchesService: MatchesService(
           firestoreService: FirestoreService(),

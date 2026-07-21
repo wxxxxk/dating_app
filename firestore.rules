@@ -653,6 +653,106 @@ service cloud.firestore {
           request.resource.data.createdAt == resource.data.createdAt;
 
         allow delete: if false;
+
+        // matches/{matchId}/appointments/{appointmentId}/safetyCheckins/{checkinUid}
+        // (Phase 2-5): 약속 전·후 안전 확인.
+        //
+        // **본인만 읽고 쓸 수 있는 개인 상태다.** 같은 match의 상대 participant도
+        // 남의 checkin은 읽을 수 없다(read에 uid == checkinUid 조건).
+        // 저장하는 값은 "만남 전 확인 완료 시각"과 "만남 후 상태"뿐이고,
+        // 체크리스트 답변·위치·연락처는 담지 않는다(exact field allowlist).
+        //
+        // 한 번 기록한 값은 바꿀 수 없다(pre 1회, post 1회). 매칭 해제
+        // (unmatchedBy) 여부는 조건에 넣지 않는다 — 해제 후에도 본인 안전 확인은
+        // 계속할 수 있어야 한다.
+        match /safetyCheckins/{checkinUid} {
+          function parentMatch() {
+            return get(/databases/$(database)/documents/matches/$(matchId)).data;
+          }
+          function parentAppointment() {
+            return get(/databases/$(database)/documents/matches/$(matchId)/appointments/$(appointmentId)).data;
+          }
+          function isParticipant() {
+            return request.auth != null &&
+              request.auth.uid in parentMatch().participants;
+          }
+          function isOwner() {
+            return request.auth != null && request.auth.uid == checkinUid;
+          }
+          function appointmentAccepted() {
+            return exists(/databases/$(database)/documents/matches/$(matchId)/appointments/$(appointmentId)) &&
+              parentAppointment().status == 'accepted';
+          }
+          // 필드 구성·타입 계약. 시각 필드는 서버 시각(request.time)만 허용해
+          // 클라이언트가 기록 시각을 위조하지 못하게 한다.
+          function validCheckinShape() {
+            let data = request.resource.data;
+            return data.keys().hasOnly([
+                'uid', 'preCheckCompletedAt', 'postStatus', 'postCheckedAt', 'updatedAt'
+              ]) &&
+              data.keys().hasAll([
+                'uid', 'preCheckCompletedAt', 'postStatus', 'postCheckedAt', 'updatedAt'
+              ]) &&
+              data.uid == checkinUid &&
+              (data.preCheckCompletedAt == null ||
+                data.preCheckCompletedAt is timestamp) &&
+              (data.postStatus == null ||
+                data.postStatus in ['safe', 'needs_support', 'cancelled']) &&
+              (data.postStatus == null
+                ? data.postCheckedAt == null
+                : data.postCheckedAt is timestamp) &&
+              data.updatedAt == request.time;
+          }
+          // 만남 후 상태는 약속 시각 이후에만 기록할 수 있다.
+          function postTimingValid() {
+            return request.resource.data.postStatus == null ||
+              request.time >= parentAppointment().scheduledAt;
+          }
+
+          allow read: if isOwner() && isParticipant();
+
+          allow create: if isOwner() &&
+            isParticipant() &&
+            appointmentAccepted() &&
+            validCheckinShape() &&
+            // 빈 껍데기 문서만 만드는 write는 막는다.
+            (request.resource.data.preCheckCompletedAt != null ||
+              request.resource.data.postStatus != null) &&
+            // 최초 생성 시 기록되는 시각은 항상 서버 시각이어야 한다.
+            (request.resource.data.preCheckCompletedAt == null ||
+              request.resource.data.preCheckCompletedAt == request.time) &&
+            // 새 상태를 기록하는 순간의 시각은 항상 서버 시각이어야 한다.
+            (request.resource.data.postStatus == null ||
+              request.resource.data.postCheckedAt == request.time) &&
+            postTimingValid();
+
+          allow update: if isOwner() &&
+            isParticipant() &&
+            appointmentAccepted() &&
+            validCheckinShape() &&
+            request.resource.data.uid == resource.data.uid &&
+            // pre: 기존 값이 있으면 그대로, 없으면 null 유지 또는 1회 기록.
+            (resource.data.preCheckCompletedAt == null ||
+              request.resource.data.preCheckCompletedAt == resource.data.preCheckCompletedAt) &&
+            // 이번에 새로 기록되는 pre 시각은 서버 시각이어야 한다.
+            (resource.data.preCheckCompletedAt != null ||
+              request.resource.data.preCheckCompletedAt == null ||
+              request.resource.data.preCheckCompletedAt == request.time) &&
+            // post: 기존 상태가 있으면 상태·시각 모두 불변.
+            (resource.data.postStatus == null ||
+              (request.resource.data.postStatus == resource.data.postStatus &&
+                request.resource.data.postCheckedAt == resource.data.postCheckedAt)) &&
+            // 이번에 새로 기록되는 post 상태의 시각은 서버 시각이어야 한다.
+            (resource.data.postStatus != null ||
+              request.resource.data.postStatus == null ||
+              request.resource.data.postCheckedAt == request.time) &&
+            postTimingValid() &&
+            // updatedAt만 갱신하는 write는 거부한다 — 실제 상태가 바뀌어야 한다.
+            (request.resource.data.preCheckCompletedAt != resource.data.preCheckCompletedAt ||
+              request.resource.data.postStatus != resource.data.postStatus);
+
+          allow delete: if false;
+        }
       }
 
       // matches/{matchId}/presence/{presenceUid} (Phase 2-2):
