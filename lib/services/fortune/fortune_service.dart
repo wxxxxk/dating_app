@@ -131,11 +131,14 @@ class FortuneService {
     int days = 7,
     DateTime? now,
   }) async {
-    final today = _dateOnly(now ?? DateTime.now());
+    // 달력 날짜를 naive DateTime으로 들고 다니다가 다시 kstDateKey()에 넘기면
+    // 기기 시간대를 거쳐 UTC로 재해석되고 +9가 또 붙는다. UTC+10 이상
+    // 기기에서는 하루 전 key가 나왔다. 달력 arithmetic으로 분리한다.
+    final calendarDates = kstDatesBackwards(now ?? DateTime.now(), days);
     final entries = await Future.wait(
-      List.generate(days, (index) async {
-        final date = today.subtract(Duration(days: index));
-        final dateKey = _dateKey(date);
+      calendarDates.map((calendarDate) async {
+        final dateKey = calendarDate.dateKey;
+        final date = calendarDate.utcCalendarValue;
         final doc = await _db
             .collection('users')
             .doc(uid)
@@ -336,8 +339,6 @@ class FortuneService {
   /// 서버(`seoulDateKey`)와 같은 기준을 쓴다. 기기 로컬 날짜를 쓰면 시간대가
   /// 다른 기기나 자정 근처에서 다른 날짜 문서를 읽게 된다.
   static String _dateKey(DateTime d) => kstDateKey(d);
-
-  static DateTime _dateOnly(DateTime d) => kstDateOnly(d);
 
   Future<HttpsCallableResult<dynamic>> _callFunction(
     Future<HttpsCallableResult<dynamic>> Function() call, {
