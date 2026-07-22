@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/text_sanitizer.dart';
 import '../../models/match_model.dart';
 import '../../models/public_profile.dart';
+import 'today_match.dart';
 import '../../models/user_profile.dart';
 import '../../models/affiliation_verification_request.dart';
 import '../../models/photo_verification_request.dart';
@@ -89,9 +90,15 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   UserProfile? _profile;
-  _DailyPick? _dailyPick;
+  TodayMatchResult? _dailyPick;
+  TodayMatchState _dailyPickState = TodayMatchState.loading;
+
+  /// 세션 캐시. 같은 사용자·같은 KST 날짜면 탭 이동·rebuild에도 같은 결과를 쓴다.
+  /// 계정이 바뀌면 uid가 달라져 자연히 miss된다.
+  TodayMatchResult? _cachedPick;
+  String? _cachedPickUid;
+
   bool _loading = true;
-  bool _dailyPickLoading = true;
   bool _verificationLoading = false;
   String? _errorMessage;
   // fortune_hub_screen.dart와 같은 패턴 — 상태 없는 서비스 래퍼라 화면마다
@@ -161,38 +168,120 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadDailyPick(UserProfile myProfile) async {
     if (mounted) {
-      setState(() => _dailyPickLoading = true);
+      setState(() => _dailyPickState = TodayMatchState.loading);
     }
+    final dateKey = kstDateKey(DateTime.now());
     try {
-      final pick = await _findDailyPick(myProfile);
+      final candidates = await _collectCandidates(myProfile);
+      final eligibleIds = candidates.map((c) => c.id).toSet();
+
+      // 캐시 재사용은 "같은 사용자 + 같은 날짜 + 후보가 아직 자격 있음"을
+      // 모두 다시 확인했을 때만 허용한다.
+      final cached = _cachedPick;
+      if (cached != null &&
+          _cachedPickUid == myProfile.uid &&
+          cached.isReusableFor(
+            dateKey: dateKey,
+            eligibleCandidateIds: eligibleIds,
+          )) {
+        _logDailyPick(
+          dateKey: dateKey,
+          source: 'cache',
+          eligibleCount: eligibleIds.length,
+          state: 'ready',
+        );
+        if (!mounted) return;
+        setState(() {
+          _dailyPick = cached;
+          _dailyPickState = TodayMatchState.ready;
+        });
+        return;
+      }
+
+      final selected = selectTodayCandidate(
+        viewerUid: myProfile.uid,
+        dateKey: dateKey,
+        candidates: candidates,
+      );
+
+      if (selected == null) {
+        // 정상 조회 결과 후보가 0명. 이전 카드를 남기지 않는다.
+        _cachedPick = null;
+        _cachedPickUid = myProfile.uid;
+        _logDailyPick(
+          dateKey: dateKey,
+          source: 'fresh',
+          eligibleCount: 0,
+          state: 'empty',
+        );
+        if (!mounted) return;
+        setState(() {
+          _dailyPick = null;
+          _dailyPickState = TodayMatchState.empty;
+        });
+        return;
+      }
+
+      final result = buildTodayMatchResult(
+        candidate: selected,
+        dateKey: dateKey,
+      );
+      _cachedPick = result;
+      _cachedPickUid = myProfile.uid;
+      _logDailyPick(
+        dateKey: dateKey,
+        source: 'fresh',
+        eligibleCount: eligibleIds.length,
+        state: 'ready',
+      );
       if (!mounted) return;
       setState(() {
-        _dailyPick = pick;
-        _dailyPickLoading = false;
+        _dailyPick = result;
+        _dailyPickState = TodayMatchState.ready;
       });
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('[HomeDailyPick] 추천 로딩 실패: $e');
-        debugPrint('$st');
-      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[HomeDailyPick] today_match_fetch_failed');
+      // 오류를 "후보 없음"으로 접지 않고, 이전 결과도 계속 보여주지 않는다.
       if (!mounted) return;
       setState(() {
         _dailyPick = null;
-        _dailyPickLoading = false;
+        _dailyPickState = TodayMatchState.error;
       });
     }
   }
 
-  Future<_DailyPick?> _findDailyPick(UserProfile myProfile) async {
+  /// 민감정보 없는 진단 로그. UID·이름·사진 URL·후보 ID 원문을 남기지 않는다.
+  void _logDailyPick({
+    required String dateKey,
+    required String source,
+    required int eligibleCount,
+    required String state,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[HomeDailyPick] dateKey=$dateKey source=$source '
+      'eligibleCandidateCount=$eligibleCount state=$state '
+      'algorithmVersion=$kTodayMatchAlgorithmVersion',
+    );
+  }
+
+  /// 자격 있는 후보를 모은다. match(이미 이어진 인연) + discovery(새 후보).
+  ///
+  /// 안전 필터(차단·선호·나이·거리·이미 pass)는 DiscoveryService가 이미
+  /// 적용한다. 여기서 정책을 새로 만들지 않는다.
+  Future<List<TodayMatchCandidate>> _collectCandidates(
+    UserProfile myProfile,
+  ) async {
+    final candidates = <TodayMatchCandidate>[];
+
     try {
       final matches = await widget.matchesService
           .watchMatches(currentUid: myProfile.uid)
           .first
           .timeout(const Duration(seconds: 5));
-      final matchPick = await _pickFromMatches(myProfile, matches);
-      if (matchPick != null) return matchPick;
+      candidates.addAll(await _matchCandidates(matches));
     } catch (e) {
-      if (kDebugMode) debugPrint('[HomeDailyPick] 매칭 목록 조회 실패: $e');
+      if (kDebugMode) debugPrint('[HomeDailyPick] match_list_failed');
     }
 
     Set<String> blockedUids = const {};
@@ -201,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
         myProfile.uid,
       );
     } catch (e) {
-      if (kDebugMode) debugPrint('[HomeDailyPick] 차단 목록 조회 실패: $e');
+      if (kDebugMode) debugPrint('[HomeDailyPick] block_list_failed');
     }
 
     final discoveryProfiles = await widget.discoveryService
@@ -212,78 +301,56 @@ class _HomeScreenState extends State<HomeScreen> {
           excludedUids: blockedUids,
         )
         .timeout(const Duration(seconds: 5));
-    if (discoveryProfiles.isEmpty) return null;
-    return _buildDailyPick(
-      otherProfile: discoveryProfiles.first,
-      source: _DailyPickSource.discovery,
+
+    candidates.addAll(
+      discoveryProfiles.map(
+        (profile) => TodayMatchCandidate(
+          profile: profile,
+          source: TodayMatchSource.discovery,
+        ),
+      ),
     );
+    return candidates;
   }
 
-  Future<_DailyPick?> _pickFromMatches(
-    UserProfile myProfile,
+  /// 매칭된 상대는 그 매칭의 궁합 캐시 문구를 자기 문구로 들고 온다.
+  /// matchId 기반이라 다른 후보의 문구가 섞일 수 없다.
+  Future<List<TodayMatchCandidate>> _matchCandidates(
     List<MatchWithProfile> matches,
   ) async {
-    if (matches.isEmpty) return null;
-    final candidates = await Future.wait(
+    if (matches.isEmpty) return const [];
+    return Future.wait(
       matches.take(8).map((match) async {
-        String? cachedReason;
+        String? reason;
         try {
           final cached = await widget.fortuneService.getCachedMatchFortune(
             match.match.matchId,
           );
-          cachedReason = cached?.reasons
-              .map((reason) => reason.text.trim())
-              .firstWhere((text) => text.isNotEmpty, orElse: () => '');
-          if (cachedReason != null && cachedReason.isEmpty) {
-            cachedReason = cached?.summary.trim();
-          }
+          final firstReason = cached?.reasons
+              .map((r) => r.text.trim())
+              .where((text) => text.isNotEmpty)
+              .cast<String?>()
+              .firstWhere((text) => text != null, orElse: () => null);
+          reason = firstReason ?? cached?.summary.trim();
         } catch (e) {
           if (kDebugMode) {
-            debugPrint('[HomeDailyPick] 궁합 캐시 조회 실패: $e');
+            debugPrint('[HomeDailyPick] match_fortune_cache_failed');
           }
         }
-        return _buildDailyPick(
-          otherProfile: match.otherProfile,
-          source: _DailyPickSource.match,
-          cachedReason: cachedReason,
+        return TodayMatchCandidate(
+          profile: match.otherProfile,
+          source: TodayMatchSource.match,
+          candidateReason: reason,
         );
       }),
     );
-    candidates.sort((a, b) => b.score.compareTo(a.score));
-    return candidates.first;
   }
 
-  _DailyPick _buildDailyPick({
-    required PublicProfile otherProfile,
-    required _DailyPickSource source,
-    String? cachedReason,
-  }) {
-    final hasCachedReason = cachedReason != null && cachedReason.isNotEmpty;
-    final score =
-        (source == _DailyPickSource.match ? 88 : 82) +
-        (hasCachedReason ? 4 : 0);
-    return _DailyPick(
-      profile: otherProfile,
-      score: score,
-      reason: hasCachedReason
-          ? cachedReason
-          : _fallbackReason(otherProfile, source),
-    );
-  }
-
-  String _fallbackReason(PublicProfile profile, _DailyPickSource source) {
-    final prefix = source == _DailyPickSource.match
-        ? '이미 이어진 인연이라'
-        : '오늘 먼저 대화해보기 좋은';
-    final goal = profile.relationshipGoal == null
-        ? null
-        : ProfileOptions.keyToLabel(
-            ProfileOptions.relationshipGoals,
-            profile.relationshipGoal!,
-          );
-    if (goal != null) return '$prefix 관계 방향이 잘 드러나는 프로필이에요.';
-    if (profile.interests.isNotEmpty) return '$prefix 공통 대화 소재를 찾기 쉬운 프로필이에요.';
-    return '$prefix 프로필 분위기가 안정적으로 채워져 있어요.';
+  Future<void> _retryDailyPick() async {
+    final profile = _profile;
+    if (profile == null) return;
+    if (_dailyPickState == TodayMatchState.loading) return;
+    await _loadDailyPick(profile);
   }
 
   Future<UserProfile> _syncAuthVerificationBadges(
@@ -583,11 +650,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               child: _DailyPickHeroCard(
-                loading: _dailyPickLoading,
+                state: _dailyPickState,
                 pick: _dailyPick,
                 onPrimaryTap: _dailyPick == null
                     ? widget.onOpenDiscovery
                     : _openDailyPickProfile,
+                onRetry: _retryDailyPick,
               ),
             ),
             // ── 사진 갤러리 ─────────────────────────────────────────────
@@ -873,38 +941,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-enum _DailyPickSource { match, discovery }
-
-class _DailyPick {
-  final PublicProfile profile;
-  final int score;
-  final String reason;
-
-  const _DailyPick({
-    required this.profile,
-    required this.score,
-    required this.reason,
-  });
-}
-
 // ── 내부 위젯 ──────────────────────────────────────────────────────────────────
 
 class _DailyPickHeroCard extends StatelessWidget {
-  final bool loading;
-  final _DailyPick? pick;
+  final TodayMatchState state;
+  final TodayMatchResult? pick;
   final VoidCallback? onPrimaryTap;
+  final VoidCallback onRetry;
 
   const _DailyPickHeroCard({
-    required this.loading,
+    required this.state,
     required this.pick,
     required this.onPrimaryTap,
+    required this.onRetry,
   });
+
+  Key get _stateKey => switch (state) {
+    TodayMatchState.loading => const Key('today-match-loading'),
+    TodayMatchState.ready => const Key('today-match-ready'),
+    TodayMatchState.empty => const Key('today-match-empty'),
+    TodayMatchState.error => const Key('today-match-error'),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final activePick = pick;
-    final isFallback = activePick == null && !loading;
+    final loading = state == TodayMatchState.loading;
+    // ready가 아니면 후보 카드를 그리지 않는다 — 이전 카드가 남지 않게.
+    final activePick = state == TodayMatchState.ready ? pick : null;
     return Container(
+      key: _stateKey,
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       // 발표용 긴급 안정화: 다크 히어로 대신 라이트 카드 + 민트 강조로 통일한다.
@@ -930,9 +995,9 @@ class _DailyPickHeroCard extends StatelessWidget {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else if (activePick != null)
-                _ScorePill(score: activePick.score),
+                ),
+              // 점수 pill은 제거했다. 앱에 궁합 점수 소스가 없어서
+              // "추천 82%"가 상수로 만들어진 값이었다.
             ],
           ),
           const SizedBox(height: 16),
@@ -947,11 +1012,13 @@ class _DailyPickHeroCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            loading
-                ? 'AI 추천 데이터를 확인하고 있어요.'
-                : isFallback
-                ? '아직 오늘의 추천을 준비하고 있어요.'
-                : '오늘 AI가 가장 잘 맞는 사람으로 추천합니다.',
+            switch (state) {
+              TodayMatchState.loading => '오늘의 추천을 확인하고 있어요.',
+              TodayMatchState.ready => '오늘 하루 같은 추천이 유지돼요.',
+              TodayMatchState.empty =>
+                '오늘 소개할 새로운 인연을 준비하고 있어요.\n새로운 프로필이 등록되면 알려드릴게요.',
+              TodayMatchState.error => '추천을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+            },
             style: const TextStyle(
               fontSize: 14,
               height: 1.45,
@@ -966,31 +1033,42 @@ class _DailyPickHeroCard extends StatelessWidget {
           else
             _DailyPickSuccessBody(pick: activePick),
           const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: loading ? null : onPrimaryTap,
-              icon: Icon(
-                activePick == null
-                    ? Icons.explore_rounded
-                    : Icons.person_search_rounded,
-                size: 19,
+          if (state == TodayMatchState.error)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('today-match-retry-button'),
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded, size: 19),
+                label: const Text('다시 시도'),
               ),
-              label: Text(activePick == null ? '둘러보기 시작' : '프로필 보기'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.mint,
-                foregroundColor: AppColors.onMint,
-                textStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: loading ? null : onPrimaryTap,
+                icon: Icon(
+                  activePick == null
+                      ? Icons.explore_rounded
+                      : Icons.person_search_rounded,
+                  size: 19,
                 ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button),
+                label: Text(activePick == null ? '둘러보기 시작' : '프로필 보기'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.mint,
+                  foregroundColor: AppColors.onMint,
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.button),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -1016,34 +1094,6 @@ class _AiBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
           letterSpacing: 0.6,
           color: AppColors.mintDeep,
-        ),
-      ),
-    );
-  }
-}
-
-class _ScorePill extends StatelessWidget {
-  final int score;
-
-  const _ScorePill({required this.score});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppColors.fortuneAccent.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(
-          color: AppColors.fortuneAccent.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Text(
-        '추천 $score%',
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-          color: AppColors.fortuneAccent,
         ),
       ),
     );
@@ -1084,7 +1134,7 @@ class _DailyPickFallbackBody extends StatelessWidget {
 }
 
 class _DailyPickSuccessBody extends StatelessWidget {
-  final _DailyPick pick;
+  final TodayMatchResult pick;
 
   const _DailyPickSuccessBody({required this.pick});
 
