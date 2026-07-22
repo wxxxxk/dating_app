@@ -205,7 +205,17 @@ test('generateMatchNarrative verifies active match and blocks before birthDate r
   assert.ok(participantIdx >= 0);
   assert.ok(blockIdx > participantIdx);
   assert.ok(attrsIdx > blockIdx);
-  assert.ok(source().includes("db.getAll(...refs, { fieldMask: ['birthDate'] })"));
+  // Phase 5-2: 출생시간 필드까지 읽되, 여전히 최소 fieldMask만 사용한다.
+  const maskMatch = source().match(/db\.getAll\(\.\.\.refs, \{\s*fieldMask: \[([\s\S]*?)\],?\s*\}\)/);
+  assert.ok(maskMatch, 'readMatchParticipantAttrs가 fieldMask를 쓰지 않는다');
+  const maskFields = maskMatch[1].match(/'[^']+'/g).map((f) => f.replace(/'/g, ''));
+  assert.deepEqual(maskFields.sort(), [
+    'birthCalendarType',
+    'birthDate',
+    'birthTimeKnown',
+    'birthTimeMinutes',
+    'birthTimeZone',
+  ]);
 });
 
 test('generateMatchNarrative returns derived attrs and does not log raw birthDate', () => {
@@ -213,7 +223,7 @@ test('generateMatchNarrative returns derived attrs and does not log raw birthDat
   const fnSrc = functionSlice(src, 'generateMatchNarrative');
   assert.ok(fnSrc.includes('return { narrative: cached, participantAttrs }'));
   assert.ok(fnSrc.includes('return { narrative, participantAttrs }'));
-  assert.ok(src.includes('participantHash: safeUidHash(participantUid)'));
+  assert.ok(src.includes('participantHash: safeUidHash(uid)'));
   assert.ok(!fnSrc.includes('birthDate'));
   assert.ok(!src.includes('console.log(birthDate'));
   assert.ok(!src.includes('console.warn(birthDate'));
@@ -442,9 +452,19 @@ test('refresh cannot bypass guard and frequent refresh returns valid cache', asy
 
 test('malformed cache is not accepted as cache hit', () => {
   const src = source();
-  assert.ok(functionSlice(src, 'generateFortuneNarrative').includes('if (isValidNarrative(cached) && isCurrentTextContent(cached))'));
-  assert.ok(functionSlice(src, 'generateMatchNarrative').includes('if (isValidNarrative(cached) && isCurrentTextContent(cached))'));
-  assert.ok(functionSlice(src, 'generateDailyFortune').includes('if (isValidDailyFortune(snap.data()) && isCurrentTextContent(snap.data()))'));
+  // Phase 5-2: 스키마·문구 버전에 더해 출생정보 지문까지 일치해야 캐시 hit이다.
+  const fortuneSlice = functionSlice(src, 'generateFortuneNarrative');
+  assert.ok(fortuneSlice.includes('isValidNarrative(cached)'));
+  assert.ok(fortuneSlice.includes('isCurrentTextContent(cached)'));
+  assert.ok(fortuneSlice.includes('isCurrentSajuCache(cached, profile)'));
+  const dailySlice = functionSlice(src, 'generateDailyFortune');
+  assert.ok(dailySlice.includes('isValidDailyFortune(snap.data())'));
+  assert.ok(dailySlice.includes('isCurrentTextContent(snap.data())'));
+  assert.ok(dailySlice.includes('isCurrentSajuCache(snap.data(), profile)'));
+  const matchSlice = functionSlice(src, 'generateMatchNarrative');
+  assert.ok(matchSlice.includes('isValidNarrative(cached)'));
+  assert.ok(matchSlice.includes('isCurrentTextContent(cached)'));
+  assert.ok(matchSlice.includes('cached.calculationVersion === SAJU_CALCULATION_VERSION'));
   assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached) && isCurrentTextContent(cached))'));
   assert.ok(functionSlice(src, 'generateIcebreakers').includes('if (isValidIcebreakerList(cached))'));
   assert.ok(functionSlice(src, 'generateConversationTips').includes('isValidConversationSuggestions(cached?.suggestions)'));
@@ -539,6 +559,9 @@ test('profile insight and ideal image guard tests remain present', () => {
   assert.ok(fs.existsSync(path.join(__dirname, 'ai_usage_guard.test.js')));
 });
 
+// 이 가드는 phase 단위로 갱신한다 — 현재 작업 중인 phase가 손대도 되는
+// Flutter 파일 범위를 고정해, 관련 없는 화면이 함께 바뀌는 것을 막는다.
+// 현재 기준: Phase 5-2 (출생정보 정밀화 및 서버 원천 계산 전환).
 test('no unrelated Flutter or production configuration files are changed for this phase', () => {
   const changed = require('child_process')
     .execFileSync('git', ['diff', '--name-only'], { cwd: path.join(__dirname, '..', '..') })
@@ -548,10 +571,18 @@ test('no unrelated Flutter or production configuration files are changed for thi
     .filter(Boolean);
   const allowedFlutterFiles = new Set([
     'lib/features/charm/charm_report_screen.dart',
+    'lib/features/fortune/fortune_history_screen.dart',
     'lib/features/fortune/fortune_hub_screen.dart',
     'lib/features/fortune/match_fortune_screen.dart',
     'lib/features/fortune/my_fortune_screen.dart',
     'lib/features/home/home_screen.dart',
+    'lib/features/onboarding/basic_info_step.dart',
+    'lib/features/onboarding/onboarding_screen.dart',
+    'lib/models/fortune/saju_convention.dart',
+    'lib/models/fortune_model.dart',
+    'lib/models/user_profile.dart',
+    'lib/services/database/firestore_service.dart',
+    'lib/services/fortune/fortune_calculator.dart',
     'lib/services/fortune/fortune_service.dart',
   ]);
   assert.deepEqual(

@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'fortune/birth_profile.dart';
+
 import 'profile_story.dart';
 
 /// Firestore 원시 값을 안전한 `Map<String, String>`으로 변환한다.
@@ -230,7 +232,11 @@ class DiscoveryFilter {
 class UserProfile {
   final String uid;
   final String displayName;
-  final DateTime birthDate; // 시간 제외 날짜만. 향후 사주 기능에서 시간 추가 예정.
+  final DateTime birthDate; // 날짜만. 태어난 시각은 [birthProfile]이 따로 담는다.
+
+  /// 출생시간 상태(Phase 5-2). 비공개 필드이며 공개 프로필에 절대 담지 않는다.
+  /// 기존 문서는 [BirthProfileStatus.legacyMissing]으로 읽힌다.
+  final BirthProfile birthProfile;
   final String gender; // 매칭 필터 키: "male" | "female" | "other"
   final String bio;
 
@@ -287,6 +293,7 @@ class UserProfile {
     required this.uid,
     required this.displayName,
     required this.birthDate,
+    this.birthProfile = const BirthProfile.legacyMissing(),
     required this.gender,
     required this.bio,
     this.photoUrls = const [],
@@ -378,6 +385,7 @@ class UserProfile {
       uid: doc.id,
       displayName: d['displayName'] as String? ?? '',
       birthDate: (d['birthDate'] as Timestamp?)?.toDate() ?? DateTime(2000),
+      birthProfile: BirthProfile.fromMap(d),
       gender: d['gender'] as String? ?? 'other',
       bio: d['bio'] as String? ?? '',
       photoUrls: (d['photoUrls'] as List<dynamic>? ?? [])
@@ -485,6 +493,7 @@ class UserProfile {
   UserProfile copyWith({
     String? displayName,
     DateTime? birthDate,
+    BirthProfile? birthProfile,
     String? gender,
     String? bio,
     List<String>? photoUrls,
@@ -516,6 +525,7 @@ class UserProfile {
       uid: uid,
       displayName: displayName ?? this.displayName,
       birthDate: birthDate ?? this.birthDate,
+      birthProfile: birthProfile ?? this.birthProfile,
       gender: gender ?? this.gender,
       bio: bio ?? this.bio,
       photoUrls: photoUrls ?? this.photoUrls,

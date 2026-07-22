@@ -237,6 +237,9 @@ Future<void> _advanceToSubmit(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('확인'));
   await tester.pumpAndSettle();
+  // Phase 5-2: 출생시간 선택은 필수다. 여기서는 "몰라요"로 진행한다.
+  await tester.tap(find.byKey(const Key('birth-time-unknown-option')));
+  await tester.pumpAndSettle();
   await tester.tap(find.text('여성'));
   await tester.enterText(find.byType(TextFormField).at(2), '천천히 대화해요');
   await tester.tap(find.text('다음'));

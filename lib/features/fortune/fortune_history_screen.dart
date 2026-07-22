@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
 import '../../models/user_profile.dart';
-import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
 
 /// 최근 오늘의 운세 기록 화면.
@@ -28,8 +27,6 @@ class FortuneHistoryScreen extends StatefulWidget {
 }
 
 class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
-  late final ZodiacInfo _zodiac;
-  late final SajuInfo _saju;
 
   bool _loading = true;
   bool _backfilling = false;
@@ -39,8 +36,6 @@ class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _zodiac = FortuneCalculator.getZodiacSign(widget.profile.birthDate);
-    _saju = FortuneCalculator.getSaju(widget.profile.birthDate);
     _load();
   }
 
@@ -69,8 +64,6 @@ class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
     try {
       await widget.fortuneService.backfillRecentDailyFortunes(
         uid: widget.profile.uid,
-        zodiac: _zodiac,
-        saju: _saju,
         days: widget.days,
       );
       await _load();

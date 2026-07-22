@@ -66,7 +66,9 @@ void main() {
   group('fixture 자체 계약', () {
     test('schema/convention 버전이 고정돼 있다', () {
       expect(fixture['schemaVersion'], 1);
-      expect(fixture['conventionVersion'], currentConvention.version);
+      // fixture는 convention v1 시절에 수집됐다. 담긴 기대값(적일·일진·음양력)은
+      // convention에 의존하지 않으므로 v2에서도 그대로 유효하다.
+      expect(fixture['conventionVersion'], legacyConventionV1.version);
     });
 
     test('case id는 고유하고 40건 이상이다', () {
@@ -306,7 +308,7 @@ void main() {
         expect(input.timeZone, 'Asia/Seoul', reason: 'case=${c['id']}');
       }
       expect(currentConvention.timezonePolicy, TimezonePolicy.asiaSeoul);
-      expect(recommendedConvention.timezonePolicy, TimezonePolicy.asiaSeoul);
+      expect(currentConvention.calendarConversion, CalendarConversion.solar);
     });
   });
 
@@ -454,7 +456,8 @@ void main() {
 
   group('convention 계약', () {
     test('현재 convention이 코드 감사 결과와 일치한다', () {
-      expect(currentConvention.version, 1);
+      // Phase 5-2에서 채택 convention을 2로 올렸다(서버와 동일).
+      expect(currentConvention.version, 2);
       expect(currentConvention.timezonePolicy, TimezonePolicy.asiaSeoul);
       expect(currentConvention.yearPillarBoundary, YearPillarBoundary.ipchun);
       expect(
@@ -465,25 +468,44 @@ void main() {
       expect(currentConvention.solarTimeCorrection, SolarTimeCorrection.disabled);
     });
 
-    test('출생시간 미수집인데 고정 시각을 대입하고 있다 — 알려진 결함', () {
-      // getOhaengBalance가 정오 12:00을 대입한다. 절기 경계일에는 연/월주가
-      // 실제와 달라질 수 있다. Phase 5-2에서 estimateNotAllowed로 옮긴다.
+    test('정오 대입 결함이 제거됐다 — Phase 5-1에서 기록한 결함의 회귀 방지', () {
+      // Phase 5-1 감사 시점에는 출생시간을 받지 않으면서 정오 12:00을 대입했다.
       expect(
-        currentConvention.unknownBirthTimePolicy,
+        legacyConventionV1.unknownBirthTimePolicy,
         UnknownBirthTimePolicy.substituteFixedTime,
       );
+      // Phase 5-2에서 시주 생략으로 바뀌었다.
       expect(
-        recommendedConvention.unknownBirthTimePolicy,
-        UnknownBirthTimePolicy.estimateNotAllowed,
+        currentConvention.unknownBirthTimePolicy,
+        UnknownBirthTimePolicy.omitHourPillar,
       );
+
+      // 정오를 대입했다면 시각 미상 결과가 12:00 결과와 같아야 한다.
+      // 절기 경계일에서 실제로 갈리는지 확인한다.
+      final unknown = FortuneCalculator.getOhaengBalance(DateTime(1995, 2, 4));
+      final noon = FortuneCalculator.getOhaengBalance(
+        DateTime(1995, 2, 4),
+        birthTimeMinutes: 12 * 60,
+      );
+      // 시각을 알면 시주까지 8글자가 되므로 분모 자체가 다르다.
+      expect(unknown.values.where((v) => v > 0).length, isNonZero);
+      expect(unknown, isNot(equals(noon)));
     });
 
-    test('오행 밸런스는 6글자(년·월·일) 기반이라 합이 1이다', () {
-      final balance = FortuneCalculator.getOhaengBalance(DateTime(1995, 2, 4));
-      final sum = balance.values.fold<double>(0, (a, b) => a + b);
-      expect(sum, closeTo(1.0, 1e-9));
-      // 시주가 빠져 있으므로 8글자 사주가 아니다.
-      expect(balance.length, 5);
+    test('시각을 모르면 6글자, 알면 8글자 기반이며 합은 항상 1이다', () {
+      final dateOnly = FortuneCalculator.getOhaengBalance(DateTime(1995, 2, 4));
+      final withTime = FortuneCalculator.getOhaengBalance(
+        DateTime(1995, 2, 4),
+        birthTimeMinutes: 455,
+      );
+      for (final balance in [dateOnly, withTime]) {
+        final sum = balance.values.fold<double>(0, (a, b) => a + b);
+        expect(sum, closeTo(1.0, 1e-9));
+        expect(balance.length, 5);
+      }
+      // 6글자 기반은 1/6 배수, 8글자 기반은 1/8 배수로 떨어진다.
+      expect(dateOnly.values.any((v) => (v * 6 - (v * 6).round()).abs() < 1e-9), isTrue);
+      expect(withTime.values.any((v) => (v * 8 - (v * 8).round()).abs() < 1e-9), isTrue);
     });
   });
 }

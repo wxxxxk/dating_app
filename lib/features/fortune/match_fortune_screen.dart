@@ -8,6 +8,7 @@ import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
+import 'widgets/saju_precision_notice.dart';
 
 /// 궁합 화면 — 매칭 목록의 "궁합 보기" 진입점.
 ///
@@ -146,6 +147,8 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
               otherSaju: otherSaju,
             ),
             const SizedBox(height: 24),
+            MatchPrecisionNotice(missingBirthTime: narrative.missingBirthTime),
+            if (narrative.missingBirthTime) const SizedBox(height: 16),
             _CharacterCard(narrative: narrative),
             const SizedBox(height: 20),
             _AiRecommendationReasons(narrative: narrative),

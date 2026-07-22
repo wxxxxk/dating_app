@@ -122,22 +122,29 @@ class FortuneCalculator {
   ///   "완전한 사주팔자(8글자)"가 아니라 년/월/일 6글자 기반의 근사치다.
   ///   시주나 지장간까지 포함하면 오행 비율이 달라질 수 있다는 한계가 있다.
   /// - 년주/월주는 절기(태양 황경) 기준으로 정해지므로 실제 계산에는 시각이 필요하다.
-  ///   출생 시각이 없어 정오(12:00, Asia/Seoul)를 임의로 대입한다 — 자정 근처를
-  ///   피해 날짜 경계(하루가 바뀌는 시점) 판정이 흔들리지 않게 하기 위함이다.
-  ///   연/월 경계일(절기 당일)에 태어난 경우 실제와 다르게 나올 수 있다.
-  /// - 위 근사를 적용해도 같은 생년월일이면 항상 같은 6글자 조합이 나오므로
-  ///   결과는 결정론적이다.
-  static Map<String, double> getOhaengBalance(DateTime birthDate) {
+  ///   [birthTimeMinutes]를 주면 그 시각을, 모르면 그날 자정(00:00, Asia/Seoul)을
+  ///   쓴다. 자정은 시각 추정이 아니라 "날짜만 안다"는 입력을 그대로 표현한
+  ///   값이며, 서버 엔진(`functions/lib/saju/saju_engine_v2.js`)과 같은 규칙이다.
+  ///   **정오를 임의로 대입하지 않는다**(Phase 5-2에서 제거됨).
+  /// - 시각을 알면 시주(2글자)까지 포함해 8글자로 계산한다.
+  /// - 같은 입력이면 항상 같은 조합이 나오므로 결과는 결정론적이다.
+  ///
+  /// 이 계산은 화면 표시용 보조값이다. 캐시·AI 근거의 source of truth는 서버다.
+  static Map<String, double> getOhaengBalance(
+    DateTime birthDate, {
+    int? birthTimeMinutes,
+  }) {
     _ensureTimezoneInitialized();
     final seoul = tz.getLocation('Asia/Seoul');
-    final noon = tz.TZDateTime(
+    final instant = tz.TZDateTime(
       seoul,
       birthDate.year,
       birthDate.month,
       birthDate.day,
-      12,
+      (birthTimeMinutes ?? 0) ~/ 60,
+      (birthTimeMinutes ?? 0) % 60,
     );
-    final pillars = bazi.getFourPillars(noon).pillars;
+    final pillars = bazi.getFourPillars(instant).pillars;
 
     final letters = <bazi.Element>[
       pillars.year.stem.element,
@@ -146,6 +153,10 @@ class FortuneCalculator {
       pillars.month.branch.element,
       pillars.day.stem.element,
       pillars.day.branch.element,
+      if (birthTimeMinutes != null) ...[
+        pillars.hour.stem.element,
+        pillars.hour.branch.element,
+      ],
     ];
 
     final counts = {for (final key in ohaengOrder) key: 0};

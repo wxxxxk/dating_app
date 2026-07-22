@@ -60,6 +60,20 @@ const {
 } = require('./lib/photo_verification_review');
 const { tokensForRecipient } = require('./lib/push_tokens');
 const {
+  SAJU_CALCULATION_VERSION,
+  SAJU_CONVENTION_VERSION,
+  SUPPORTED_CALENDAR_TYPE,
+  SUPPORTED_TIME_ZONE,
+  STATUS: BIRTH_PROFILE_STATUS,
+  parseBirthProfile,
+  parseBirthProfileRequest,
+} = require('./lib/saju/birth_profile');
+const {
+  computeSajuChart,
+  buildEvidencePayload,
+  legacyAttrsFromChart,
+} = require('./lib/saju/saju_engine_v2');
+const {
   createLoungePostCore,
   createFeedPostCore,
   createCommunityCommentCore,
@@ -412,6 +426,110 @@ function isCurrentTextContent(value) {
   return !!value && value.contentVersion === TEXT_CONTENT_VERSION;
 }
 
+// ── 사주 계산 source of truth (Phase 5-2) ──────────────────────────────────
+//
+// 클라이언트가 보낸 zodiac/dayMaster 같은 계산 결과는 더 이상 신뢰하지 않는다.
+// 아래 helper들이 users/{uid} 비공개 출생정보만 근거로 계산하고, 그 입력의
+// 지문을 캐시에 함께 저장해 생년월일·출생시간이 바뀌면 캐시가 자연히 만료된다.
+
+/**
+ * 캐시 문서에 붙일 계산 근거 metadata.
+ *
+ * raw 생년월일·시각은 넣지 않는다 — 지문만 저장한다.
+ */
+function sajuCacheMetadata(profile) {
+  return {
+    calculationVersion: SAJU_CALCULATION_VERSION,
+    conventionVersion: SAJU_CONVENTION_VERSION,
+    interpretationVersion: TEXT_CONTENT_VERSION,
+    inputFingerprint: profile.inputFingerprint,
+  };
+}
+
+/**
+ * 캐시가 지금의 출생정보·계산 convention·문구 버전으로 만들어진 것인지.
+ *
+ * metadata가 아예 없는 기존 캐시(Phase 5-2 이전)는 항상 miss로 처리한다.
+ * production 캐시를 일괄 삭제하지 않고 자연스럽게 재생성되게 하기 위함이다.
+ */
+function isCurrentSajuCache(cached, profile) {
+  return !!(
+    cached &&
+    cached.calculationVersion === SAJU_CALCULATION_VERSION &&
+    cached.conventionVersion === SAJU_CONVENTION_VERSION &&
+    cached.interpretationVersion === TEXT_CONTENT_VERSION &&
+    typeof cached.inputFingerprint === 'string' &&
+    cached.inputFingerprint === profile.inputFingerprint
+  );
+}
+
+/**
+ * 본인 출생정보를 읽어 사주 원국을 계산한다.
+ *
+ * 출생시간 필드가 아직 없는 기존 사용자는 `failed-precondition`으로 돌려보내
+ * 앱이 출생시간 보완 화면을 띄우게 한다. **정오를 대입하지 않는다.**
+ */
+function birthChartFromUserData(data, { fn, callerUid }) {
+  const parsed = parseBirthProfile(data);
+  if (parsed.status === BIRTH_PROFILE_STATUS.LEGACY_MISSING) {
+    logTextAiEvent('info', fn, 'birth_profile_incomplete', {
+      callerHash: safeUidHash(callerUid),
+      retryable: false,
+    });
+    throw new HttpsError('failed-precondition', '태어난 시간 정보가 필요합니다.', {
+      reason: 'birth_profile_incomplete',
+    });
+  }
+  if (parsed.status === BIRTH_PROFILE_STATUS.INVALID) {
+    // reason은 값이 아니라 어떤 계약을 어겼는지만 담는다(생년월일·시각 미포함).
+    logTextAiEvent('warn', fn, 'birth_profile_invalid', {
+      callerHash: safeUidHash(callerUid),
+      status: parsed.reason,
+      retryable: false,
+    });
+    throw new HttpsError('failed-precondition', '프로필 생년월일이 필요합니다.', {
+      reason: 'birth_profile_invalid',
+    });
+  }
+  return { profile: parsed.profile, chart: computeSajuChart(parsed.profile) };
+}
+
+/**
+ * 상대방 등 "보완을 요구할 수 없는" 사용자의 사주를 계산한다.
+ *
+ * 출생시간이 없으면 막지 않고 dateOnly(시주 없음)로 계산한다 — 궁합·아이스브레이커가
+ * 상대 프로필 때문에 통째로 실패하지 않게 하기 위함이다. 임의 시각 대입은 없다.
+ */
+function birthChartForCounterpart(data, { fn, callerUid, matchId }) {
+  const parsed = parseBirthProfile(data);
+  if (parsed.status === BIRTH_PROFILE_STATUS.OK) {
+    return computeSajuChart(parsed.profile);
+  }
+  if (parsed.status === BIRTH_PROFILE_STATUS.LEGACY_MISSING) {
+    const fallback = parseBirthProfile({ ...data, birthTimeKnown: false });
+    if (fallback.status === BIRTH_PROFILE_STATUS.OK) {
+      return computeSajuChart(fallback.profile);
+    }
+  }
+  logTextAiEvent('warn', fn, 'birth_date_missing', {
+    callerHash: safeUidHash(callerUid),
+    matchHash: matchId ? safeMatchHash(matchId) : undefined,
+    retryable: false,
+  });
+  throw new HttpsError('failed-precondition', '프로필 생년월일이 필요합니다.');
+}
+
+/** Asia/Seoul 기준 오늘 날짜 키(yyyy-MM-dd). 클라이언트 날짜를 신뢰하지 않는다. */
+function seoulDateKey(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SUPPORTED_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+  return parts;
+}
+
 /** 개인 사주 서사 생성용 시스템 프롬프트. */
 function fortuneSystemPrompt() {
   return [
@@ -419,8 +537,12 @@ function fortuneSystemPrompt() {
     '"내 얘기 같다"고 느끼도록 따뜻하게 풀어주는 카피라이터입니다.',
     '',
     '반드시 지킬 규칙:',
-    '1. 사용자 메시지의 "속성" JSON에 주어진 값(별자리/원소/일간/오행)만 근거로 해석한다.',
+    '1. 사용자 메시지의 "속성"·"사주근거" JSON에 주어진 값만 근거로 해석한다.',
     '   주어지지 않은 정보(정확한 생년월일, 이름, 성별 등)를 추측하거나 지어내지 않는다.',
+    '1-1. "사주근거"의 hourPillar가 null이거나 missingBirthTime이 true이면,',
+    '   출생시간을 모르는 것이다. 시주(時柱)나 태어난 시간대에서 온 성향을 언급하거나',
+    '   지어내지 않는다. 연/월/일주와 오행 분포만으로 해석한다.',
+    '1-2. fiveElementBalance는 이미 계산된 값이다. 직접 다시 세거나 바꾸지 않는다.',
     '2. 명리학 용어를 나열하지 말고, 연애·대화·관계에서 겪는 실제 상황으로 풀어 쓴다.',
     '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
     '3. 점수·퍼센트·순위 등 숫자 지표나 확정적 운명 예측은 만들지 않는다.',
@@ -442,8 +564,11 @@ function matchSystemPrompt() {
     '이해하는 데 도움이 될 궁합 이야기를 따뜻하게 들려주는 카피라이터입니다.',
     '',
     '반드시 지킬 규칙:',
-    '1. 사용자 메시지의 "속성A"·"속성B" JSON에 주어진 두 사람의 값만 근거로 해석한다.',
+    '1. 사용자 메시지의 "속성A"·"속성B"·"사주근거A"·"사주근거B" JSON에 주어진',
+    '   두 사람의 값만 근거로 해석한다.',
     '   주어지지 않은 정보(이름, 나이, 외모 등)를 추측하거나 지어내지 않는다.',
+    '1-1. 사주근거의 missingBirthTime이 true인 사람은 출생시간을 모르는 것이다.',
+    '   그 사람의 시주나 태어난 시간대 성향을 언급하거나 지어내지 않는다.',
     '2. 명리학 용어를 나열하기보다, 두 사람이 대화하고 가까워지는 실제 상황으로 풀어 쓴다.',
     '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
     '3. 점수·퍼센트·순위·궁합도 같은 숫자 지표나 확정적 예측은 만들지 않는다.',
@@ -457,17 +582,6 @@ function matchSystemPrompt() {
     '- relationshipStory: 3~5문장. 두 사람이 가까워질 때 도움이 될 만한 관계 흐름을',
     '  실제 대화 장면처럼 서술한다(확정적 예측·점수 금지)',
   ].join('\n');
-}
-
-/** 속성 JSON이 GPT 근거로 쓰기에 충분한 형태인지 검사. */
-function isValidAttrs(attrs) {
-  return !!(
-    attrs &&
-    typeof attrs.zodiac?.sign === 'string' &&
-    typeof attrs.zodiac?.element === 'string' &&
-    typeof attrs.saju?.dayMaster === 'string' &&
-    typeof attrs.saju?.element === 'string'
-  );
 }
 
 /** GPT가 돌려준 JSON이 기대한 서사 스키마를 갖췄는지 검사. */
@@ -733,27 +847,26 @@ async function assertNoMatchBlocks({ fn, matchId, participants, callerUid }) {
   }
 }
 
-function attrsFromBirthDate({ birthDate, participantUid, callerUid, matchId, fn }) {
-  const parts = datePartsInSeoul(birthDate);
-  if (!parts || !parts.year || !parts.month || !parts.day) {
-    logTextAiEvent('warn', fn, 'birth_date_missing', {
-      callerHash: safeUidHash(callerUid),
-      matchHash: safeMatchHash(matchId),
-      participantHash: safeUidHash(participantUid),
-      retryable: false,
-    });
-    throw new HttpsError('failed-precondition', '프로필 생년월일이 필요합니다.');
-  }
-  return {
-    zodiac: getZodiacAttrs(parts),
-    saju: getSajuAttrs(parts),
-  };
-}
-
+/**
+ * 매치 참가자 두 명의 사주를 서버에서 계산한다(Phase 5-2).
+ *
+ * 상대방에게 출생시간 보완을 요구할 수는 없으므로, 출생시간이 없는 참가자는
+ * 막지 않고 dateOnly로 계산한다. 어느 한쪽이라도 시간이 없으면 결과 metadata의
+ * `missingBirthTime`이 true가 되어 화면이 "기본 궁합"임을 표시할 수 있다.
+ */
 async function readMatchParticipantAttrs({ fn, matchId, participants, callerUid }) {
   const refs = participants.map((uid) => db.collection('users').doc(uid));
-  const snaps = await db.getAll(...refs, { fieldMask: ['birthDate'] });
+  const snaps = await db.getAll(...refs, {
+    fieldMask: [
+      'birthDate',
+      'birthCalendarType',
+      'birthTimeKnown',
+      'birthTimeMinutes',
+      'birthTimeZone',
+    ],
+  });
   const participantAttrs = {};
+  const participantCharts = {};
   for (let i = 0; i < participants.length; i += 1) {
     const uid = participants[i];
     const snap = snaps[i];
@@ -766,15 +879,25 @@ async function readMatchParticipantAttrs({ fn, matchId, participants, callerUid 
       });
       throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
     }
-    participantAttrs[uid] = attrsFromBirthDate({
-      birthDate: snap.data()?.birthDate,
-      participantUid: uid,
+    const chart = birthChartForCounterpart(snap.data(), {
+      fn,
       callerUid,
       matchId,
-      fn,
     });
+    participantCharts[uid] = chart;
+    participantAttrs[uid] = legacyAttrsFromChart(chart);
   }
-  return participantAttrs;
+  return { participantAttrs, participantCharts };
+}
+
+/** 매치 결과에 붙일 precision metadata. 두 사람 중 한 명이라도 시간이 없으면 표시한다. */
+function matchPrecisionMetadata(participantCharts) {
+  const charts = Object.values(participantCharts);
+  const missing = charts.some((chart) => chart.precision === 'dateOnly');
+  return {
+    precision: missing ? 'dateOnly' : 'dateAndTime',
+    missingBirthTime: missing,
+  };
 }
 
 async function acquireTextAiGenerationSlot({
@@ -845,10 +968,76 @@ async function releaseTextAiGenerationSlot({
 }
 
 /**
+ * 내 출생정보 저장/수정 (callable) — Phase 5-2.
+ *
+ * 입력: { birthDateMillis, birthCalendarType, birthTimeKnown, birthTimeMinutes,
+ *        birthTimeZone }
+ *
+ * 출생정보는 사주 계산의 유일한 근거이자 민감한 비공개 데이터라, 클라이언트
+ * Firestore write whitelist를 넓히는 대신 서버 검증 경로로만 갱신한다.
+ * 여기서 쓰는 필드는 users/{uid} 비공개 문서에만 존재하며 publicProfiles에는
+ * 어떤 형태로도 복제하지 않는다.
+ *
+ * 캐시는 여기서 지우지 않는다 — 출생정보가 바뀌면 지문이 달라져 다음 조회 때
+ * 자연스럽게 miss가 되고 재생성된다.
+ */
+exports.updateMyBirthProfile = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
+  }
+  const uid = request.auth.uid;
+  const parsed = parseBirthProfileRequest(request.data);
+  if (!parsed.ok) {
+    // 어떤 계약을 어겼는지만 남긴다 — 생년월일·시각 값 자체는 로그에 없다.
+    logTextAiEvent('warn', 'updateMyBirthProfile', 'request_invalid', {
+      callerHash: safeUidHash(uid),
+      status: parsed.reason,
+      retryable: false,
+    });
+    throw new HttpsError('invalid-argument', '출생 정보가 올바르지 않습니다.', {
+      reason: parsed.reason,
+    });
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const snap = await userRef.get();
+  if (!snap.exists) {
+    throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
+  }
+
+  const fields = parsed.fields;
+  await userRef.set(
+    {
+      birthDate: admin.firestore.Timestamp.fromMillis(fields.birthDateMillis),
+      birthCalendarType: fields.birthCalendarType,
+      birthTimeKnown: fields.birthTimeKnown,
+      birthTimeMinutes: fields.birthTimeMinutes,
+      birthTimeZone: fields.birthTimeZone,
+      sajuInputVersion: fields.sajuInputVersion,
+      birthProfileUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  logTextAiEvent('info', 'updateMyBirthProfile', 'saved', {
+    callerHash: safeUidHash(uid),
+    status: fields.birthTimeKnown ? 'dateAndTime' : 'dateOnly',
+    retryable: false,
+  });
+
+  return {
+    birthTimeKnown: fields.birthTimeKnown,
+    precision: fields.birthTimeKnown ? 'dateAndTime' : 'dateOnly',
+    sajuInputVersion: fields.sajuInputVersion,
+  };
+});
+
+/**
  * 내 사주 서사 생성 (callable).
  *
- * 입력: { attrs: { zodiac: {sign, element}, saju: {dayMaster, element} } }
- * 캐싱: users/{uid}.fortuneNarrative — 이미 있으면 GPT 호출 없이 그대로 반환한다.
+ * 입력: {} — 클라이언트가 보내는 계산 attrs는 무시한다(Phase 5-2).
+ * 근거: users/{uid} 비공개 출생정보로 서버가 직접 계산한다.
+ * 캐싱: users/{uid}.fortuneNarrative — 출생정보 지문이 일치할 때만 재사용한다.
  */
 exports.generateFortuneNarrative = onCall(
   { secrets: [OPENAI_API_KEY] },
@@ -856,23 +1045,32 @@ exports.generateFortuneNarrative = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     }
-    const attrs = request.data?.attrs;
-    if (!isValidAttrs(attrs)) {
-      throw new HttpsError('invalid-argument', '별자리/사주 속성이 올바르지 않습니다.');
-    }
 
     const userRef = db.collection('users').doc(request.auth.uid);
     const snap = await userRef.get();
+    // 구버전 앱이 attrs를 보내더라도 읽지 않는다 — 서버 계산이 유일한 근거다.
+    const { profile, chart } = birthChartFromUserData(snap.data(), {
+      fn: 'generateFortuneNarrative',
+      callerUid: request.auth.uid,
+    });
+    const attrs = legacyAttrsFromChart(chart);
+    const evidence = buildEvidencePayload(chart);
+
     const cached = snap.data()?.fortuneNarrative;
-    if (isValidNarrative(cached) && isCurrentTextContent(cached)) {
+    if (
+      isValidNarrative(cached) &&
+      isCurrentTextContent(cached) &&
+      isCurrentSajuCache(cached, profile)
+    ) {
       logTextAiEvent('info', 'generateFortuneNarrative', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
+        status: chart.precision,
         retryable: false,
       });
       return cached;
     }
 
-    const inputHash = textAiInputHash({ attrs });
+    const inputHash = textAiInputHash({ fingerprint: profile.inputFingerprint });
     await acquireTextAiGenerationSlot({
       fn: 'generateFortuneNarrative',
       guard: textAiUsageGuards.generateFortuneNarrative,
@@ -887,7 +1085,7 @@ exports.generateFortuneNarrative = onCall(
       try {
         const rawNarrative = await callOpenAiForNarrative({
           systemPrompt: fortuneSystemPrompt(),
-          userPayload: { 속성: attrs },
+          userPayload: { 속성: attrs, 사주근거: evidence },
         });
         narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
         if (!isValidNarrative(narrative)) {
@@ -908,11 +1106,15 @@ exports.generateFortuneNarrative = onCall(
       }
 
       narrative.contentVersion = TEXT_CONTENT_VERSION;
+      Object.assign(narrative, sajuCacheMetadata(profile), {
+        precision: chart.precision,
+      });
       await userRef.set({ fortuneNarrative: narrative }, { merge: true });
       success = true;
       logTextAiEvent('info', 'generateFortuneNarrative', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
         callerHash: safeUidHash(request.auth.uid),
         count: narrative.reasons.length,
+        status: chart.precision,
         retryable: false,
       });
       return narrative;
@@ -970,7 +1172,7 @@ exports.generateMatchNarrative = onCall(
       callerUid: request.auth.uid,
     });
 
-    const participantAttrs = await readMatchParticipantAttrs({
+    const { participantAttrs, participantCharts } = await readMatchParticipantAttrs({
       fn: 'generateMatchNarrative',
       matchId,
       participants,
@@ -979,9 +1181,17 @@ exports.generateMatchNarrative = onCall(
     const [uidA, uidB] = participants;
     const userA = participantAttrs[uidA];
     const userB = participantAttrs[uidB];
+    const precision = matchPrecisionMetadata(participantCharts);
+    const evidenceA = buildEvidencePayload(participantCharts[uidA]);
+    const evidenceB = buildEvidencePayload(participantCharts[uidB]);
 
     const cached = matchData.fortuneMatch;
-    if (isValidNarrative(cached) && isCurrentTextContent(cached)) {
+    if (
+      isValidNarrative(cached) &&
+      isCurrentTextContent(cached) &&
+      cached.calculationVersion === SAJU_CALCULATION_VERSION &&
+      cached.conventionVersion === SAJU_CONVENTION_VERSION
+    ) {
       logTextAiEvent('info', 'generateMatchNarrative', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
         matchHash: safeMatchHash(matchId),
@@ -1007,7 +1217,12 @@ exports.generateMatchNarrative = onCall(
       try {
         const rawNarrative = await callOpenAiForNarrative({
           systemPrompt: matchSystemPrompt(),
-          userPayload: { 속성A: userA, 속성B: userB },
+          userPayload: {
+            속성A: userA,
+            속성B: userB,
+            사주근거A: evidenceA,
+            사주근거B: evidenceB,
+          },
         });
         narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
         if (!isValidNarrative(narrative) || typeof narrative.relationshipStory !== 'string') {
@@ -1030,6 +1245,10 @@ exports.generateMatchNarrative = onCall(
       }
 
       narrative.contentVersion = TEXT_CONTENT_VERSION;
+      Object.assign(narrative, precision, {
+        calculationVersion: SAJU_CALCULATION_VERSION,
+        conventionVersion: SAJU_CONVENTION_VERSION,
+      });
       await matchRef.set({ fortuneMatch: narrative }, { merge: true });
       success = true;
       logTextAiEvent('info', 'generateMatchNarrative', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
@@ -1706,8 +1925,10 @@ function dailyFortuneSystemPrompt() {
     '따뜻하고 공감되는 카피라이터입니다.',
     '',
     '반드시 지킬 규칙:',
-    '1. 사용자 메시지의 "속성" JSON(별자리/원소/일간/오행)과 "날짜"만 근거로 삼는다.',
+    '1. 사용자 메시지의 "속성"·"사주근거" JSON과 "날짜"만 근거로 삼는다.',
     '   주어지지 않은 정보를 추측하거나 지어내지 않는다.',
+    '1-1. "사주근거"의 missingBirthTime이 true이면 출생시간을 모르는 것이다.',
+    '   시주나 태어난 시간대 이야기를 지어내지 않는다.',
     '2. 점술 설명문이 아니라 오늘 하루 참고할 수 있는 짧고 구체적인 연애 조언으로 쓴다.',
     '   존댓말로, 확정적 예언 대신 공감과 응원 위주로 표현한다.',
     '   매일 비슷한 generic 문구를 반복하지 말고 그날의 결을 담는다.',
@@ -1755,9 +1976,10 @@ function sanitizeDailyFortune(raw) {
 /**
  * 오늘의 운세(애정 중심) 생성 (callable).
  *
- * 입력: { date: 'yyyy-MM-dd', attrs: { zodiac: {sign, element}, saju: {dayMaster, element} } }
- * 캐싱: users/{uid}/dailyFortune/{date} — 이미 있으면 GPT 호출 없이 그대로 반환한다.
- * 날짜는 클라이언트의 로컬 "오늘"을 그대로 캐시 키로 쓴다(사용자 체감 기준).
+ * 입력: {} — 날짜와 계산 attrs 모두 클라이언트 값을 신뢰하지 않는다(Phase 5-2).
+ * 날짜는 Asia/Seoul 기준 오늘로 서버가 정하고, 사주 근거는 비공개 출생정보로
+ * 서버가 직접 계산한다.
+ * 캐싱: users/{uid}/dailyFortune/{date} — 출생정보 지문이 일치할 때만 재사용한다.
  */
 exports.generateDailyFortune = onCall(
   { secrets: [OPENAI_API_KEY] },
@@ -1765,13 +1987,15 @@ exports.generateDailyFortune = onCall(
     if (!request.auth) {
       throw new HttpsError('unauthenticated', '로그인이 필요합니다.');
     }
-    const { date, attrs } = request.data || {};
-    if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      throw new HttpsError('invalid-argument', '날짜 형식이 올바르지 않습니다 (yyyy-MM-dd).');
-    }
-    if (!isValidAttrs(attrs)) {
-      throw new HttpsError('invalid-argument', '별자리/사주 속성이 올바르지 않습니다.');
-    }
+    const date = seoulDateKey();
+
+    const userSnap = await db.collection('users').doc(request.auth.uid).get();
+    const { profile, chart } = birthChartFromUserData(userSnap.data(), {
+      fn: 'generateDailyFortune',
+      callerUid: request.auth.uid,
+    });
+    const attrs = legacyAttrsFromChart(chart);
+    const evidence = buildEvidencePayload(chart);
 
     const dailyRef = db
       .collection('users')
@@ -1780,15 +2004,23 @@ exports.generateDailyFortune = onCall(
       .doc(date);
 
     const snap = await dailyRef.get();
-    if (isValidDailyFortune(snap.data()) && isCurrentTextContent(snap.data())) {
+    if (
+      isValidDailyFortune(snap.data()) &&
+      isCurrentTextContent(snap.data()) &&
+      isCurrentSajuCache(snap.data(), profile)
+    ) {
       logTextAiEvent('info', 'generateDailyFortune', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
+        status: chart.precision,
         retryable: false,
       });
       return snap.data();
     }
 
-    const inputHash = textAiInputHash({ date, attrs });
+    const inputHash = textAiInputHash({
+      date,
+      fingerprint: profile.inputFingerprint,
+    });
     await acquireTextAiGenerationSlot({
       fn: 'generateDailyFortune',
       guard: textAiUsageGuards.generateDailyFortune,
@@ -1803,7 +2035,7 @@ exports.generateDailyFortune = onCall(
       try {
         const rawFortune = await callOpenAiForNarrative({
           systemPrompt: dailyFortuneSystemPrompt(),
-          userPayload: { 날짜: date, 속성: attrs },
+          userPayload: { 날짜: date, 속성: attrs, 사주근거: evidence },
         });
         fortune = sanitizeDailyFortune(rawFortune);
         if (!isValidDailyFortune(fortune)) {
@@ -1824,11 +2056,14 @@ exports.generateDailyFortune = onCall(
       }
 
       fortune.contentVersion = TEXT_CONTENT_VERSION;
+      Object.assign(fortune, sajuCacheMetadata(profile), {
+        precision: chart.precision,
+      });
       await dailyRef.set(fortune);
       success = true;
       logTextAiEvent('info', 'generateDailyFortune', generator === 'ai' ? 'generated_ai' : 'generated_fallback', {
         callerHash: safeUidHash(request.auth.uid),
-        status: fortune.loveScore,
+        status: chart.precision,
         retryable: false,
       });
       return fortune;

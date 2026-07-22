@@ -31,20 +31,13 @@ class FortuneService {
 
   /// 내 사주 서사를 가져온다. uid는 반드시 로그인한 본인이어야 한다
   /// (함수가 request.auth.uid로만 users/{uid} 문서를 갱신하기 때문).
-  Future<FortuneNarrative> getMyFortune({
-    required String uid,
-    required ZodiacInfo zodiac,
-    required SajuInfo saju,
-  }) async {
-    final userDoc = await _db.collection('users').doc(uid).get();
-    final cached = userDoc.data()?['fortuneNarrative'] as Map<String, dynamic>?;
-    if (cached != null) return FortuneNarrative.fromMap(cached);
-
+  ///
+  /// Phase 5-2부터 별자리·일간 같은 계산값을 클라이언트가 보내지 않는다.
+  /// 서버가 비공개 출생정보로 직접 계산하는 것이 유일한 근거다.
+  Future<FortuneNarrative> getMyFortune({required String uid}) async {
     final result = await _callFunction(() {
       final callable = _functions.httpsCallable('generateFortuneNarrative');
-      return callable.call({
-        'attrs': {'zodiac': zodiac.toAttrs(), 'saju': saju.toAttrs()},
-      });
+      return callable.call(<String, dynamic>{});
     }, label: 'generateFortuneNarrative');
     return FortuneNarrative.fromMap(
       Map<String, dynamic>.from(result.data as Map),
@@ -99,10 +92,11 @@ class FortuneService {
   /// users/{uid}/dailyFortune/{yyyy-MM-dd} 문서로 하루 단위 캐싱한다 —
   /// 날짜가 바뀌면 문서 키가 달라져 자연히 새로 생성되고, 같은 날 재진입은
   /// 캐시를 그대로 읽어 GPT를 다시 부르지 않는다.
+  ///
+  /// Phase 5-2부터 날짜와 사주 근거를 모두 서버가 정한다 — 클라이언트 날짜와
+  /// 계산값은 보내지 않는다. 로컬 날짜는 캐시 선조회에만 쓴다.
   Future<DailyFortune> getDailyFortune({
     required String uid,
-    required ZodiacInfo zodiac,
-    required SajuInfo saju,
     DateTime? now,
   }) async {
     final dateKey = _dateKey(now ?? DateTime.now());
@@ -113,16 +107,15 @@ class FortuneService {
         .doc(dateKey);
 
     final cachedSnap = await docRef.get();
-    if (cachedSnap.data() != null) {
-      return DailyFortune.fromMap(cachedSnap.data()!);
+    final cached = cachedSnap.data();
+    // 캐시 metadata가 없는 옛 문서는 서버가 재생성하도록 그냥 흘려보낸다.
+    if (cached != null && cached['inputFingerprint'] is String) {
+      return DailyFortune.fromMap(cached);
     }
 
     final result = await _callFunction(() {
       final callable = _functions.httpsCallable('generateDailyFortune');
-      return callable.call({
-        'date': dateKey,
-        'attrs': {'zodiac': zodiac.toAttrs(), 'saju': saju.toAttrs()},
-      });
+      return callable.call(<String, dynamic>{});
     }, label: 'generateDailyFortune');
     return DailyFortune.fromMap(Map<String, dynamic>.from(result.data as Map));
   }
@@ -163,18 +156,15 @@ class FortuneService {
   ///
   /// 발표/데모용 개발 기능에서만 호출한다. 실제 서비스에서는 사용자가 매일
   /// 사주 탭을 열 때 [getDailyFortune]이 자연스럽게 그날 문서를 만든다.
+  ///
+  /// Phase 5-2부터 서버가 Asia/Seoul 기준 오늘 날짜만 생성하므로, 이 호출은
+  /// 과거 날짜 문서를 만들지 못하고 오늘 문서만 확인한다. 데모용 잔재다.
   Future<void> backfillRecentDailyFortunes({
     required String uid,
-    required ZodiacInfo zodiac,
-    required SajuInfo saju,
     int days = 7,
     DateTime? now,
   }) async {
-    final today = _dateOnly(now ?? DateTime.now());
-    for (var index = 0; index < days; index++) {
-      final date = today.subtract(Duration(days: index));
-      await getDailyFortune(uid: uid, zodiac: zodiac, saju: saju, now: date);
-    }
+    await getDailyFortune(uid: uid, now: now);
   }
 
   /// 매칭 채팅의 첫 대화 물꼬를 가져온다.

@@ -128,8 +128,36 @@ service cloud.firestore {
           'interests', 'personalityTags', 'idealTags', 'relationshipGoal',
           'valueAnswers', 'profileStories',
           'location', 'verifications', 'discoveryFilter',
-          'fcmTokens', 'fcmTokenUpdatedAt'
+          'fcmTokens', 'fcmTokenUpdatedAt',
+          // Phase 5-2 출생정보. 최초 생성만 클라이언트가 쓸 수 있고,
+          // 이후 수정은 updateMyBirthProfile callable(서버 검증)만 가능하다.
+          'birthCalendarType', 'birthTimeKnown', 'birthTimeMinutes',
+          'birthTimeZone', 'sajuInputVersion', 'birthProfileUpdatedAt'
         ];
+      }
+
+      // 출생시간 계약. birthTimeKnown이 true면 0~1439 분이 반드시 있어야 하고,
+      // false면 분이 null이어야 한다. 서버 birth_profile.js와 같은 불변식이다.
+      function birthProfileValid(data) {
+        return (!('birthCalendarType' in data) ||
+            data.birthCalendarType == 'solar') &&
+          (!('birthTimeZone' in data) || data.birthTimeZone == 'Asia/Seoul') &&
+          (!('sajuInputVersion' in data) || data.sajuInputVersion is int) &&
+          (!('birthTimeKnown' in data) || (
+            data.birthTimeKnown is bool && (
+              (data.birthTimeKnown == true &&
+                'birthTimeMinutes' in data &&
+                data.birthTimeMinutes is int &&
+                data.birthTimeMinutes >= 0 &&
+                data.birthTimeMinutes <= 1439) ||
+              (data.birthTimeKnown == false &&
+                (!('birthTimeMinutes' in data) ||
+                  data.birthTimeMinutes == null))
+            )
+          )) &&
+          (!('birthTimeMinutes' in data) ||
+            data.birthTimeMinutes == null ||
+            'birthTimeKnown' in data);
       }
 
       function userOwnerUpdateKeys() {
@@ -215,7 +243,8 @@ service cloud.firestore {
       }
 
       function userFieldsValid(data) {
-        return (!('displayName' in data) || data.displayName is string) &&
+        return birthProfileValid(data) &&
+          (!('displayName' in data) || data.displayName is string) &&
           (!('birthDate' in data) || data.birthDate is timestamp) &&
           (!('gender' in data) ||
             data.gender in ['male', 'female', 'other']) &&

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/validators.dart';
+import '../../models/fortune/birth_profile.dart';
+import '../../shared/widgets/birth_time_selector.dart';
 import '../../shared/widgets/primary_button.dart';
 
 /// 온보딩 스텝 1 — 기본 정보 입력.
@@ -14,6 +16,7 @@ class BasicInfoStep extends StatefulWidget {
   final void Function({
     required String name,
     required DateTime birthDate,
+    required BirthProfile birthProfile,
     required String gender,
     required String bio,
   })
@@ -32,6 +35,9 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
   final _bioController = TextEditingController();
 
   DateTime? _birthDate;
+  // 아직 아무것도 고르지 않은 상태를 null로 구분한다 — "몰라요"와 다르다.
+  bool? _birthTimeKnown;
+  int? _birthTimeMinutes;
   String? _gender;
 
   @override
@@ -63,6 +69,17 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
     }
   }
 
+  /// 현재 선택 상태를 저장 계약에 맞는 값으로 만든다. 계약을 못 지키면 null.
+  BirthProfile? get _birthProfile {
+    final known = _birthTimeKnown;
+    if (known == null) return null;
+    if (!known) return const BirthProfile.unknownTime();
+    final minutes = _birthTimeMinutes;
+    if (minutes == null) return null;
+    final profile = BirthProfile.knownTime(minutes);
+    return profile.isValid ? profile : null;
+  }
+
   void _handleNext() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_birthDate == null) {
@@ -71,15 +88,35 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
       ).showSnackBar(const SnackBar(content: Text('생년월일을 선택해주세요.')));
       return;
     }
+    if (_birthTimeKnown == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('태어난 시간을 아는지 선택해주세요.')),
+      );
+      return;
+    }
+    if (_birthTimeKnown == true && _birthTimeMinutes == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('태어난 시각을 선택해주세요.')));
+      return;
+    }
     if (_gender == null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('성별을 선택해주세요.')));
       return;
     }
+    final birthProfile = _birthProfile;
+    if (birthProfile == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('태어난 시간을 다시 확인해주세요.')));
+      return;
+    }
     widget.onNext(
       name: _nameController.text.trim(),
       birthDate: _birthDate!,
+      birthProfile: birthProfile,
       gender: _gender!,
       bio: _bioController.text.trim(),
     );
@@ -148,6 +185,19 @@ class _BasicInfoStepState extends State<BasicInfoStep> {
                     ),
                     validator: (_) =>
                         _birthDate == null ? '생년월일을 선택해주세요.' : null,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // 태어난 시간 — 시주(時柱) 계산에 쓰인다. 모르면 명시적으로
+                  // "몰라요"를 골라야 하며, 임의 시각을 대신 넣지 않는다.
+                  BirthTimeSelector(
+                    timeKnown: _birthTimeKnown,
+                    minutes: _birthTimeMinutes,
+                    onKnownChanged: (known) => setState(() {
+                      _birthTimeKnown = known;
+                      if (!known) _birthTimeMinutes = null;
+                    }),
+                    onMinutesChanged: (m) => setState(() => _birthTimeMinutes = m),
                   ),
                   const SizedBox(height: 24),
 

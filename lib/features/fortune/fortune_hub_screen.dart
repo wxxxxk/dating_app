@@ -9,8 +9,10 @@ import '../../services/auth/auth_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
+import '../../services/profile/birth_profile_service.dart';
 import '../../services/ideal_type/ideal_type_service.dart';
 import '../../services/matches/matches_service.dart';
+import 'birth_time_completion_screen.dart';
 import 'fortune_route_names.dart';
 import 'fortune_history_screen.dart';
 import '../ideal_type/ideal_type_screen.dart';
@@ -53,6 +55,9 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
   String? _error;
 
   UserProfile? _profile;
+  /// 출생시간을 아직 물어본 적이 없는 기존 사용자면 true. 보완 화면을 띄운다.
+  bool _needsBirthTime = false;
+  final _birthProfileService = BirthProfileService();
   ZodiacInfo? _zodiac;
   SajuInfo? _saju;
   DailyFortune? _daily;
@@ -97,17 +102,26 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
       final profile = await widget.firestoreService.getUserProfile(uid);
       if (profile == null) throw StateError('프로필을 찾을 수 없습니다.');
 
+      // 출생시간을 물어본 적이 없으면 사주를 계산하지 않고 보완 화면을 띄운다.
+      // 앱의 다른 기능은 막지 않는다.
+      if (profile.birthProfile.needsCompletion) {
+        if (mounted) {
+          setState(() {
+            _profile = profile;
+            _needsBirthTime = true;
+          });
+        }
+        return;
+      }
+
       final zodiac = FortuneCalculator.getZodiacSign(profile.birthDate);
       final saju = FortuneCalculator.getSaju(profile.birthDate);
-      final daily = await widget.fortuneService.getDailyFortune(
-        uid: uid,
-        zodiac: zodiac,
-        saju: saju,
-      );
+      final daily = await widget.fortuneService.getDailyFortune(uid: uid);
 
       if (mounted) {
         setState(() {
           _profile = profile;
+          _needsBirthTime = false;
           _zodiac = zodiac;
           _saju = saju;
           _daily = daily;
@@ -136,6 +150,13 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
       builder: (_) => MyFortuneScreen(
         profile: profile,
         fortuneService: widget.fortuneService,
+        // 시간을 몰라요로 저장한 사용자도 나중에 추가할 수 있게 한다.
+        onAddBirthTime: profile.birthProfile.hasKnownTime
+            ? null
+            : () {
+                Navigator.of(context).pop();
+                setState(() => _needsBirthTime = true);
+              },
       ),
     );
   }
@@ -201,6 +222,16 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
       return _FortuneHubErrorState(
         message: '사주 정보를 불러오지 못했어요.\n잠시 후 다시 시도해주세요.',
         onRetry: _load,
+      );
+    }
+
+    // 기존 사용자 출생시간 보완 — 저장하면 다시 표시되지 않는다.
+    final profile = _profile;
+    if (_needsBirthTime && profile != null) {
+      return BirthTimeCompletionScreen(
+        birthDate: profile.birthDate,
+        birthProfileService: _birthProfileService,
+        onCompleted: _load,
       );
     }
 

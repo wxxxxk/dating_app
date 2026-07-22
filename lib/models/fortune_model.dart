@@ -24,11 +24,19 @@ class FortuneNarrative {
   final List<FortuneReason> reasons;
   final String? relationshipStory;
 
+  /// 서버가 계산에 쓴 정밀도(Phase 5-2). 'dateOnly' | 'dateAndTime' | null(구버전).
+  final String? precision;
+
+  /// 궁합의 경우 두 사람 중 한 명이라도 출생시간이 없으면 true.
+  final bool missingBirthTime;
+
   const FortuneNarrative({
     required this.characterType,
     required this.summary,
     required this.reasons,
     this.relationshipStory,
+    this.precision,
+    this.missingBirthTime = false,
   });
 
   factory FortuneNarrative.fromMap(Map<String, dynamic> map) {
@@ -46,6 +54,8 @@ class FortuneNarrative {
       relationshipStory: (map['relationshipStory'] as String?) == null
           ? null
           : _stripDecorativeSymbols(map['relationshipStory'] as String),
+      precision: map['precision'] as String?,
+      missingBirthTime: map['missingBirthTime'] as bool? ?? false,
     );
   }
 }

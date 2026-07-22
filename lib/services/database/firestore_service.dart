@@ -57,6 +57,15 @@ class FirestoreService {
   static const Set<String> clientCreatableUserKeys = {
     'displayName',
     'birthDate',
+    // Phase 5-2 출생정보. 비공개 필드이며 publicProfiles에는 담지 않는다.
+    // 최초 생성만 클라이언트가 쓰고, 이후 수정은 updateMyBirthProfile callable이
+    // 서버 검증을 거쳐 처리한다.
+    'birthCalendarType',
+    'birthTimeKnown',
+    'birthTimeMinutes',
+    'birthTimeZone',
+    'sajuInputVersion',
+    'birthProfileUpdatedAt',
     'gender',
     'bio',
     'photoUrls',
@@ -144,6 +153,7 @@ class FirestoreService {
     return {
       'displayName': profile.displayName,
       'birthDate': Timestamp.fromDate(profile.birthDate),
+      ...profile.birthProfile.toFirestoreFields(),
       'gender': profile.gender,
       'bio': profile.bio,
       'photoUrls': profile.photoUrls,

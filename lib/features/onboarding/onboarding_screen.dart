@@ -12,6 +12,7 @@ import '../../services/database/firestore_service.dart';
 import '../../services/profile/profile_keyword_summary_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../../models/fortune/birth_profile.dart';
 import 'basic_info_step.dart';
 import 'detail_info_step.dart';
 import 'photo_upload_step.dart';
@@ -65,6 +66,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ── 스텝 1: 기본 정보 ────────────────────────────────────────────────────
   String _name = '';
   DateTime? _birthDate;
+  // 회원가입에서 반드시 선택된다 — legacyMissing 상태로 신규 문서를 만들지 않는다.
+  BirthProfile? _birthProfile;
   String? _gender;
   String _bio = '';
 
@@ -114,6 +117,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         uid: widget.uid,
         displayName: _name,
         birthDate: _birthDate!,
+        birthProfile: _birthProfile ?? const BirthProfile.unknownTime(),
         gender: _gender!,
         bio: _bio,
         photoUrls: photoUrls,
@@ -197,11 +201,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ({
                 required name,
                 required birthDate,
+                required birthProfile,
                 required gender,
                 required bio,
               }) {
                 _name = name;
                 _birthDate = birthDate;
+                _birthProfile = birthProfile;
                 _gender = gender;
                 _bio = bio;
                 _nextStep();

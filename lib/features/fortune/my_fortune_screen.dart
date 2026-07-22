@@ -8,6 +8,7 @@ import '../../services/fortune/fortune_calculator.dart';
 import '../../services/fortune/fortune_service.dart';
 import '../../services/share/share_image_service.dart';
 import 'widgets/ohaeng_radar_chart.dart';
+import 'widgets/saju_precision_notice.dart';
 import 'widgets/share_card.dart';
 
 /// 내 사주 화면 — "내 사주 보기" 진입점.
@@ -18,10 +19,15 @@ class MyFortuneScreen extends StatefulWidget {
   final UserProfile profile;
   final FortuneService fortuneService;
 
+  /// 출생시간이 없을 때 "태어난 시간 추가하기"를 눌렀을 때의 동작.
+  /// null이면 버튼을 표시하지 않는다.
+  final VoidCallback? onAddBirthTime;
+
   const MyFortuneScreen({
     super.key,
     required this.profile,
     required this.fortuneService,
+    this.onAddBirthTime,
   });
 
   @override
@@ -43,7 +49,12 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
     super.initState();
     _zodiac = FortuneCalculator.getZodiacSign(widget.profile.birthDate);
     _saju = FortuneCalculator.getSaju(widget.profile.birthDate);
-    _balance = FortuneCalculator.getOhaengBalance(widget.profile.birthDate);
+    _balance = FortuneCalculator.getOhaengBalance(
+      widget.profile.birthDate,
+      birthTimeMinutes: widget.profile.birthProfile.hasKnownTime
+          ? widget.profile.birthProfile.minutes
+          : null,
+    );
     _load();
   }
 
@@ -55,8 +66,6 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
     try {
       final narrative = await widget.fortuneService.getMyFortune(
         uid: widget.profile.uid,
-        zodiac: _zodiac,
-        saju: _saju,
       );
       if (mounted) setState(() => _narrative = narrative);
     } on FortuneFailure catch (e) {
@@ -148,6 +157,11 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
           children: [
             _AttributeRow(zodiac: _zodiac, saju: _saju),
+            const SizedBox(height: 16),
+            SajuPrecisionNotice(
+              hasKnownTime: widget.profile.birthProfile.hasKnownTime,
+              onAddBirthTime: widget.onAddBirthTime,
+            ),
             const SizedBox(height: 24),
             _CharacterCard(narrative: narrative),
             const SizedBox(height: 24),

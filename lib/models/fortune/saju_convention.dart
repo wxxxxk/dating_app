@@ -120,18 +120,11 @@ class SajuConvention {
   });
 }
 
-/// 현재 앱이 **실제로** 따르고 있는 규칙 (Phase 5-1 코드 감사 결과).
+/// Phase 5-1 감사 시점(= Phase 5-2 이전)에 앱이 따르던 규칙. **역사 기록용**이다.
 ///
-/// 근거:
-/// - 입력: `basic_info_step.dart`의 `showDatePicker` — 양력 날짜만, 시간·음력 없음
-/// - 시간대: `FortuneCalculator.getOhaengBalance`가 `Asia/Seoul` 고정,
-///   서버 `datePartsInSeoul()`도 동일
-/// - 연/월주: `saju` 패키지 `yearPillar`(입춘) / `monthPillar`(태양 황경)
-/// - 일주: `saju` 패키지 `standardPreset` — `DayBoundary.midnight`
-/// - 출생시간: 수집하지 않으면서 연/월주 계산에 **정오 12:00을 대입**한다
-///   (`getOhaengBalance`). 시주는 화면에 노출하지 않는다.
-/// - 진태양시: 경도 기본값이 `tzOffsetHours * 15 = 135°`라 보정량이 0이다.
-const SajuConvention currentConvention = SajuConvention(
+/// 이 시점의 알려진 결함: 출생시간을 수집하지 않으면서 연/월주 계산에
+/// 정오 12:00을 대입했다. Phase 5-2에서 제거됐다.
+const SajuConvention legacyConventionV1 = SajuConvention(
   version: 1,
   calendarConversion: CalendarConversion.solar,
   lunarLeapMonthRequired: false,
@@ -139,26 +132,49 @@ const SajuConvention currentConvention = SajuConvention(
   yearPillarBoundary: YearPillarBoundary.ipchun,
   monthPillarBoundary: MonthPillarBoundary.solarTerms,
   dayPillarBoundary: DayPillarBoundary.midnight,
-  // 출생시간을 받지 않으면서도 정오를 대입한다 — Phase 5-2 수정 대상.
   unknownBirthTimePolicy: UnknownBirthTimePolicy.substituteFixedTime,
   solarTimeCorrection: SolarTimeCorrection.disabled,
 );
 
-/// Phase 5-2에서 지향하는 규칙 **제안**.
+/// 제품이 **채택한** 계산 규칙 (Phase 5-2, conventionVersion 2).
 ///
-/// 아직 제품 결정이 내려지지 않았다. 특히 다음은 사용자 확정이 필요하다:
-/// - 일주 경계를 자정으로 둘지 자시(23:00)로 둘지
-/// - 진태양시 보정을 켤지
-/// 여기 적힌 값은 "현재 구현과 같은 쪽"을 기본으로 두되, 출생시간 임의 대입만
-/// 명시적으로 금지한 것이다.
-const SajuConvention recommendedConvention = SajuConvention(
+/// 서버 `functions/lib/saju/birth_profile.js`의 `SAJU_CONVENTION_VERSION`과
+/// 같은 값을 가리킨다. 서버가 계산의 source of truth이고, 이 상수는 앱이 같은
+/// 규칙을 따르고 있음을 코드로 고정하기 위한 것이다.
+///
+/// 논쟁적인 항목(일주 경계 자정/자시, 진태양시 보정)은 이번에 바꾸지 않았다 —
+/// 현재 구현과 같은 쪽을 명시적으로 채택했을 뿐이며, 바꾸려면 버전을 올린다.
+///
+/// 근거:
+/// - 입력: 회원가입에서 양력 생년월일 + 출생시간(알아요/몰라요)을 받는다
+/// - 시간대: Asia/Seoul 고정. 서버는 역사적 offset(1954~61, 1987~88)까지 반영
+/// - 연주: 입춘 / 월주: 절기(태양 황경) / 일주: 자정 00:00
+/// - 출생시간 미상: 시주를 계산하지 않는다. 임의 시각을 대입하지 않는다
+/// - 진태양시: 보정하지 않는다
+const SajuConvention currentConvention = SajuConvention(
   version: 2,
+  calendarConversion: CalendarConversion.solar,
+  lunarLeapMonthRequired: false,
+  timezonePolicy: TimezonePolicy.asiaSeoul,
+  yearPillarBoundary: YearPillarBoundary.ipchun,
+  monthPillarBoundary: MonthPillarBoundary.solarTerms,
+  dayPillarBoundary: DayPillarBoundary.midnight,
+  unknownBirthTimePolicy: UnknownBirthTimePolicy.omitHourPillar,
+  solarTimeCorrection: SolarTimeCorrection.disabled,
+);
+
+/// 향후 지원을 검토 중인 규칙. **아직 채택하지 않았다.**
+///
+/// 음력·윤달 입력은 별도 Phase로 진행한다. 여기 적혀 있다는 이유로 UI나 계산이
+/// 음력을 지원하는 것처럼 동작해서는 안 된다.
+const SajuConvention proposedLunarConvention = SajuConvention(
+  version: 3,
   calendarConversion: CalendarConversion.both,
   lunarLeapMonthRequired: true,
   timezonePolicy: TimezonePolicy.asiaSeoul,
   yearPillarBoundary: YearPillarBoundary.ipchun,
   monthPillarBoundary: MonthPillarBoundary.solarTerms,
   dayPillarBoundary: DayPillarBoundary.midnight,
-  unknownBirthTimePolicy: UnknownBirthTimePolicy.estimateNotAllowed,
+  unknownBirthTimePolicy: UnknownBirthTimePolicy.omitHourPillar,
   solarTimeCorrection: SolarTimeCorrection.disabled,
 );
