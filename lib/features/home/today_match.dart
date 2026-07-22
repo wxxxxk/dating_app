@@ -11,7 +11,26 @@ import '../../models/public_profile.dart';
 /// 바꾸고, 결과를 한 객체로 묶어 후보·문구가 서로 다른 대상에서 오지 않게 한다.
 
 /// 추천 알고리즘 버전. 선정 규칙이 바뀌면 올린다 → 기존 캐시가 자연히 무효화된다.
-const int kTodayMatchAlgorithmVersion = 2;
+///
+/// v3: 차단 fail-closed + candidate/viewer fingerprint 기반 캐시 무효화.
+const int kTodayMatchAlgorithmVersion = 3;
+
+/// 차단 관계를 확인하지 못했을 때 던진다.
+///
+/// 이걸 삼키고 빈 집합으로 진행하면 차단한 상대가 추천에 나올 수 있다.
+/// 확인이 안 되면 추천 자체를 하지 않는다(fail-closed).
+class BlockLookupFailure implements Exception {
+  const BlockLookupFailure();
+  @override
+  String toString() => 'BlockLookupFailure';
+}
+
+/// 후보 목록을 가져오지 못했을 때 던진다. empty와 구분하기 위한 타입.
+class CandidateLookupFailure implements Exception {
+  const CandidateLookupFailure();
+  @override
+  String toString() => 'CandidateLookupFailure';
+}
 
 /// 추천 후보가 어디서 왔는지.
 enum TodayMatchSource { match, discovery }
@@ -36,6 +55,13 @@ class TodayMatchResult {
   /// 후보가 바뀌면 값이 달라져 이전 문구를 재사용할 수 없다.
   final String reasonFingerprint;
 
+  /// 후보의 **공개 프로필** 지문. 사진·소개·관심사 등이 바뀌면 값이 달라진다.
+  /// ID만 비교하면 같은 사람이 프로필을 고쳐도 옛 카드가 계속 남는다.
+  final String candidateProfileFingerprint;
+
+  /// 보는 사람의 추천 조건 지문(필터·목표 등). 조건이 바뀌면 재계산해야 한다.
+  final String viewerEligibilityFingerprint;
+
   const TodayMatchResult({
     required this.profile,
     required this.candidateId,
@@ -43,20 +69,35 @@ class TodayMatchResult {
     required this.dateKey,
     required this.source,
     required this.reasonFingerprint,
+    required this.candidateProfileFingerprint,
+    required this.viewerEligibilityFingerprint,
     this.algorithmVersion = kTodayMatchAlgorithmVersion,
   });
 
   /// 캐시된 결과를 그대로 재사용해도 되는지.
   ///
-  /// 같은 사용자·같은 날짜·같은 알고리즘이면서, 후보가 **지금도** 자격이 있을 때만
-  /// 재사용한다. Firestore 조회가 실패했다고 이전 결과를 계속 보여주지 않는다.
+  /// 같은 사용자·같은 날짜·같은 알고리즘이면서, 후보가 **지금도** 자격이 있고
+  /// 공개 프로필과 내 추천 조건이 그대로일 때만 재사용한다. 조회가 실패했다고
+  /// 이전 결과를 계속 보여주지 않는다.
+  ///
+  /// [eligibleCandidateFingerprints]는 ID → 최신 공개 프로필 지문이다.
+  /// ID Set만 받으면 프로필 변경을 감지할 수 없어 map으로 받는다.
   bool isReusableFor({
     required String dateKey,
-    required Set<String> eligibleCandidateIds,
+    required Map<String, String> eligibleCandidateFingerprints,
+    required Set<String> blockedUids,
+    required String viewerEligibilityFingerprint,
   }) {
     if (this.dateKey != dateKey) return false;
     if (algorithmVersion != kTodayMatchAlgorithmVersion) return false;
-    if (!eligibleCandidateIds.contains(candidateId)) return false;
+    // 차단된 후보는 캐시에 있어도 절대 재사용하지 않는다.
+    if (blockedUids.contains(candidateId)) return false;
+    if (this.viewerEligibilityFingerprint != viewerEligibilityFingerprint) {
+      return false;
+    }
+    final latest = eligibleCandidateFingerprints[candidateId];
+    if (latest == null) return false;
+    if (latest != candidateProfileFingerprint) return false;
     return reasonFingerprint == buildReasonFingerprint(candidateId, reason);
   }
 }
@@ -116,6 +157,129 @@ int dailyRankFor({
 /// 문구가 이 후보에게서 나왔음을 나타내는 지문.
 String buildReasonFingerprint(String candidateId, String reason) {
   return '${_fnv1a('$candidateId|$reason')}';
+}
+
+/// 후보 공개 프로필의 지문.
+///
+/// 서버가 관리하는 `profileUpdatedAt`/`schemaVersion`을 먼저 쓰되, 그 값이
+/// 모든 편집에서 갱신된다는 보장이 없으므로 **카드와 문구가 실제로 쓰는 공개
+/// 필드**를 함께 정규화해 넣는다.
+///
+/// 공개 프로필 필드만 쓴다 — 생년월일·출생시간·정확한 좌표 같은 비공개
+/// 데이터는 들어가지 않는다(`age`는 이미 공개 필드다).
+/// 이 값은 캐시 무효화 전용이며 UI·로그·Firestore에 노출하지 않는다.
+String buildCandidateProfileFingerprint(PublicProfile profile) {
+  final parts = <String>[
+    profile.uid,
+    profile.displayName,
+    '${profile.age}',
+    profile.bio,
+    // 사진은 순서까지 의미가 있다(대표 사진 = 첫 장).
+    profile.photoUrls.join(','),
+    (profile.interests.toList()..sort()).join(','),
+    profile.relationshipGoal ?? '',
+    '${profile.schemaVersion}',
+    profile.profileUpdatedAt?.toUtc().toIso8601String() ?? '',
+  ];
+  return '${_fnv1a(parts.join(''))}';
+}
+
+/// 보는 사람의 추천 조건 지문.
+///
+/// 좌표 원문은 넣지 않고 "거리 필터를 쓸 수 있는 상태인지"만 bool로 넣는다.
+/// 이 값도 캐시 무효화 전용이며 어디에도 출력하지 않는다.
+String buildViewerEligibilityFingerprint({
+  required String viewerUid,
+  required int ageMin,
+  required int ageMax,
+  required double? maxDistanceKm,
+  required String gender,
+  required String? relationshipGoal,
+  required bool hasLocation,
+}) {
+  final parts = <String>[
+    viewerUid,
+    '$ageMin',
+    '$ageMax',
+    maxDistanceKm?.toStringAsFixed(1) ?? '',
+    gender,
+    relationshipGoal ?? '',
+    hasLocation ? 'loc' : 'noloc',
+  ];
+  return '${_fnv1a(parts.join(''))}';
+}
+
+/// 후보 목록 → ID별 최신 공개 프로필 지문.
+Map<String, String> candidateFingerprints(
+  Iterable<TodayMatchCandidate> candidates,
+) {
+  final result = <String, String>{};
+  for (final candidate in candidates) {
+    result[candidate.id] = buildCandidateProfileFingerprint(candidate.profile);
+  }
+  return result;
+}
+
+/// 오늘의 인연 후보를 모은다. **차단 확인 실패 시 fail-closed.**
+///
+/// 순서가 계약이다:
+/// 1. 차단 관계를 **먼저** 확인한다. 실패하면 [BlockLookupFailure]를 던지고
+///    추천을 중단한다 — 빈 집합으로 대체해 계속 진행하지 않는다.
+/// 2. match 후보를 모으고 차단 집합으로 거른다(매치 스트림에 남아 있어도 제외).
+/// 3. discovery 조회에 차단 집합을 넘기고, 결과도 방어적으로 다시 거른다.
+///
+/// match 조회 실패는 치명적이지 않다(차단 집합은 이미 확보했으므로 discovery
+/// 만으로 진행 가능). discovery 조회 실패는 [CandidateLookupFailure]다 —
+/// "후보 0명"으로 오해하면 안 되기 때문이다.
+Future<List<TodayMatchCandidate>> collectTodayMatchCandidates({
+  required String viewerUid,
+  required Future<Set<String>> Function(String viewerUid) loadBlockedUids,
+  required Future<List<TodayMatchCandidate>> Function(Set<String> blockedUids)
+  loadMatchCandidates,
+  required Future<List<PublicProfile>> Function(Set<String> blockedUids)
+  loadDiscoveryProfiles,
+  void Function(String event)? onLog,
+}) async {
+  Set<String> blockedUids;
+  try {
+    blockedUids = await loadBlockedUids(viewerUid);
+  } catch (_) {
+    onLog?.call('block_relationship_lookup_failed');
+    throw const BlockLookupFailure();
+  }
+
+  final candidates = <TodayMatchCandidate>[];
+
+  try {
+    final matchCandidates = await loadMatchCandidates(blockedUids);
+    candidates.addAll(
+      matchCandidates.where((c) => !blockedUids.contains(c.id)),
+    );
+  } catch (_) {
+    // 후보 0명과 구분되도록 남긴다. discovery만으로 계속 진행한다.
+    onLog?.call('match_list_failed');
+  }
+
+  List<PublicProfile> discoveryProfiles;
+  try {
+    discoveryProfiles = await loadDiscoveryProfiles(blockedUids);
+  } catch (_) {
+    onLog?.call('discovery_lookup_failed');
+    throw const CandidateLookupFailure();
+  }
+
+  candidates.addAll(
+    discoveryProfiles
+        .where((profile) => !blockedUids.contains(profile.uid))
+        .map(
+          (profile) => TodayMatchCandidate(
+            profile: profile,
+            source: TodayMatchSource.discovery,
+          ),
+        ),
+  );
+
+  return candidates;
 }
 
 /// 후보 목록에서 오늘의 한 명을 고른다.
@@ -190,6 +354,7 @@ String buildDeterministicReason(TodayMatchCandidate candidate) {
 TodayMatchResult buildTodayMatchResult({
   required TodayMatchCandidate candidate,
   required String dateKey,
+  required String viewerEligibilityFingerprint,
 }) {
   final reason = (candidate.candidateReason?.trim().isNotEmpty ?? false)
       ? candidate.candidateReason!.trim()
@@ -201,5 +366,9 @@ TodayMatchResult buildTodayMatchResult({
     dateKey: dateKey,
     source: candidate.source,
     reasonFingerprint: buildReasonFingerprint(candidate.id, reason),
+    candidateProfileFingerprint: buildCandidateProfileFingerprint(
+      candidate.profile,
+    ),
+    viewerEligibilityFingerprint: viewerEligibilityFingerprint,
   );
 }

@@ -178,10 +178,12 @@ void main() {
       final a = buildTodayMatchResult(
         candidate: discovery('a', interests: const ['등산']),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       final b = buildTodayMatchResult(
         candidate: discovery('b', interests: const ['영화']),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       expect(a.candidateId, 'a');
       expect(a.profile.uid, 'a');
@@ -194,6 +196,7 @@ void main() {
       final result = buildTodayMatchResult(
         candidate: discovery('a', interests: const ['등산', '커피']),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       // 후보 자신의 관심사가 들어간다. 다른 후보/데모 문구가 아니다.
       // 관심사는 정렬해 첫 항목을 쓰므로 순서가 흔들려도 문구가 안정적이다.
@@ -202,6 +205,7 @@ void main() {
       final shuffled = buildTodayMatchResult(
         candidate: discovery('a', interests: const ['커피', '등산']),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       expect(shuffled.reason, result.reason);
     });
@@ -210,6 +214,7 @@ void main() {
       final result = buildTodayMatchResult(
         candidate: matched('a', reason: '두 사람은 대화 속도가 비슷해요.'),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       expect(result.reason, '두 사람은 대화 속도가 비슷해요.');
     });
@@ -218,6 +223,7 @@ void main() {
       final result = buildTodayMatchResult(
         candidate: discovery('a'),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       // 점수 소스가 앱에 없으므로 숫자 자체를 두지 않는다.
       expect(result.toString(), isNot(contains('score')));
@@ -231,6 +237,7 @@ void main() {
       final result = buildTodayMatchResult(
         candidate: discovery('uid-secret-123', interests: const ['등산']),
         dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
       );
       expect(result.reason.contains('uid-secret-123'), isFalse);
       expect(RegExp(r'\d{4}-\d{2}-\d{2}').hasMatch(result.reason), isFalse);
@@ -239,54 +246,256 @@ void main() {
     });
   });
 
-  group('캐시 재사용 조건', () {
-    TodayMatchResult resultFor(String uid) => buildTodayMatchResult(
-      candidate: discovery(uid, interests: const ['등산']),
-      dateKey: '2026-07-22',
+  group('차단 안전성 (fail-closed)', () {
+    Future<List<TodayMatchCandidate>> collect({
+      required Future<Set<String>> Function(String) loadBlocked,
+      Future<List<TodayMatchCandidate>> Function(Set<String>)? loadMatches,
+      Future<List<PublicProfile>> Function(Set<String>)? loadDiscovery,
+      List<String>? log,
+    }) {
+      return collectTodayMatchCandidates(
+        viewerUid: 'me',
+        loadBlockedUids: loadBlocked,
+        loadMatchCandidates: loadMatches ?? (_) async => const [],
+        loadDiscoveryProfiles: loadDiscovery ?? (_) async => const [],
+        onLog: log?.add,
+      );
+    }
+
+    test(
+      '1/2. 차단 조회 실패면 BlockLookupFailure를 던지고 discovery를 호출하지 않는다',
+      () async {
+        var discoveryCalls = 0;
+        final log = <String>[];
+        await expectLater(
+          collect(
+            loadBlocked: (_) async => throw StateError('permission-denied'),
+            loadDiscovery: (_) async {
+              discoveryCalls += 1;
+              return const [];
+            },
+            log: log,
+          ),
+          throwsA(isA<BlockLookupFailure>()),
+        );
+        expect(discoveryCalls, 0, reason: '차단 확인 없이 추천을 계속하면 안 된다');
+        expect(log, contains('block_relationship_lookup_failed'));
+      },
     );
 
-    test('같은 날짜 + 후보가 아직 자격 있으면 재사용한다', () {
-      final result = resultFor('a');
-      expect(
-        result.isReusableFor(
-          dateKey: '2026-07-22',
-          eligibleCandidateIds: {'a', 'b'},
-        ),
-        isTrue,
+    test('3. 차단한 discovery 후보가 제외된다', () async {
+      final candidates = await collect(
+        loadBlocked: (_) async => {'blocked'},
+        loadDiscovery: (_) async => [profile('blocked'), profile('ok')],
       );
+      expect(candidates.map((c) => c.id), ['ok']);
+    });
+
+    test('4. 차단한 match 후보가 제외된다 (매치 스트림에 남아 있어도)', () async {
+      final candidates = await collect(
+        loadBlocked: (_) async => {'blocked'},
+        loadMatches: (_) async => [matched('blocked'), matched('ok')],
+      );
+      expect(candidates.map((c) => c.id), ['ok']);
+    });
+
+    test('5. 나를 차단한 상대도 같은 집합으로 제외된다', () async {
+      // getBlockedRelationshipUids는 양방향(내가 차단 + 나를 차단)을 함께 준다.
+      final candidates = await collect(
+        loadBlocked: (_) async => {'blocked-me'},
+        loadMatches: (_) async => [matched('blocked-me')],
+        loadDiscovery: (_) async => [profile('blocked-me'), profile('ok')],
+      );
+      expect(candidates.map((c) => c.id), ['ok']);
+    });
+
+    test('8. 차단 조회 성공 + match 실패면 discovery로 계속 진행한다', () async {
+      final log = <String>[];
+      final candidates = await collect(
+        loadBlocked: (_) async => const {},
+        loadMatches: (_) async => throw StateError('stream failed'),
+        loadDiscovery: (_) async => [profile('ok')],
+        log: log,
+      );
+      expect(candidates.map((c) => c.id), ['ok']);
+      expect(log, contains('match_list_failed'));
+    });
+
+    test('9. discovery 실패는 CandidateLookupFailure다 (후보 0명이 아니다)', () async {
+      final log = <String>[];
+      await expectLater(
+        collect(
+          loadBlocked: (_) async => const {},
+          loadDiscovery: (_) async => throw StateError('offline'),
+          log: log,
+        ),
+        throwsA(isA<CandidateLookupFailure>()),
+      );
+      expect(log, contains('discovery_lookup_failed'));
+    });
+
+    test('차단 집합이 discovery 조회에 그대로 전달된다', () async {
+      Set<String>? received;
+      await collect(
+        loadBlocked: (_) async => {'b1', 'b2'},
+        loadDiscovery: (blocked) async {
+          received = blocked;
+          return const [];
+        },
+      );
+      expect(received, {'b1', 'b2'});
+    });
+  });
+
+  group('캐시 재사용 조건', () {
+    const viewerFp = 'viewer-fp';
+
+    TodayMatchResult resultFor(TodayMatchCandidate candidate) =>
+        buildTodayMatchResult(
+          candidate: candidate,
+          dateKey: '2026-07-22',
+          viewerEligibilityFingerprint: viewerFp,
+        );
+
+    bool reusable(
+      TodayMatchResult result, {
+      String dateKey = '2026-07-22',
+      Map<String, String>? fingerprints,
+      Set<String> blocked = const {},
+      String viewer = viewerFp,
+    }) => result.isReusableFor(
+      dateKey: dateKey,
+      eligibleCandidateFingerprints:
+          fingerprints ??
+          {result.candidateId: result.candidateProfileFingerprint},
+      blockedUids: blocked,
+      viewerEligibilityFingerprint: viewer,
+    );
+
+    test('14. 공개 필드가 그대로면 재사용한다', () {
+      final result = resultFor(discovery('a', interests: const ['등산']));
+      expect(reusable(result), isTrue);
     });
 
     test('20. 날짜가 지나면 재사용하지 않는다', () {
-      final result = resultFor('a');
+      final result = resultFor(discovery('a'));
+      expect(reusable(result, dateKey: '2026-07-23'), isFalse);
+    });
+
+    test('6/18. 후보가 차단되면 재사용하지 않는다', () {
+      final result = resultFor(discovery('a'));
+      expect(reusable(result, blocked: {'a'}), isFalse);
+    });
+
+    test('후보가 eligible 목록에서 사라지면 재사용하지 않는다', () {
+      final result = resultFor(discovery('a'));
+      expect(reusable(result, fingerprints: const {}), isFalse);
+    });
+
+    test('10. 사진이 바뀌면 무효화된다', () {
+      final before = PublicProfile(uid: 'a', photoUrls: const ['p1.jpg']);
+      final after = PublicProfile(uid: 'a', photoUrls: const ['p2.jpg']);
+      final result = resultFor(
+        TodayMatchCandidate(
+          profile: before,
+          source: TodayMatchSource.discovery,
+        ),
+      );
       expect(
-        result.isReusableFor(
-          dateKey: '2026-07-23',
-          eligibleCandidateIds: {'a'},
+        reusable(
+          result,
+          fingerprints: {'a': buildCandidateProfileFingerprint(after)},
         ),
         isFalse,
       );
     });
 
-    test('18. 후보가 자격을 잃으면(차단·비활성) 재사용하지 않는다', () {
-      final result = resultFor('a');
+    test('사진 순서만 바뀌어도(대표 사진 교체) 무효화된다', () {
+      final before = PublicProfile(
+        uid: 'a',
+        photoUrls: const ['p1.jpg', 'p2.jpg'],
+      );
+      final after = PublicProfile(
+        uid: 'a',
+        photoUrls: const ['p2.jpg', 'p1.jpg'],
+      );
       expect(
-        result.isReusableFor(
-          dateKey: '2026-07-22',
-          eligibleCandidateIds: {'b', 'c'},
+        buildCandidateProfileFingerprint(before),
+        isNot(buildCandidateProfileFingerprint(after)),
+      );
+    });
+
+    test('11. bio가 바뀌면 무효화된다', () {
+      final before = PublicProfile(uid: 'a', bio: '안녕하세요');
+      final after = PublicProfile(uid: 'a', bio: '반갑습니다');
+      final result = resultFor(
+        TodayMatchCandidate(
+          profile: before,
+          source: TodayMatchSource.discovery,
+        ),
+      );
+      expect(
+        reusable(
+          result,
+          fingerprints: {'a': buildCandidateProfileFingerprint(after)},
         ),
         isFalse,
       );
     });
 
-    test('후보가 하나도 없으면 재사용하지 않는다', () {
-      final result = resultFor('a');
+    test('12. interests가 바뀌면 무효화된다', () {
+      final result = resultFor(discovery('a', interests: const ['등산']));
       expect(
-        result.isReusableFor(
-          dateKey: '2026-07-22',
-          eligibleCandidateIds: const {},
+        reusable(
+          result,
+          fingerprints: {
+            'a': buildCandidateProfileFingerprint(
+              profile('a', interests: const ['등산', '영화']),
+            ),
+          },
         ),
         isFalse,
       );
+    });
+
+    test('13. relationshipGoal이 바뀌면 무효화된다', () {
+      final result = resultFor(
+        TodayMatchCandidate(
+          profile: profile('a', relationshipGoal: 'serious'),
+          source: TodayMatchSource.discovery,
+        ),
+      );
+      expect(
+        reusable(
+          result,
+          fingerprints: {
+            'a': buildCandidateProfileFingerprint(
+              profile('a', relationshipGoal: 'casual'),
+            ),
+          },
+        ),
+        isFalse,
+      );
+    });
+
+    test('profileUpdatedAt이 바뀌면 무효화된다', () {
+      final before = PublicProfile(
+        uid: 'a',
+        profileUpdatedAt: DateTime.utc(2026, 7, 1),
+      );
+      final after = PublicProfile(
+        uid: 'a',
+        profileUpdatedAt: DateTime.utc(2026, 7, 22),
+      );
+      expect(
+        buildCandidateProfileFingerprint(before),
+        isNot(buildCandidateProfileFingerprint(after)),
+      );
+    });
+
+    test('17. discoveryFilter가 바뀌면 무효화된다', () {
+      final result = resultFor(discovery('a'));
+      expect(reusable(result, viewer: 'different-filter-fp'), isFalse);
     });
 
     test('15. algorithm version이 바뀌면 재사용하지 않는다', () {
@@ -297,12 +506,13 @@ void main() {
         dateKey: '2026-07-22',
         source: TodayMatchSource.discovery,
         reasonFingerprint: buildReasonFingerprint('a', '문구'),
+        candidateProfileFingerprint: buildCandidateProfileFingerprint(
+          profile('a'),
+        ),
+        viewerEligibilityFingerprint: viewerFp,
         algorithmVersion: kTodayMatchAlgorithmVersion - 1,
       );
-      expect(
-        stale.isReusableFor(dateKey: '2026-07-22', eligibleCandidateIds: {'a'}),
-        isFalse,
-      );
+      expect(reusable(stale), isFalse);
     });
 
     test('16/21. 문구가 다른 후보 것으로 바뀌면 지문이 어긋나 재사용하지 않는다', () {
@@ -311,17 +521,138 @@ void main() {
         candidateId: 'a',
         reason: 'B 후보의 문구',
         dateKey: '2026-07-22',
-        // 지문은 여전히 원래 문구 기준 → 불일치
         reasonFingerprint: buildReasonFingerprint('a', 'A 후보의 문구'),
+        candidateProfileFingerprint: buildCandidateProfileFingerprint(
+          profile('a'),
+        ),
+        viewerEligibilityFingerprint: viewerFp,
         source: TodayMatchSource.discovery,
       );
+      expect(reusable(tampered), isFalse);
+    });
+  });
+
+  group('viewer eligibility fingerprint', () {
+    String fp({
+      String uid = 'me',
+      int ageMin = 20,
+      int ageMax = 40,
+      double? maxDistanceKm = 30,
+      String gender = 'all',
+      String? relationshipGoal,
+      bool hasLocation = true,
+    }) => buildViewerEligibilityFingerprint(
+      viewerUid: uid,
+      ageMin: ageMin,
+      ageMax: ageMax,
+      maxDistanceKm: maxDistanceKm,
+      gender: gender,
+      relationshipGoal: relationshipGoal,
+      hasLocation: hasLocation,
+    );
+
+    test('같은 조건이면 같은 값이다', () {
+      expect(fp(), fp());
+    });
+
+    test('17. 나이·거리·성별·목표·위치사용이 바뀌면 값이 달라진다', () {
+      expect(fp(ageMin: 25), isNot(fp()));
+      expect(fp(ageMax: 45), isNot(fp()));
+      expect(fp(maxDistanceKm: 50), isNot(fp()));
+      expect(fp(maxDistanceKm: null), isNot(fp()));
+      expect(fp(gender: 'female'), isNot(fp()));
+      expect(fp(relationshipGoal: 'serious'), isNot(fp()));
+      expect(fp(hasLocation: false), isNot(fp()));
+    });
+
+    test('19. 계정이 다르면 값이 달라진다 (이전 캐시 재사용 불가)', () {
+      expect(fp(uid: 'other'), isNot(fp()));
+    });
+  });
+
+  group('지문 비노출', () {
+    test('16. 지문이 UI 문구에 들어가지 않는다', () {
+      final result = buildTodayMatchResult(
+        candidate: discovery('a', interests: const ['등산']),
+        dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'viewer-fp',
+      );
       expect(
-        tampered.isReusableFor(
-          dateKey: '2026-07-22',
-          eligibleCandidateIds: {'a'},
+        result.reason.contains(result.candidateProfileFingerprint),
+        isFalse,
+      );
+      expect(
+        result.reason.contains(result.viewerEligibilityFingerprint),
+        isFalse,
+      );
+      expect(result.reason.contains(result.reasonFingerprint), isFalse);
+    });
+  });
+
+  group('날짜 계약 (4장 정정)', () {
+    test('20/22. 같은 dateKey면 입력 순서가 달라도 결과가 같다', () {
+      final candidates = List.generate(5, (i) => discovery('u$i'));
+      final a = selectTodayCandidate(
+        viewerUid: 'me',
+        dateKey: '2026-07-22',
+        candidates: candidates,
+      )!;
+      final b = selectTodayCandidate(
+        viewerUid: 'me',
+        dateKey: '2026-07-22',
+        candidates: candidates.reversed.toList(),
+      )!;
+      expect(a.id, b.id);
+    });
+
+    test('21. 다음 날 같은 후보가 나와도 계약 위반이 아니다 (재계산 여부만 본다)', () {
+      final candidates = [discovery('a'), discovery('b')];
+      final today = selectTodayCandidate(
+        viewerUid: 'me',
+        dateKey: '2026-07-22',
+        candidates: candidates,
+      )!;
+      final tomorrow = selectTodayCandidate(
+        viewerUid: 'me',
+        dateKey: '2026-07-23',
+        candidates: candidates,
+      )!;
+      // 같을 수도 다를 수도 있다. 중요한 건 새 날짜로 계산됐다는 것이다.
+      expect(tomorrow.id, isIn(['a', 'b']));
+      // 날짜가 바뀌면 캐시는 반드시 무효화된다.
+      final result = buildTodayMatchResult(
+        candidate: today,
+        dateKey: '2026-07-22',
+        viewerEligibilityFingerprint: 'v',
+      );
+      expect(
+        result.isReusableFor(
+          dateKey: '2026-07-23',
+          eligibleCandidateFingerprints: {
+            result.candidateId: result.candidateProfileFingerprint,
+          },
+          blockedUids: const {},
+          viewerEligibilityFingerprint: 'v',
         ),
         isFalse,
       );
+    });
+
+    test('후보 집합이 달라지면 새 집합으로 재계산된다', () {
+      final small = [discovery('a')];
+      final large = [discovery('a'), discovery('b'), discovery('c')];
+      final fromSmall = selectTodayCandidate(
+        viewerUid: 'me',
+        dateKey: '2026-07-22',
+        candidates: small,
+      )!;
+      final fromLarge = selectTodayCandidate(
+        viewerUid: 'me',
+        dateKey: '2026-07-22',
+        candidates: large,
+      )!;
+      expect(fromSmall.id, 'a');
+      expect(fromLarge.id, isIn(['a', 'b', 'c']));
     });
   });
 }

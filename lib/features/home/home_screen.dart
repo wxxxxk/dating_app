@@ -171,23 +171,65 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _dailyPickState = TodayMatchState.loading);
     }
     final dateKey = kstDateKey(DateTime.now());
-    try {
-      final candidates = await _collectCandidates(myProfile);
-      final eligibleIds = candidates.map((c) => c.id).toSet();
+    final filter = myProfile.discoveryFilter;
+    final viewerFingerprint = buildViewerEligibilityFingerprint(
+      viewerUid: myProfile.uid,
+      ageMin: filter.ageMin,
+      ageMax: filter.ageMax,
+      maxDistanceKm: filter.maxDistanceKm,
+      gender: filter.gender,
+      relationshipGoal: filter.relationshipGoal,
+      hasLocation: myProfile.location != null,
+    );
 
-      // 캐시 재사용은 "같은 사용자 + 같은 날짜 + 후보가 아직 자격 있음"을
-      // 모두 다시 확인했을 때만 허용한다.
+    try {
+      var blockedUids = const <String>{};
+      final candidates = await collectTodayMatchCandidates(
+        viewerUid: myProfile.uid,
+        loadBlockedUids: (uid) async {
+          final result = await widget.safetyService
+              .getBlockedRelationshipUids(uid)
+              .timeout(const Duration(seconds: 5));
+          blockedUids = result;
+          return result;
+        },
+        loadMatchCandidates: (_) async {
+          final matches = await widget.matchesService
+              .watchMatches(currentUid: myProfile.uid)
+              .first
+              .timeout(const Duration(seconds: 5));
+          return _matchCandidates(matches);
+        },
+        loadDiscoveryProfiles: (blocked) => widget.discoveryService
+            .getDiscoveryProfiles(
+              currentUid: myProfile.uid,
+              currentLocation: myProfile.location,
+              filter: filter,
+              excludedUids: blocked,
+            )
+            .timeout(const Duration(seconds: 5)),
+        onLog: (event) {
+          if (kDebugMode) debugPrint('[HomeDailyPick] $event');
+        },
+      );
+
+      final fingerprints = candidateFingerprints(candidates);
+
+      // 캐시 재사용은 날짜·차단·후보 프로필·내 추천 조건을 모두 다시 확인한
+      // 뒤에만 허용한다.
       final cached = _cachedPick;
       if (cached != null &&
           _cachedPickUid == myProfile.uid &&
           cached.isReusableFor(
             dateKey: dateKey,
-            eligibleCandidateIds: eligibleIds,
+            eligibleCandidateFingerprints: fingerprints,
+            blockedUids: blockedUids,
+            viewerEligibilityFingerprint: viewerFingerprint,
           )) {
         _logDailyPick(
           dateKey: dateKey,
           source: 'cache',
-          eligibleCount: eligibleIds.length,
+          eligibleCount: fingerprints.length,
           state: 'ready',
         );
         if (!mounted) return;
@@ -222,16 +264,19 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      // 후보가 그대로여도 최신 PublicProfile로 result를 다시 만든다 —
+      // 사진·소개가 바뀌었으면 카드와 문구가 함께 갱신되어야 한다.
       final result = buildTodayMatchResult(
         candidate: selected,
         dateKey: dateKey,
+        viewerEligibilityFingerprint: viewerFingerprint,
       );
       _cachedPick = result;
       _cachedPickUid = myProfile.uid;
       _logDailyPick(
         dateKey: dateKey,
         source: 'fresh',
-        eligibleCount: eligibleIds.length,
+        eligibleCount: fingerprints.length,
         state: 'ready',
       );
       if (!mounted) return;
@@ -240,8 +285,20 @@ class _HomeScreenState extends State<HomeScreen> {
         _dailyPickState = TodayMatchState.ready;
       });
     } catch (e) {
-      if (kDebugMode) debugPrint('[HomeDailyPick] today_match_fetch_failed');
-      // 오류를 "후보 없음"으로 접지 않고, 이전 결과도 계속 보여주지 않는다.
+      // 차단 확인 실패·후보 조회 실패 모두 error다. 빈 후보(empty)로 접지
+      // 않고, 이전 카드도 남기지 않는다(차단된 상대가 남을 수 있다).
+      if (kDebugMode) {
+        debugPrint(
+          '[HomeDailyPick] today_match_failed '
+          'reason=${e is BlockLookupFailure
+              ? 'block_lookup'
+              : e is CandidateLookupFailure
+              ? 'candidate_lookup'
+              : 'unknown'}',
+        );
+      }
+      _cachedPick = null;
+      _cachedPickUid = null;
       if (!mounted) return;
       setState(() {
         _dailyPick = null;
@@ -250,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 민감정보 없는 진단 로그. UID·이름·사진 URL·후보 ID 원문을 남기지 않는다.
+  /// 민감정보 없는 진단 로그. UID·이름·사진 URL·후보 ID·지문을 남기지 않는다.
   void _logDailyPick({
     required String dateKey,
     required String source,
@@ -263,54 +320,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'eligibleCandidateCount=$eligibleCount state=$state '
       'algorithmVersion=$kTodayMatchAlgorithmVersion',
     );
-  }
-
-  /// 자격 있는 후보를 모은다. match(이미 이어진 인연) + discovery(새 후보).
-  ///
-  /// 안전 필터(차단·선호·나이·거리·이미 pass)는 DiscoveryService가 이미
-  /// 적용한다. 여기서 정책을 새로 만들지 않는다.
-  Future<List<TodayMatchCandidate>> _collectCandidates(
-    UserProfile myProfile,
-  ) async {
-    final candidates = <TodayMatchCandidate>[];
-
-    try {
-      final matches = await widget.matchesService
-          .watchMatches(currentUid: myProfile.uid)
-          .first
-          .timeout(const Duration(seconds: 5));
-      candidates.addAll(await _matchCandidates(matches));
-    } catch (e) {
-      if (kDebugMode) debugPrint('[HomeDailyPick] match_list_failed');
-    }
-
-    Set<String> blockedUids = const {};
-    try {
-      blockedUids = await widget.safetyService.getBlockedRelationshipUids(
-        myProfile.uid,
-      );
-    } catch (e) {
-      if (kDebugMode) debugPrint('[HomeDailyPick] block_list_failed');
-    }
-
-    final discoveryProfiles = await widget.discoveryService
-        .getDiscoveryProfiles(
-          currentUid: myProfile.uid,
-          currentLocation: myProfile.location,
-          filter: myProfile.discoveryFilter,
-          excludedUids: blockedUids,
-        )
-        .timeout(const Duration(seconds: 5));
-
-    candidates.addAll(
-      discoveryProfiles.map(
-        (profile) => TodayMatchCandidate(
-          profile: profile,
-          source: TodayMatchSource.discovery,
-        ),
-      ),
-    );
-    return candidates;
   }
 
   /// 매칭된 상대는 그 매칭의 궁합 캐시 문구를 자기 문구로 들고 온다.
