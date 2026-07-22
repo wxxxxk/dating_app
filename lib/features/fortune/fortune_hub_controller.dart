@@ -76,8 +76,22 @@ class FortuneHubController extends ChangeNotifier {
   String? _loadedDailyDateKey;
   String? _loadedHistoryDateKey;
 
+  /// 이 controller가 **지금 담당하는** KST 날짜.
+  ///
+  /// 완료된 결과(`_loadedXDateKey`)가 아니라 요청 context다. 초기 요청이 아직
+  /// 끝나지 않아 loaded key가 둘 다 null인 상태에서 자정을 넘기면, loaded key만
+  /// 보는 판정으로는 날짜 변경을 감지하지 못해 controller가 loading에서 멈춘다.
+  String? _contextDateKey;
+
   int _dailyGeneration = 0;
   int _historyGeneration = 0;
+
+  /// 진행 중인 요청의 identity. 세대가 다른 옛 요청의 정리 코드가 새 요청의
+  /// in-flight 상태를 꺼버리지 않도록, bool이 아니라 generation으로 들고 있다.
+  int? _activeDailyGeneration;
+  String? _activeDailyDateKey;
+  int? _activeHistoryGeneration;
+  String? _activeHistoryDateKey;
 
   bool _disposed = false;
   bool _initialLoadStarted = false;
@@ -95,8 +109,15 @@ class FortuneHubController extends ChangeNotifier {
   String? get activeUid => _activeUid;
   String? get loadedDailyDateKey => _loadedDailyDateKey;
   String? get loadedHistoryDateKey => _loadedHistoryDateKey;
+  String? get contextDateKey => _contextDateKey;
   int get dailyGeneration => _dailyGeneration;
   int get historyGeneration => _historyGeneration;
+
+  /// 테스트·진단용. 진행 중인 요청이 있는지와 그 요청이 어느 날짜 것인지.
+  bool get isDailyInFlight => _dailyInFlight;
+  bool get isHistoryInFlight => _historyInFlight;
+  String? get inFlightDailyDateKey => _activeDailyDateKey;
+  String? get inFlightHistoryDateKey => _activeHistoryDateKey;
 
   /// 지금 이 순간의 KST 달력 날짜 key. 기기 시간대와 무관하다.
   String get currentDateKey => KstCalendarDate.fromInstant(_now()).dateKey;
@@ -118,10 +139,14 @@ class FortuneHubController extends ChangeNotifier {
     if (uid == null) return;
 
     final dateKey = currentDateKey;
-    if (_loadedDailyDateKey != dateKey && !_dailyInFlight) {
+    _contextDateKey = dateKey;
+
+    // "이미 읽었다"와 "이 날짜로 요청 중이다"만 재요청을 막는다. 다른 날짜의
+    // 요청이 진행 중인 것은 재요청을 막을 이유가 되지 않는다.
+    if (_loadedDailyDateKey != dateKey && _activeDailyDateKey != dateKey) {
       unawaited(_loadDaily(uid: uid, dateKey: dateKey));
     }
-    if (_loadedHistoryDateKey != dateKey && !_historyInFlight) {
+    if (_loadedHistoryDateKey != dateKey && _activeHistoryDateKey != dateKey) {
       unawaited(_loadHistory(uid: uid, dateKey: dateKey));
     }
   }
@@ -145,12 +170,10 @@ class FortuneHubController extends ChangeNotifier {
     _log('account_context_changed signed_in=${uid != null}');
     // 진행 중인 이전 계정 요청을 먼저 무효화한다. 그래야 A의 응답이
     // B의 화면에 한 프레임도 나타나지 않는다.
-    _dailyGeneration += 1;
-    _historyGeneration += 1;
-    _dailyInFlight = false;
-    _historyInFlight = false;
+    _invalidateInFlightRequests();
 
     _activeUid = uid;
+    _contextDateKey = uid == null ? null : currentDateKey;
     _profile = null;
     _profileUid = null;
     _zodiac = null;
@@ -169,13 +192,27 @@ class FortuneHubController extends ChangeNotifier {
     await refreshForCurrentContext();
   }
 
-  /// KST 날짜가 넘어갔다. 어제 결과를 즉시 버린다.
-  void invalidateForDateChange() {
-    if (_disposed) return;
+  /// 진행 중인 요청을 전부 무효화한다.
+  ///
+  /// 네트워크 요청을 물리적으로 취소하지는 않는다. 세대를 올리고 in-flight
+  /// identity를 비워, 늦게 도착한 응답이 새 요청의 상태를 건드리지 못하게 한다.
+  void _invalidateInFlightRequests() {
     _dailyGeneration += 1;
     _historyGeneration += 1;
-    _dailyInFlight = false;
-    _historyInFlight = false;
+    _activeDailyGeneration = null;
+    _activeDailyDateKey = null;
+    _activeHistoryGeneration = null;
+    _activeHistoryDateKey = null;
+  }
+
+  /// KST 날짜가 넘어갔다. 어제 결과를 즉시 버린다.
+  ///
+  /// 어제 요청이 아직 끝나지 않았어도 기다리지 않는다 — 그대로 두면 어제
+  /// 요청의 in-flight 상태가 오늘 요청 시작을 막아 loading에서 멈춘다.
+  void invalidateForDateChange() {
+    if (_disposed) return;
+    _invalidateInFlightRequests();
+    _contextDateKey = _activeUid == null ? null : currentDateKey;
     _dailyFortune = null;
     _history = const [];
     _loadedDailyDateKey = null;
@@ -216,12 +253,13 @@ class FortuneHubController extends ChangeNotifier {
     await retryDaily();
   }
 
-  bool _dailyInFlight = false;
-  bool _historyInFlight = false;
+  bool get _dailyInFlight => _activeDailyGeneration != null;
+  bool get _historyInFlight => _activeHistoryGeneration != null;
 
   Future<void> _loadDaily({required String uid, required String dateKey}) async {
     final generation = ++_dailyGeneration;
-    _dailyInFlight = true;
+    _activeDailyGeneration = generation;
+    _activeDailyDateKey = dateKey;
     _dailyFortune = null;
     _dailyStatus = DailyFortuneStatus.loading;
     notifyListeners();
@@ -282,6 +320,14 @@ class FortuneHubController extends ChangeNotifier {
       if (!_isDailyCurrent(generation, uid, dateKey)) return;
       _log('error_category=unknown area=daily');
       _finishDaily(DailyFortuneStatus.error, generation);
+    } finally {
+      // stale 경로로 return했더라도 반드시 지난다. 단, 이 요청이 여전히
+      // 현재 요청일 때만 비운다 — 옛 요청이 새 요청의 in-flight를 끄면
+      // 그 자리에서 중복 요청이 시작된다.
+      if (_activeDailyGeneration == generation) {
+        _activeDailyGeneration = null;
+        _activeDailyDateKey = null;
+      }
     }
   }
 
@@ -290,7 +336,8 @@ class FortuneHubController extends ChangeNotifier {
     required String dateKey,
   }) async {
     final generation = ++_historyGeneration;
-    _historyInFlight = true;
+    _activeHistoryGeneration = generation;
+    _activeHistoryDateKey = dateKey;
     _history = const [];
     _historyStatus = FortuneHistoryStatus.loading;
     notifyListeners();
@@ -307,22 +354,33 @@ class FortuneHubController extends ChangeNotifier {
       if (!_isHistoryCurrent(generation, uid, dateKey)) return;
       _history = List.unmodifiable(entries);
       _loadedHistoryDateKey = dateKey;
-      _historyInFlight = false;
       _historyStatus = FortuneHistoryStatus.ready;
       _log(
         'request_succeeded area=history generation=$generation '
         'day_count=${entries.length}',
       );
       notifyListeners();
+      // day 0 보정은 이 요청이 in-flight에서 빠진 뒤에 판단해야 한다.
+      // 그래야 보정 재조회가 자기 자신에게 막히지 않는다.
+      _releaseHistoryRequest(generation);
       _maybeSyncHistoryDayZero();
     } on FortuneFailure catch (failure) {
       if (!_isHistoryCurrent(generation, uid, dateKey)) return;
       _log('error_category=${failure.code} area=history');
-      _finishHistoryError();
+      _finishHistoryError(dateKey);
     } catch (error) {
       if (!_isHistoryCurrent(generation, uid, dateKey)) return;
       _log('error_category=unknown area=history');
-      _finishHistoryError();
+      _finishHistoryError(dateKey);
+    } finally {
+      _releaseHistoryRequest(generation);
+    }
+  }
+
+  void _releaseHistoryRequest(int generation) {
+    if (_activeHistoryGeneration == generation) {
+      _activeHistoryGeneration = null;
+      _activeHistoryDateKey = null;
     }
   }
 
@@ -356,16 +414,17 @@ class FortuneHubController extends ChangeNotifier {
 
   void _finishDaily(DailyFortuneStatus status, int generation) {
     if (generation != _dailyGeneration) return;
-    _dailyInFlight = false;
     if (status != DailyFortuneStatus.ready) _dailyFortune = null;
     _dailyStatus = status;
     notifyListeners();
   }
 
-  void _finishHistoryError() {
-    _historyInFlight = false;
+  void _finishHistoryError(String dateKey) {
     _history = const [];
     _historyStatus = FortuneHistoryStatus.error;
+    // 보정 재조회가 실패했다면 "이 날짜는 확인 끝"으로 굳히지 않는다.
+    // 사용자가 retryHistory로 복구하면 day 0을 다시 대조할 수 있어야 한다.
+    if (_dayZeroSyncedDateKey == dateKey) _dayZeroSyncedDateKey = null;
     notifyListeners();
   }
 
@@ -396,12 +455,17 @@ class FortuneHubController extends ChangeNotifier {
     return true;
   }
 
+  /// 완료된 결과뿐 아니라 **진행 중인 요청과 controller context**까지 본다.
+  /// 초기 요청이 아직 끝나지 않은 채로 자정을 넘긴 경우가 여기서 걸린다.
   bool _hasStaleDateContext(String dateKey) {
-    if (_loadedDailyDateKey != null && _loadedDailyDateKey != dateKey) {
-      return true;
-    }
-    if (_loadedHistoryDateKey != null && _loadedHistoryDateKey != dateKey) {
-      return true;
+    for (final candidate in [
+      _contextDateKey,
+      _loadedDailyDateKey,
+      _loadedHistoryDateKey,
+      _activeDailyDateKey,
+      _activeHistoryDateKey,
+    ]) {
+      if (candidate != null && candidate != dateKey) return true;
     }
     return false;
   }

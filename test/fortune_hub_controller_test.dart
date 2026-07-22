@@ -20,6 +20,13 @@ class FakeFortuneDataSource implements FortuneDataSource {
   Completer<DailyFortune>? nextDailyCompleter;
   Completer<List<FortuneHistoryEntry>>? nextHistoryCompleter;
 
+  /// true면 **모든** 호출을 붙잡아둔다. 여러 요청을 동시에 in-flight로 두고
+  /// 완료 순서를 뒤집어보기 위한 장치다.
+  bool holdDaily = false;
+  bool holdHistory = false;
+  final List<Completer<DailyFortune>> pendingDaily = [];
+  final List<Completer<List<FortuneHistoryEntry>>> pendingHistory = [];
+
   DailyFortune dailyResult = const DailyFortune(
     loveScore: 4,
     mood: '설렘',
@@ -46,6 +53,11 @@ class FakeFortuneDataSource implements FortuneDataSource {
       nextDailyCompleter = null;
       return completer.future;
     }
+    if (holdDaily) {
+      final held = Completer<DailyFortune>();
+      pendingDaily.add(held);
+      return held.future;
+    }
     if (dailyError != null) throw dailyError!;
     return dailyResult;
   }
@@ -63,6 +75,11 @@ class FakeFortuneDataSource implements FortuneDataSource {
     if (completer != null) {
       nextHistoryCompleter = null;
       return completer.future;
+    }
+    if (holdHistory) {
+      final held = Completer<List<FortuneHistoryEntry>>();
+      pendingHistory.add(held);
+      return held.future;
     }
     if (historyError != null) throw historyError!;
     return (historyBuilder ?? defaultHistory)(now, days);
@@ -574,6 +591,350 @@ void main() {
         _kstKey(fake.historyNows.single!),
       );
       expect(_kstKey(fake.dailyNows.single!), '2026-07-22');
+      controller.dispose();
+    });
+  });
+
+  // 1-E-3 회귀: 초기 daily/history가 **둘 다 아직 완료되지 않은 채** 자정을
+  // 넘기면, loaded key가 둘 다 null이라 날짜 변경이 감지되지 않고 두 in-flight
+  // flag가 새 요청을 막아 controller가 loading에서 영구 정지했다.
+  group('자정 전환 중 in-flight 교착', () {
+    const yesterdayFortune = DailyFortune(
+      loveScore: 1,
+      mood: '어제',
+      message: 'y',
+      advice: 'y',
+    );
+    const todayFortune = DailyFortune(
+      loveScore: 5,
+      mood: '오늘',
+      message: 't',
+      advice: 't',
+    );
+
+    test('45. 두 요청이 모두 in-flight여도 새 날짜 요청이 즉시 시작된다', () async {
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      expect(fake.dailyCallCount, 1);
+      expect(fake.historyCallCount, 1);
+      expect(controller.loadedDailyDateKey, isNull);
+      expect(controller.loadedHistoryDateKey, isNull);
+      expect(controller.isDailyInFlight, isTrue);
+      expect(controller.isHistoryInFlight, isTrue);
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+
+      // 어제 응답이 아직 오지 않았는데도 새 날짜 요청이 나가야 한다.
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 2);
+      expect(controller.dailyStatus, DailyFortuneStatus.loading);
+      expect(controller.historyStatus, FortuneHistoryStatus.loading);
+      expect(controller.contextDateKey, '2026-07-23');
+      expect(controller.inFlightDailyDateKey, '2026-07-23');
+      expect(controller.inFlightHistoryDateKey, '2026-07-23');
+
+      // 어제 응답이 뒤늦게 도착 — 반영되지 않는다.
+      fake.pendingDaily[0].complete(yesterdayFortune);
+      fake.pendingHistory[0].complete(historyFor(day1Noon, 7));
+      await pumpEventQueue();
+      expect(controller.dailyFortune, isNull);
+      expect(controller.history, isEmpty);
+      expect(controller.dailyStatus, DailyFortuneStatus.loading);
+      expect(controller.historyStatus, FortuneHistoryStatus.loading);
+
+      // 오늘 응답
+      fake.pendingDaily[1].complete(todayFortune);
+      fake.pendingHistory[1].complete(historyFor(day2Past, 7));
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(controller.dailyFortune?.mood, '오늘');
+      expect(controller.loadedDailyDateKey, '2026-07-23');
+      expect(controller.loadedHistoryDateKey, '2026-07-23');
+      expect(controller.history.first.dateKey, '2026-07-23');
+
+      // 이후 같은 날짜 resume은 추가 호출을 만들지 않는다.
+      await controller.handleResume();
+      await pumpEventQueue();
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 2);
+      controller.dispose();
+    });
+
+    test('16/17. 어제 요청의 정리 코드가 오늘 요청의 in-flight를 끄지 않는다', () async {
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+
+      // 어제 요청을 성공/실패 양쪽으로 끝내본다.
+      fake.pendingDaily[0].complete(yesterdayFortune);
+      fake.pendingHistory[0].completeError(const FortuneFailure('unavailable'));
+      await pumpEventQueue();
+
+      expect(controller.isDailyInFlight, isTrue, reason: '오늘 daily는 여전히 진행 중');
+      expect(controller.isHistoryInFlight, isTrue);
+      expect(controller.inFlightDailyDateKey, '2026-07-23');
+      expect(controller.inFlightHistoryDateKey, '2026-07-23');
+      // 20. stale 오류가 현재 상태를 덮어쓰지 않는다.
+      expect(controller.historyStatus, FortuneHistoryStatus.loading);
+      expect(fake.dailyCallCount, 2, reason: '중복 재요청 없음');
+      expect(fake.historyCallCount, 2);
+      controller.dispose();
+    });
+
+    test('18/19. 진행 중이면 중복 요청이 없고, 완료 후 retry가 동작한다', () async {
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      await controller.refreshForCurrentContext();
+      await controller.refreshForCurrentContext();
+      await pumpEventQueue();
+      expect(fake.dailyCallCount, 1, reason: '같은 날짜 요청이 진행 중이면 중복 금지');
+      expect(fake.historyCallCount, 1);
+
+      fake.pendingDaily[0].complete(todayFortune);
+      fake.pendingHistory[0].complete(historyFor(day1Noon, 7));
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.isDailyInFlight, isFalse);
+      expect(controller.isHistoryInFlight, isFalse);
+
+      fake
+        ..holdDaily = false
+        ..holdHistory = false;
+      await controller.retryDaily();
+      await controller.retryHistory();
+      await pumpEventQueue();
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 2);
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      controller.dispose();
+    });
+
+    test('20. stale 요청이 오류로 끝나도 현재 ready 상태를 덮어쓰지 않는다', () async {
+      fake.holdDaily = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+
+      fake.pendingDaily[1].complete(todayFortune);
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+
+      fake.pendingDaily[0].completeError(const FortuneFailure('internal'));
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.dailyFortune?.mood, '오늘');
+      controller.dispose();
+    });
+
+    test('21. daily만 in-flight인 상태에서 날짜가 바뀌어도 복구된다', () async {
+      fake.holdDaily = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(controller.isDailyInFlight, isTrue);
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 2);
+      expect(controller.history.first.dateKey, '2026-07-23');
+
+      fake.pendingDaily[1].complete(todayFortune);
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.loadedDailyDateKey, '2026-07-23');
+      controller.dispose();
+    });
+
+    test('22. history만 in-flight인 상태에서 날짜가 바뀌어도 복구된다', () async {
+      fake.holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.isHistoryInFlight, isTrue);
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+      expect(fake.historyCallCount, 2);
+      expect(controller.loadedDailyDateKey, '2026-07-23');
+
+      fake.pendingHistory[1].complete(historyFor(day2Past, 7));
+      await pumpEventQueue();
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(controller.loadedHistoryDateKey, '2026-07-23');
+      controller.dispose();
+    });
+
+    test('23. profile loader 단계에서 날짜가 바뀌어도 교착되지 않는다', () async {
+      final profileGate = Completer<UserProfile?>();
+      final controller = build(loadProfile: (uid) => profileGate.future);
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+      expect(fake.dailyCallCount, 0, reason: '아직 프로필 대기 중');
+      expect(controller.isDailyInFlight, isTrue);
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+      expect(controller.contextDateKey, '2026-07-23');
+      expect(controller.inFlightDailyDateKey, '2026-07-23');
+
+      profileGate.complete(profileFor('user-a'));
+      await pumpEventQueue();
+      // 어제 요청은 버려지고, 오늘 요청만 결과를 만든다.
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.loadedDailyDateKey, '2026-07-23');
+      expect(fake.dailyCallCount, 1);
+      expect(_kstKey(fake.dailyNows.single!), '2026-07-23');
+      controller.dispose();
+    });
+
+    test('24. 날짜 변경 직후 계정을 전환해도 새 계정 결과만 남는다', () async {
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+
+      unawaited(controller.updateAccount('user-b'));
+      await pumpEventQueue();
+      expect(controller.activeUid, 'user-b');
+      expect(controller.contextDateKey, '2026-07-23');
+      expect(fake.dailyUids.last, 'user-b');
+
+      // user-a의 어제·오늘 응답이 모두 늦게 도착해도 반영되지 않는다.
+      for (final pending in fake.pendingDaily.take(2)) {
+        pending.complete(yesterdayFortune);
+      }
+      await pumpEventQueue();
+      expect(controller.dailyFortune, isNull);
+
+      fake.pendingDaily.last.complete(todayFortune);
+      fake.pendingHistory.last.complete(historyFor(day2Past, 7));
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.dailyFortune?.mood, '오늘');
+      controller.dispose();
+    });
+
+    test('25. 계정 전환 직후 날짜가 바뀌어도 새 계정·새 날짜로 복구된다', () async {
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      unawaited(controller.updateAccount('user-b'));
+      await pumpEventQueue();
+      expect(controller.contextDateKey, '2026-07-22');
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+      expect(controller.contextDateKey, '2026-07-23');
+      expect(controller.inFlightDailyDateKey, '2026-07-23');
+      expect(fake.dailyUids.last, 'user-b');
+
+      fake.pendingDaily.last.complete(todayFortune);
+      fake.pendingHistory.last.complete(historyFor(day2Past, 7));
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.loadedDailyDateKey, '2026-07-23');
+      controller.dispose();
+    });
+
+    test('26. dispose 이후의 모든 늦은 완료를 무시한다', () async {
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+
+      now = day2Past;
+      unawaited(controller.handleResume());
+      await pumpEventQueue();
+
+      controller.dispose();
+      fake.pendingDaily[0].complete(yesterdayFortune);
+      fake.pendingDaily[1].complete(todayFortune);
+      fake.pendingHistory[0].complete(historyFor(day1Noon, 7));
+      fake.pendingHistory[1].completeError(const FortuneFailure('internal'));
+      await pumpEventQueue();
+
+      expect(controller.dailyFortune, isNull);
+      expect(controller.history, isEmpty);
+    });
+  });
+
+  group('day 0 sync guard', () {
+    test('46. 보정 재조회가 실패하면 retry 후 day 0을 다시 대조한다', () async {
+      var served = 0;
+      fake.historyBuilder = (nowValue, days) {
+        served += 1;
+        if (served == 2) throw const FortuneFailure('unavailable');
+        // 3번째 응답(수동 retry)부터 day 0이 채워진다.
+        return historyFor(nowValue ?? day1Noon, days, dayZeroFilled: served > 2);
+      };
+      final controller = build();
+      await controller.loadInitial();
+      await pumpEventQueue();
+
+      // 1회차 ready(day 0 비어있음) → 보정 재조회 2회차가 실패했다.
+      expect(fake.historyCallCount, 2);
+      expect(controller.historyStatus, FortuneHistoryStatus.error);
+
+      await controller.retryHistory();
+      await pumpEventQueue();
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(controller.history.first.fortune, isNotNull);
+      controller.dispose();
+    });
+
+    test('47. day 0이 계속 비어 있어도 자동 재조회는 날짜당 1회로 멈춘다', () async {
+      fake.historyBuilder = (nowValue, days) =>
+          historyFor(nowValue ?? day1Noon, days, dayZeroFilled: false);
+      final controller = build();
+      await controller.loadInitial();
+      await pumpEventQueue();
+
+      expect(fake.historyCallCount, 2, reason: '초기 1회 + 보정 1회에서 멈춘다');
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
       controller.dispose();
     });
   });

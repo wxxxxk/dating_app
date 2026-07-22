@@ -167,6 +167,10 @@ class _MainShellState extends State<MainShell> {
             firestoreService: widget.firestoreService,
             matchesService: widget.matchesService,
             fortuneService: widget.fortuneService,
+            // IndexedStack은 탭을 바꿔도 State를 버리지 않는다. 운세는 KST
+            // 날짜에 묶인 화면이라, 탭이 다시 활성화되는 순간을 알려줘야
+            // 자정을 넘긴 뒤 돌아왔을 때 어제 운세가 남지 않는다.
+            isActive: _selectedIndex == MainTabIndex.fortune,
             onExploreTap: () =>
                 setState(() => _selectedIndex = MainTabIndex.discovery),
           ),

@@ -36,6 +36,10 @@ class FortuneHubScreen extends StatefulWidget {
   /// "새로운 인연을 만나보세요" CTA 탭 시 둘러보기 탭으로 전환한다.
   final VoidCallback onExploreTap;
 
+  /// 이 화면이 보이는 탭인지. [MainShell]이 IndexedStack으로 State를 보존하므로,
+  /// 탭 재진입은 initState가 아니라 이 값의 false→true 전환으로 알 수 있다.
+  final bool isActive;
+
   /// 테스트용 시계 주입. production에서는 [DateTime.now]를 쓴다.
   final DateTime Function()? nowProvider;
 
@@ -46,6 +50,7 @@ class FortuneHubScreen extends StatefulWidget {
     required this.matchesService,
     required this.fortuneService,
     required this.onExploreTap,
+    this.isActive = true,
     this.nowProvider,
   });
 
@@ -106,8 +111,26 @@ class _FortuneHubScreenState extends State<FortuneHubScreen>
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant FortuneHubScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 비활성 → 활성으로 바뀐 순간에만 1회. 활성 상태의 rebuild는 통과시키지
+    // 않으므로 탭 안에서 setState가 반복돼도 중복 요청이 생기지 않는다.
+    if (!oldWidget.isActive && widget.isActive) _syncAccountAndDate();
+  }
+
   void _onControllerChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// 계정이 바뀌었으면 계정 전환을, 아니면 날짜 재확인을 수행한다.
+  void _syncAccountAndDate() {
+    final uid = widget.authService.currentUser?.uid;
+    if (uid != _controller.activeUid) {
+      _controller.updateAccount(uid);
+      return;
+    }
+    _controller.handleResume();
   }
 
   @override
@@ -115,12 +138,7 @@ class _FortuneHubScreenState extends State<FortuneHubScreen>
     super.didChangeAppLifecycleState(state);
     if (state != AppLifecycleState.resumed) return;
     // 계정이 바뀌어 있으면 이전 사용자 결과를 먼저 버린다.
-    final uid = widget.authService.currentUser?.uid;
-    if (uid != _controller.activeUid) {
-      _controller.updateAccount(uid);
-      return;
-    }
-    _controller.handleResume();
+    _syncAccountAndDate();
   }
 
   /// 상세 화면에서 돌아왔을 때도 날짜 context를 다시 확인한다.

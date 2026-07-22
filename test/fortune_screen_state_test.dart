@@ -334,6 +334,48 @@ void main() {
       expect(find.textContaining('StateError'), findsNothing);
     });
 
+    testWidgets('45. 탭 재진입(isActive false→true)에서만 날짜를 다시 확인한다', (
+      tester,
+    ) async {
+      Widget shell(bool active) => MaterialApp(
+        home: FortuneHubScreen(
+          authService: auth,
+          firestoreService: firestore,
+          matchesService: _FakeMatchesService(firestore),
+          fortuneService: fortune,
+          onExploreTap: () {},
+          isActive: active,
+          nowProvider: () => now,
+        ),
+      );
+
+      await tester.pumpWidget(shell(true));
+      await tester.pumpAndSettle();
+      expect(fortune.dailyCallCount, 1);
+
+      // 활성 상태의 rebuild는 재확인을 트리거하지 않는다.
+      await tester.pumpWidget(shell(true));
+      await tester.pumpAndSettle();
+      expect(fortune.dailyCallCount, 1);
+
+      // 다른 탭으로 나갔다가 같은 날짜에 돌아옴 → 추가 요청 없음.
+      await tester.pumpWidget(shell(false));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(shell(true));
+      await tester.pumpAndSettle();
+      expect(fortune.dailyCallCount, 1);
+
+      // 다른 탭에 있는 동안 자정을 넘긴 뒤 돌아옴 → daily/history 갱신.
+      await tester.pumpWidget(shell(false));
+      await tester.pumpAndSettle();
+      now = day2;
+      await tester.pumpWidget(shell(true));
+      await tester.pumpAndSettle();
+      expect(fortune.dailyCallCount, 2);
+      expect(fortune.historyCallCount, 2);
+      expect(find.textContaining('7월 23일'), findsOneWidget);
+    });
+
     testWidgets('43/44. resume 시 날짜가 바뀌면 어제 ready 위젯이 사라진다', (tester) async {
       await tester.pumpWidget(hub());
       await tester.pumpAndSettle();
