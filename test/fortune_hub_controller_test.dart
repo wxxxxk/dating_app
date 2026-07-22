@@ -902,6 +902,235 @@ void main() {
     });
   });
 
+  // 1-E-4 회귀: 같은 KST 날짜에 출생정보가 바뀌면 서버 inputFingerprint가 달라져
+  // dailyFortune 문서가 새로 쓰인다. daily만 다시 읽으면 오늘 카드는 새 출생정보
+  // 기반인데 최근 기록 day 0은 이전 출생정보 기반으로 남았다.
+  group('출생정보 변경 후 재결합', () {
+    const oldFortune = DailyFortune(
+      loveScore: 2,
+      mood: '시간 모름',
+      message: 'old',
+      advice: 'old',
+    );
+    const newFortune = DailyFortune(
+      loveScore: 5,
+      mood: '시간 반영',
+      message: 'new',
+      advice: 'new',
+    );
+
+    /// unknown-time 상태로 daily/history가 모두 ready인 controller.
+    Future<FortuneHubController> readyController() async {
+      fake.dailyResult = oldFortune;
+      final controller = build();
+      await controller.loadInitial();
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.ready);
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(controller.history.first.fortune, isNotNull);
+      expect(fake.dailyCallCount, 1);
+      expect(fake.historyCallCount, 1, reason: 'day 0이 채워져 보정 재조회 없음');
+      return controller;
+    }
+
+    test('48. 호출 즉시 이전 daily와 day 0이 사라지고 과거 기록은 남는다', () async {
+      final controller = await readyController();
+      final pastBefore = controller.history.skip(1).toList();
+
+      fake.holdDaily = true;
+      unawaited(controller.refreshAfterBirthProfileCompleted());
+
+      expect(controller.dailyFortune, isNull);
+      expect(controller.dailyStatus, DailyFortuneStatus.loading);
+      expect(controller.history.first.fortune, isNull, reason: '이전 day 0 즉시 제거');
+      expect(controller.history.first.dateKey, '2026-07-22');
+      expect(controller.history.length, 7);
+      for (var i = 0; i < pastBefore.length; i++) {
+        expect(controller.history[i + 1].dateKey, pastBefore[i].dateKey);
+        expect(controller.history[i + 1].fortune, pastBefore[i].fortune);
+      }
+      controller.dispose();
+    });
+
+    test('49. daily가 먼저 나가고, 완료 전에는 history를 읽지 않는다', () async {
+      final controller = await readyController();
+
+      fake.holdDaily = true;
+      unawaited(controller.refreshAfterBirthProfileCompleted());
+      await pumpEventQueue();
+
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 1, reason: 'daily write 전에 history를 읽으면 안 된다');
+      controller.dispose();
+    });
+
+    test('50. daily 성공 후 history를 정확히 1회 재조회해 day 0을 교체한다', () async {
+      final controller = await readyController();
+
+      fake.dailyResult = newFortune;
+      await controller.refreshAfterBirthProfileCompleted();
+      await pumpEventQueue();
+
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 2, reason: 'history 재조회는 정확히 1회');
+      expect(controller.dailyFortune?.mood, '시간 반영');
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(controller.history.first.dateKey, '2026-07-22');
+      expect(controller.history.first.fortune, isNotNull);
+      expect(controller.history.length, 7);
+      controller.dispose();
+    });
+
+    test('51. 기존 dayZeroSyncedDateKey가 재조회를 막지 않는다', () async {
+      final controller = await readyController();
+      // day 0이 이미 채워져 있어 guard가 오늘 날짜로 굳어 있는 상태다.
+      await controller.handleResume();
+      await pumpEventQueue();
+      expect(fake.historyCallCount, 1);
+
+      await controller.refreshAfterBirthProfileCompleted();
+      await pumpEventQueue();
+      expect(fake.historyCallCount, 2);
+      controller.dispose();
+    });
+
+    test('52. 재조회 완료 후 추가 중복 read가 없다', () async {
+      final controller = await readyController();
+      await controller.refreshAfterBirthProfileCompleted();
+      await pumpEventQueue();
+      expect(fake.historyCallCount, 2);
+
+      await controller.handleResume();
+      await controller.refreshForCurrentContext();
+      await pumpEventQueue();
+      expect(fake.dailyCallCount, 2);
+      expect(fake.historyCallCount, 2);
+      controller.dispose();
+    });
+
+    test('53. daily 실패 시 이전 daily·day 0을 복원하지 않는다', () async {
+      final controller = await readyController();
+
+      fake.dailyError = const FortuneFailure('unavailable');
+      await controller.refreshAfterBirthProfileCompleted();
+      await pumpEventQueue();
+
+      expect(controller.dailyStatus, DailyFortuneStatus.unavailable);
+      expect(controller.dailyFortune, isNull);
+      expect(controller.history.first.fortune, isNull, reason: '이전 day 0 복원 금지');
+      expect(controller.historyStatus, FortuneHistoryStatus.ready);
+      expect(fake.historyCallCount, 1, reason: 'daily 실패 시 history를 읽지 않는다');
+      controller.dispose();
+    });
+
+    test('54. daily 실패 후 retryDaily가 성공하면 history를 갱신한다', () async {
+      final controller = await readyController();
+      fake.dailyError = const FortuneFailure('unavailable');
+      await controller.refreshAfterBirthProfileCompleted();
+      await pumpEventQueue();
+      expect(controller.dailyStatus, DailyFortuneStatus.unavailable);
+
+      fake
+        ..dailyError = null
+        ..dailyResult = newFortune;
+      await controller.retryDaily();
+      await pumpEventQueue();
+
+      expect(controller.dailyFortune?.mood, '시간 반영');
+      expect(fake.historyCallCount, 2, reason: 'retry 성공 시 예약된 갱신이 실행된다');
+      expect(controller.history.first.fortune, isNotNull);
+      controller.dispose();
+    });
+
+    test('55. 갱신 중 날짜가 바뀌면 이전 날짜 history refresh를 버린다', () async {
+      final controller = await readyController();
+
+      fake.holdDaily = true;
+      unawaited(controller.refreshAfterBirthProfileCompleted());
+      await pumpEventQueue();
+      final historyCallsBefore = fake.historyCallCount;
+
+      now = day2Past;
+      fake.holdDaily = false;
+      await controller.handleResume();
+      await pumpEventQueue();
+
+      expect(controller.loadedDailyDateKey, '2026-07-23');
+      expect(controller.loadedHistoryDateKey, '2026-07-23');
+      // 어제 daily가 늦게 도착해도 어제 날짜 history를 다시 읽지 않는다.
+      final callsAfterRollover = fake.historyCallCount;
+      fake.pendingDaily.first.complete(newFortune);
+      await pumpEventQueue();
+      expect(fake.historyCallCount, callsAfterRollover);
+      expect(callsAfterRollover, greaterThan(historyCallsBefore));
+      expect(controller.history.first.dateKey, '2026-07-23');
+      controller.dispose();
+    });
+
+    test('56. 갱신 중 계정이 바뀌면 이전 계정 refresh를 버린다', () async {
+      final controller = await readyController();
+
+      fake.holdDaily = true;
+      unawaited(controller.refreshAfterBirthProfileCompleted());
+      await pumpEventQueue();
+
+      fake.holdDaily = false;
+      await controller.updateAccount('user-b');
+      await pumpEventQueue();
+      final callsAfterSwitch = fake.historyCallCount;
+
+      // user-a의 daily가 뒤늦게 도착해도 history를 다시 읽지 않는다.
+      fake.pendingDaily.first.complete(newFortune);
+      await pumpEventQueue();
+      expect(fake.historyCallCount, callsAfterSwitch);
+      expect(fake.historyUids.last, 'user-b');
+      controller.dispose();
+    });
+
+    test('57. 진행 중이던 이전 history 응답이 늦게 와도 day 0을 덮어쓰지 않는다', () async {
+      fake
+        ..dailyResult = oldFortune
+        ..holdHistory = true;
+      final controller = build();
+      unawaited(controller.loadInitial());
+      await pumpEventQueue();
+      expect(controller.isHistoryInFlight, isTrue);
+
+      // history가 아직 진행 중인 시점에 출생정보가 바뀐다.
+      fake
+        ..holdHistory = false
+        ..dailyResult = newFortune;
+      await controller.refreshAfterBirthProfileCompleted();
+      await pumpEventQueue();
+      expect(controller.history.first.fortune?.mood, '기록 0');
+
+      // 이전 출생정보 기준으로 시작됐던 history 응답이 뒤늦게 도착.
+      fake.pendingHistory.first.complete([
+        FortuneHistoryEntry(dateKey: 'stale-day-zero', date: _staleDate),
+      ]);
+      await pumpEventQueue();
+      expect(controller.history.first.dateKey, '2026-07-22');
+      expect(controller.history.length, 7);
+      controller.dispose();
+    });
+
+    test('58. dispose 이후 늦은 응답을 무시한다', () async {
+      final controller = await readyController();
+      fake
+        ..holdDaily = true
+        ..holdHistory = true;
+      unawaited(controller.refreshAfterBirthProfileCompleted());
+      await pumpEventQueue();
+
+      controller.dispose();
+      fake.pendingDaily.first.complete(newFortune);
+      await pumpEventQueue();
+
+      expect(controller.dailyFortune, isNull);
+      expect(fake.historyCallCount, 1, reason: 'dispose 후에는 재조회하지 않는다');
+    });
+  });
+
   group('day 0 sync guard', () {
     test('46. 보정 재조회가 실패하면 retry 후 day 0을 다시 대조한다', () async {
       var served = 0;

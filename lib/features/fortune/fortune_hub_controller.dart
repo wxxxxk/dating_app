@@ -99,6 +99,16 @@ class FortuneHubController extends ChangeNotifier {
   /// day 0 보정을 이미 끝낸 날짜. 무한 재조회를 막는 유일한 장치다.
   String? _dayZeroSyncedDateKey;
 
+  /// 출생정보가 바뀌어, 새 daily가 나온 뒤 최근 기록을 다시 읽어야 하는 날짜.
+  ///
+  /// 같은 KST 날짜라도 출생정보가 바뀌면 서버 `inputFingerprint`가 달라져
+  /// dailyFortune 문서가 새로 쓰인다. daily만 다시 읽으면 오늘 카드는 새
+  /// 출생정보 기반인데 최근 기록 day 0은 이전 값으로 남는다.
+  ///
+  /// daily와 **동시에** 읽으면 안 된다 — history가 daily의 Firestore write보다
+  /// 먼저 끝나면 또 이전 문서를 읽는다. daily 성공 뒤에 순차로 읽는다.
+  String? _refreshHistoryAfterDailyDateKey;
+
   DailyFortuneStatus get dailyStatus => _dailyStatus;
   FortuneHistoryStatus get historyStatus => _historyStatus;
   DailyFortune? get dailyFortune => _dailyFortune;
@@ -183,6 +193,7 @@ class FortuneHubController extends ChangeNotifier {
     _loadedDailyDateKey = null;
     _loadedHistoryDateKey = null;
     _dayZeroSyncedDateKey = null;
+    _refreshHistoryAfterDailyDateKey = null;
     _dailyStatus = DailyFortuneStatus.idle;
     _historyStatus = FortuneHistoryStatus.idle;
     notifyListeners();
@@ -218,6 +229,8 @@ class FortuneHubController extends ChangeNotifier {
     _loadedDailyDateKey = null;
     _loadedHistoryDateKey = null;
     _dayZeroSyncedDateKey = null;
+    // 이전 날짜의 출생정보 갱신 예약을 다음 날짜로 넘기지 않는다.
+    _refreshHistoryAfterDailyDateKey = null;
     _dailyStatus = _activeUid == null
         ? DailyFortuneStatus.idle
         : DailyFortuneStatus.loading;
@@ -245,12 +258,58 @@ class FortuneHubController extends ChangeNotifier {
     await _loadHistory(uid: uid, dateKey: currentDateKey);
   }
 
-  /// 출생시간 보완을 마친 직후. 프로필 캐시를 버리고 다시 판정한다.
+  /// 출생시간 보완을 마친 직후.
+  ///
+  /// 단순 daily retry가 아니라 **같은 계정·같은 날짜의 계산 입력 변경**이다.
+  /// 이전 출생정보로 만든 오늘 운세와 최근 기록 day 0을 먼저 지우고, 새 daily가
+  /// 생성된 뒤에 최근 기록을 다시 읽는다. 과거 1~6일 기록은 그대로 둔다.
   Future<void> refreshAfterBirthProfileCompleted() async {
     if (_disposed) return;
+    final uid = _activeUid;
+    if (uid == null) return;
+    final dateKey = currentDateKey;
+
+    _log('birth_profile_changed date_key=$dateKey');
+    // 진행 중이던 daily/history 응답은 모두 이전 출생정보 기준이다.
+    _invalidateInFlightRequests();
+    _contextDateKey = dateKey;
     _profile = null;
     _profileUid = null;
-    await retryDaily();
+    _zodiac = null;
+    _saju = null;
+    _dailyFortune = null;
+    _loadedDailyDateKey = null;
+    _dayZeroSyncedDateKey = null;
+    _clearHistoryDayZeroFortune(dateKey);
+    _refreshHistoryAfterDailyDateKey = dateKey;
+    _dailyStatus = DailyFortuneStatus.loading;
+    notifyListeners();
+
+    await _loadDaily(uid: uid, dateKey: dateKey);
+  }
+
+  /// 오늘 항목의 운세만 비우고 과거 기록은 유지한다.
+  /// 이전 출생정보 기반 day 0을 한 프레임도 남기지 않기 위한 동기 처리다.
+  void _clearHistoryDayZeroFortune(String dateKey) {
+    if (_history.isEmpty) return;
+    final dayZero = _history.first;
+    if (dayZero.dateKey != dateKey || dayZero.fortune == null) return;
+    _history = List.unmodifiable([
+      FortuneHistoryEntry(dateKey: dayZero.dateKey, date: dayZero.date),
+      ..._history.skip(1),
+    ]);
+  }
+
+  /// 출생정보 변경 후 예약된 history 갱신을 소비한다. 날짜당 한 번만 실행된다.
+  bool _consumeBirthProfileHistoryRefresh(String uid, String dateKey) {
+    if (_refreshHistoryAfterDailyDateKey != dateKey) return false;
+    _refreshHistoryAfterDailyDateKey = null;
+    // 이 재조회가 day 0 대조를 겸한다. 뒤이어 또 보정이 돌지 않게 한다.
+    _dayZeroSyncedDateKey = dateKey;
+    _loadedHistoryDateKey = null;
+    _log('history_refresh_after_birth_change date_key=$dateKey');
+    unawaited(_loadHistory(uid: uid, dateKey: dateKey));
+    return true;
   }
 
   bool get _dailyInFlight => _activeDailyGeneration != null;
@@ -304,7 +363,10 @@ class FortuneHubController extends ChangeNotifier {
       _loadedDailyDateKey = dateKey;
       _finishDaily(DailyFortuneStatus.ready, generation);
       _log('request_succeeded area=daily generation=$generation');
-      _maybeSyncHistoryDayZero();
+      // 출생정보 변경 갱신이 예약돼 있으면 그쪽이 history를 담당한다.
+      if (!_consumeBirthProfileHistoryRefresh(uid, dateKey)) {
+        _maybeSyncHistoryDayZero();
+      }
     } on FortuneFailure catch (failure) {
       if (!_isDailyCurrent(generation, uid, dateKey)) return;
       final status = dailyStatusForFailureCode(failure.code);
