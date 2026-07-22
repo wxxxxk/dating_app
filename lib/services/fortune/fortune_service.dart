@@ -214,56 +214,114 @@ class FortuneService {
   ///
   /// 서버와 동일하게 최신 메시지 ID 기준 짧은 캐시를 먼저 확인한다.
   /// 메시지가 없는 채팅방은 아이스브레이커 카드가 담당하므로 빈 리스트를 반환한다.
-  Future<List<ConversationTip>> getConversationTips(String matchId) async {
-    _debugLog('[ConversationTips] 캐시 확인 시작 matchId=$matchId');
+  /// 대화 추천을 가져온다.
+  ///
+  /// 실패를 빈 리스트로 접지 않는다. 예전에는 `not-found`를 `const []`로
+  /// 돌려줘서, 실제로는 오류인데 화면에는 "추천 없음"으로 보였고 원인을
+  /// 알 수 없었다. 이제 모든 실패는 [ConversationTipsFailure]로 분류해 던진다.
+  ///
+  /// 반환값은 요청 시점 context와 함께 온다 — 호출자가 stale 응답을 버릴 수
+  /// 있어야 하기 때문이다.
+  Future<ConversationTipsResult> getConversationTips(String matchId) async {
+    _debugLog('[ConversationTips] request_started');
+    final matchRef = _db.collection('matches').doc(matchId);
+
+    String latestMessageId;
     try {
-      final matchRef = _db.collection('matches').doc(matchId);
       final latestMessageSnap = await matchRef
           .collection('messages')
           .orderBy('createdAt', descending: true)
           .limit(1)
           .get();
       if (latestMessageSnap.docs.isEmpty) {
-        _debugLog('[ConversationTips] 메시지 없음 matchId=$matchId');
-        return const [];
+        _debugLog('[ConversationTips] error_category=no_messages');
+        throw const ConversationTipsFailure(
+          ConversationTipsErrorKind.noMessages,
+        );
       }
+      latestMessageId = latestMessageSnap.docs.first.id;
+    } on ConversationTipsFailure {
+      rethrow;
+    } catch (e) {
+      _debugLog('[ConversationTips] error_category=context_read_failed');
+      throw const ConversationTipsFailure(
+        ConversationTipsErrorKind.unavailable,
+      );
+    }
 
-      final latestMessageId = latestMessageSnap.docs.first.id;
+    // Firestore 캐시 우선. suggestionVersion·lastMessageId가 모두 맞을 때만 쓴다.
+    try {
       final matchDoc = await matchRef.get();
       final cached = matchDoc.data()?['conversationTips'];
       if (cached is Map) {
         final cacheMap = Map<String, dynamic>.from(cached);
-        final tips = _conversationTipsFromList(
-          cacheMap['suggestions'] as List<dynamic>?,
-        );
-        if (cacheMap['lastMessageId'] == latestMessageId && tips.length >= 2) {
-          _debugLog('[ConversationTips] 캐시 hit count=${tips.length}');
-          return tips;
+        if (cacheMap['lastMessageId'] == latestMessageId &&
+            cacheMap['suggestionVersion'] == kConversationSuggestionVersion) {
+          final tips = _conversationTipsFromResponse(cacheMap);
+          if (tips.length == 3) {
+            _debugLog(
+              '[ConversationTips] cache_hit result_count=${tips.length} '
+              'schema_version=${cacheMap['schemaVersion']} '
+              'suggestion_version=${cacheMap['suggestionVersion']}',
+            );
+            return ConversationTipsResult(
+              tips: tips,
+              latestMessageId: latestMessageId,
+            );
+          }
         }
       }
+    } catch (e) {
+      // 캐시 읽기 실패는 치명적이지 않다. callable로 진행한다.
+      _debugLog('[ConversationTips] cache_read_failed');
+    }
 
-      _debugLog('[ConversationTips] 캐시 miss, callable 호출 matchId=$matchId');
+    _debugLog('[ConversationTips] cache_miss');
+    try {
       final callable = _functions.httpsCallable('generateConversationTips');
       final result = await callable.call({'matchId': matchId});
       final data = Map<String, dynamic>.from(result.data as Map);
-      final tips = _conversationTipsFromList(
-        data['suggestions'] as List<dynamic>?,
-      );
-      _debugLog('[ConversationTips] callable 성공 count=${tips.length}');
-      return tips;
-    } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'not-found') {
-        _debugLog('[ConversationTips] 대상 없음 matchId=$matchId');
-        return const [];
+      final tips = _conversationTipsFromResponse(data);
+      if (tips.isEmpty) {
+        _debugLog('[ConversationTips] error_category=invalid_schema');
+        throw const ConversationTipsFailure(
+          ConversationTipsErrorKind.invalidResponse,
+        );
       }
-      _debugLog(
-        '[ConversationTips] callable 실패 matchId=$matchId code=${e.code}',
+      _debugLog('[ConversationTips] result_count=${tips.length}');
+      return ConversationTipsResult(
+        tips: tips,
+        latestMessageId: latestMessageId,
       );
+    } on FirebaseFunctionsException catch (e) {
+      final kind = conversationTipsErrorKindFor(e.code);
+      _debugLog('[ConversationTips] error_category=${kind.name}');
+      throw ConversationTipsFailure(kind);
+    } on ConversationTipsFailure {
       rethrow;
     } catch (e) {
-      _debugLog('[ConversationTips] 실패 matchId=$matchId error=$e');
-      rethrow;
+      _debugLog('[ConversationTips] error_category=unknown');
+      throw const ConversationTipsFailure(ConversationTipsErrorKind.unknown);
     }
+  }
+
+  /// v2 `suggestionItems`를 우선 파싱하고, 없으면 v1 문자열 배열로 fallback한다.
+  List<ConversationTip> _conversationTipsFromResponse(
+    Map<String, dynamic> data,
+  ) {
+    final items = data['suggestionItems'];
+    if (items is List && items.isNotEmpty) {
+      final parsed = items
+          .whereType<Map>()
+          .map(
+            (raw) => ConversationTip.fromItem(Map<String, dynamic>.from(raw)),
+          )
+          .where((tip) => tip.message.isNotEmpty)
+          .take(3)
+          .toList();
+      if (parsed.isNotEmpty) return parsed;
+    }
+    return _conversationTipsFromList(data['suggestions'] as List<dynamic>?);
   }
 
   List<ConversationTip> _conversationTipsFromList(List<dynamic>? rawItems) {

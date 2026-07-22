@@ -1490,23 +1490,196 @@ function sanitizeIcebreakers(result) {
 /** 대화 재개 코치용 시스템 프롬프트. */
 function conversationTipsSystemPrompt() {
   return [
-    '당신은 데이팅 앱 채팅에서 대화가 잠시 끊겼을 때',
-    '자연스럽게 다시 이어갈 수 있는 짧은 메시지를 제안하는 대화 코치입니다.',
+    '당신은 데이팅 앱 사용자가 상대에게 **그대로 복사해서 보낼 메시지**를 대신 써주는 사람입니다.',
+    '조언이나 코칭을 쓰는 게 아닙니다. 사용자가 입력창에 붙여넣고 바로 전송할 문장을 씁니다.',
     '',
-    '반드시 지킬 규칙:',
-    '1. 사용자 메시지의 최근대화, 두 사람의 사주 속성, 프로필 태그, 공통 관심사만 근거로 한다.',
-    '2. 매칭 직후 첫 인사가 아니라, 이미 진행된 대화를 부드럽게 재개하는 문장을 제안한다.',
-    '3. 최근 메시지를 반복하지 말고, 마지막 흐름을 살짝 이어가거나 부담 없는 새 화제로 전환한다.',
-    '4. 어느 참가자가 보내도 어색하지 않은 중립적인 문장으로 쓴다.',
-    '5. 각각 실제 입력창에 바로 넣을 수 있는 한 문장으로 쓴다.',
-    '6. 외모 평가, 점수, 등급, 확정적 예언, 과한 친밀감 표현은 절대 쓰지 않는다.',
-    '7. 반드시 아래 JSON 스키마로만 응답한다 (다른 설명, 마크다운, 코드블록 금지):',
-    '{"suggestions": [string, string, string]}',
-    '- suggestions: 2~3개의 짧은 대화 재개 문장',
+    '## 절대 규칙',
+    '- 사용자에게 지시하는 문장을 쓰지 않는다.',
+    '  나쁨: "상대방의 관심사를 존중하며 개방형 질문을 해보세요."',
+    '  나쁨: "공감 표현을 통해 라포를 형성하세요."',
+    '  좋음: "아까 그 얘기 계속 궁금했는데, 요즘 제일 자주 찾게 되는 건 뭐예요?"',
+    '- 상대가 실제로 말하지 않은 일을 사실처럼 단정하지 않는다.',
+    '- 최근대화에 없는 정보를 지어내지 않는다. 공통관심사는 참고해도 된다.',
+    '- 외모 평가, 점수·등급, 사주 단정, 민감정보 추론을 하지 않는다.',
+    '- 답장을 강요하거나 죄책감을 주지 않는다("왜 답이 없어요?" 금지).',
+    '- 친밀도가 낮은 대화에 반말·애칭·성적 표현을 쓰지 않는다. 기본은 존댓말이다.',
+    '- 어느 참가자가 보내도 어색하지 않은 중립적인 문장으로 쓴다.',
+    '',
+    '## 문장 형식',
+    '- 각 문장은 1~2문장, 모바일 채팅에 어울리는 길이(최대 120자).',
+    '- 이모지는 문장당 최대 1개. 없어도 된다.',
+    '- 번호·markdown·따옴표 장식을 넣지 않는다.',
+    '- 세 문장이 사실상 같은 말의 말투 변경이어서는 안 된다. 화제나 각도가 달라야 한다.',
+    '',
+    '## 정확히 3개, 각각 다른 역할',
+    '- natural: 편안하고 부담 없이 대화를 다시 여는 문장',
+    '- curious: 최근 대화에 연결되는 구체적인 질문이 있는 문장',
+    '- playful: 가볍고 장난스럽지만 과하지 않은 문장',
+    '',
+    '## 응답 형식',
+    '반드시 아래 JSON으로만 응답한다 (설명·마크다운·코드블록 금지):',
+    '{"suggestions":[',
+    '  {"id":"natural","tone":"natural","text":"..."},',
+    '  {"id":"curious","tone":"curious","text":"..."},',
+    '  {"id":"playful","tone":"playful","text":"..."}',
+    ']}',
   ].join('\n');
 }
 
-/** GPT가 돌려준 대화 코치 문장 배열이 기대 스키마인지 검사. */
+/**
+ * OpenAI SDK 예외를 사용자에게 노출 가능한 typed error로 정규화한다.
+ *
+ * 폐기된 API key 사고 때 SDK 예외가 그대로 unhandled error로 올라갔다.
+ * 원문 메시지·헤더·key 조각은 로그에도 남기지 않고 범주만 남긴다.
+ */
+function classifyProviderError(error) {
+  if (error instanceof HttpsError) return null;
+  const status = Number(error?.status ?? error?.response?.status);
+  const code = String(error?.code || '');
+  const name = String(error?.name || '');
+
+  if (status === 401 || status === 403 || code === 'invalid_api_key') {
+    // 사용자 잘못이 아니다. 내부 사유는 숨기고 일시적 장애로 안내한다.
+    return { category: 'provider_auth', httpsCode: 'unavailable', retryable: false };
+  }
+  if (status === 429 || code === 'rate_limit_exceeded') {
+    return { category: 'provider_rate_limit', httpsCode: 'resource-exhausted', retryable: true };
+  }
+  if (status === 408 || status >= 500 || /timeout/i.test(name) || /timeout/i.test(code)) {
+    return { category: 'provider_unavailable', httpsCode: 'unavailable', retryable: true };
+  }
+  return { category: 'provider_unknown', httpsCode: 'internal', retryable: true };
+}
+
+/** 사용자에게 보여줄 안전한 문구. 내부 사유는 담지 않는다. */
+const PROVIDER_ERROR_MESSAGES = Object.freeze({
+  'resource-exhausted': '요청이 많아 잠시 후 다시 시도해 주세요.',
+  unavailable: '추천 문장을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
+  internal: '추천 문장을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
+});
+
+/** 대화 추천 계약 버전. 프롬프트·검증 규칙이 바뀌면 올린다 → 캐시 자연 miss. */
+const CONVERSATION_SUGGESTION_VERSION = 2;
+
+/** 추천 문장의 역할. 정확히 이 셋이 하나씩 있어야 한다. */
+const CONVERSATION_TONES = Object.freeze(['natural', 'curious', 'playful']);
+
+/** 한 문장 최대 길이(모바일 채팅 기준). 넘으면 계약 위반으로 본다. */
+const MAX_SUGGESTION_LENGTH = 120;
+
+/**
+ * "상대에게 보낼 문장"이 아니라 코칭·설명문일 때 걸리는 패턴.
+ *
+ * 1-C 감사에서 확인된 실제 문제다 — 결과가 "개방형 질문을 해보세요"처럼
+ * 사용자에게 지시하는 문장이라 그대로 전송할 수 없었다.
+ */
+const COACHING_PATTERNS = Object.freeze([
+  /해\s*보세요/,
+  /하세요\s*$/,
+  /하는\s*것이\s*좋(습니다|아요)/,
+  /추천(합니다|해요|드립니다)/,
+  /질문을\s*던져/,
+  /라포/,
+  /대화를\s*이어가기\s*위해/,
+  /표현을\s*통해/,
+  /운명적으로/,
+  /상대방의\s+\S+를?\s*존중/,
+]);
+
+/** markdown·번호·따옴표 장식을 벗겨 실제 전송 문장만 남긴다. */
+function stripSuggestionDecoration(value) {
+  let text = String(value || '').trim();
+  text = text.replace(/^\s*[-*•]\s+/, '');
+  text = text.replace(/^\s*\d+[.)]\s*/, '');
+  text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
+  text = text.replace(/\*\*(.+?)\*\*/g, '$1');
+  text = text.replace(/`+/g, '');
+  return text.trim();
+}
+
+/** 근접 중복 판정용 정규화(공백·문장부호·이모지 제거). */
+function normalizedSuggestionKey(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '');
+}
+
+/** 코칭·설명문이면 true. */
+function looksLikeCoaching(text) {
+  return COACHING_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * GPT 응답 → tone별 추천 3개.
+ *
+ * 계약을 만족하지 못하면 빈 배열을 돌려준다. 부분 보정해서 억지로 통과시키지
+ * 않는다 — 잘못된 문장을 그대로 사용자에게 보내게 되기 때문이다.
+ */
+function sanitizeConversationSuggestionItems(result) {
+  const raw = Array.isArray(result?.suggestions) ? result.suggestions : [];
+  const byTone = new Map();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const tone = String(entry.tone || entry.id || '').trim();
+    if (!CONVERSATION_TONES.includes(tone)) continue;
+    if (byTone.has(tone)) continue;
+    const text = stripSuggestionDecoration(entry.text);
+    if (!text) continue;
+    byTone.set(tone, { id: tone, tone, text });
+  }
+  // 순서를 계약대로 고정한다.
+  return CONVERSATION_TONES.map((tone) => byTone.get(tone)).filter(Boolean);
+}
+
+/** tone 3종이 하나씩 있고, 문장이 전송 가능한 형태인지. */
+function isValidConversationSuggestionItems(items) {
+  if (!Array.isArray(items) || items.length !== CONVERSATION_TONES.length) {
+    return false;
+  }
+  const tones = new Set();
+  const keys = new Set();
+  for (const item of items) {
+    if (!item || typeof item !== 'object') return false;
+    if (!CONVERSATION_TONES.includes(item.tone)) return false;
+    if (item.id !== item.tone) return false;
+    if (tones.has(item.tone)) return false;
+    tones.add(item.tone);
+
+    const text = typeof item.text === 'string' ? item.text.trim() : '';
+    if (!text) return false;
+    if (text.length > MAX_SUGGESTION_LENGTH) return false;
+    if (looksLikeCoaching(text)) return false;
+
+    const key = normalizedSuggestionKey(text);
+    if (!key || keys.has(key)) return false; // 중복·근접 중복 거부
+    keys.add(key);
+  }
+  return tones.size === CONVERSATION_TONES.length;
+}
+
+/** 구버전 앱이 읽는 문자열 배열. */
+function suggestionTextsOf(items) {
+  return items.map((item) => item.text);
+}
+
+/**
+ * callable 응답. 구버전 앱이 기대하는 `suggestions`(문자열 배열)를 그대로
+ * 유지하고, 신규 앱이 쓰는 `suggestionItems`를 함께 준다.
+ * 참가자 UID 같은 내부 값은 넣지 않는다.
+ */
+function conversationTipsResponse(items, latestMessageId) {
+  return {
+    schemaVersion: 2,
+    suggestions: suggestionTextsOf(items),
+    suggestionItems: items,
+    context: {
+      lastMessageId: latestMessageId,
+      suggestionVersion: CONVERSATION_SUGGESTION_VERSION,
+    },
+  };
+}
+
+/** GPT가 돌려준 대화 코치 문장 배열이 v1 스키마인지 검사(하위호환 읽기 전용). */
 function isValidConversationSuggestions(items) {
   return !!(
     Array.isArray(items) &&
@@ -1516,14 +1689,22 @@ function isValidConversationSuggestions(items) {
   );
 }
 
-/** GPT 응답에서 캐시 가능한 대화 코치 문장 2~3개만 정리한다. */
-function sanitizeConversationSuggestions(result) {
-  const items = result?.suggestions;
-  if (!Array.isArray(items)) return [];
-  return items
-    .slice(0, 3)
-    .map((item) => String(item || '').trim())
-    .filter(Boolean);
+/**
+ * Firestore에 저장된 conversationTips 캐시를 읽는다.
+ *
+ * v2(suggestionItems)만 재사용한다. v1 문자열 캐시는 tone 구분이 없어
+ * 새 계약을 만족하지 못하므로 **읽을 수는 있지만 hit로 치지 않는다** —
+ * suggestionVersion이 다르면 miss라는 계약을 그대로 따른다.
+ */
+function readConversationTipsCache(cached, { latestMessageId }) {
+  if (!cached || typeof cached !== 'object') return null;
+  if (cached.lastMessageId !== latestMessageId) return null;
+  if (cached.suggestionVersion !== CONVERSATION_SUGGESTION_VERSION) return null;
+  const items = sanitizeConversationSuggestionItems({
+    suggestions: cached.suggestionItems,
+  });
+  if (!isValidConversationSuggestionItems(items)) return null;
+  return items;
 }
 
 /** Firestore Timestamp를 앱 기준 날짜(Asia/Seoul)의 연/월/일로 변환한다. */
@@ -1846,6 +2027,15 @@ exports.generateConversationTips = onCall(
       throw new HttpsError('failed-precondition', '상대 참가자를 찾을 수 없습니다.');
     }
 
+    // 차단 검증은 **캐시 확인보다 먼저** 한다. 뒤에 두면 차단된 관계에서도
+    // 과거 conversationTips 캐시가 그대로 반환된다.
+    await assertNoMatchBlocks({
+      fn: 'generateConversationTips',
+      matchId,
+      participants,
+      callerUid: request.auth.uid,
+    });
+
     const messageSnap = await matchRef
       .collection('messages')
       .orderBy('createdAt', 'desc')
@@ -1856,18 +2046,17 @@ exports.generateConversationTips = onCall(
     }
 
     const latestMessageId = messageSnap.docs[0].id;
-    const cached = matchData.conversationTips;
-    if (
-      cached?.lastMessageId === latestMessageId &&
-      isValidConversationSuggestions(cached?.suggestions)
-    ) {
+    const cachedItems = readConversationTipsCache(matchData.conversationTips, {
+      latestMessageId,
+    });
+    if (cachedItems) {
       logTextAiEvent('info', 'generateConversationTips', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
         matchHash: safeMatchHash(matchId),
-        count: cached.suggestions.length,
+        count: cachedItems.length,
         retryable: false,
       });
-      return { suggestions: cached.suggestions };
+      return conversationTipsResponse(cachedItems, latestMessageId);
     }
     logTextAiEvent('info', 'generateConversationTips', 'cache_miss', {
       callerHash: safeUidHash(request.auth.uid),
@@ -1926,32 +2115,55 @@ exports.generateConversationTips = onCall(
     });
     let success = false;
     try {
-      const result = await callOpenAiForNarrative({
-        systemPrompt: conversationTipsSystemPrompt(),
-        userPayload: {
-          사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
-          사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
-          공통관심사: tagLabels(commonInterestKeys),
-          최근대화: recentMessages,
-        },
-      });
+      let result;
+      try {
+        result = await callOpenAiForNarrative({
+          systemPrompt: conversationTipsSystemPrompt(),
+          userPayload: {
+            사용자A: { 속성: userA.attrs, 프로필태그: userA.profileTags },
+            사용자B: { 속성: userB.attrs, 프로필태그: userB.profileTags },
+            공통관심사: tagLabels(commonInterestKeys),
+            최근대화: recentMessages,
+          },
+        });
+      } catch (error) {
+        // provider 예외를 그대로 올리면 SDK 메시지가 노출된다. 범주만 남긴다.
+        const classified = classifyProviderError(error);
+        if (!classified) throw error;
+        logTextAiEvent('warn', 'generateConversationTips', 'provider_error', {
+          callerHash: safeUidHash(request.auth.uid),
+          matchHash: safeMatchHash(matchId),
+          errorCategory: classified.category,
+          retryable: classified.retryable,
+        });
+        throw new HttpsError(
+          classified.httpsCode,
+          PROVIDER_ERROR_MESSAGES[classified.httpsCode] ||
+            PROVIDER_ERROR_MESSAGES.internal,
+        );
+      }
 
-      const suggestions = sanitizeConversationSuggestions(result);
-      if (!isValidConversationSuggestions(suggestions)) {
+      const suggestionItems = sanitizeConversationSuggestionItems(result);
+      if (!isValidConversationSuggestionItems(suggestionItems)) {
         logTextAiEvent('warn', 'generateConversationTips', 'invalid_response', {
           callerHash: safeUidHash(request.auth.uid),
           matchHash: safeMatchHash(matchId),
-          count: suggestions.length,
+          count: suggestionItems.length,
           retryable: true,
         });
-        throw new HttpsError('internal', 'GPT 응답 형식이 올바르지 않습니다.');
+        // 다른 채팅 캐시나 demo 문구로 대체하지 않는다.
+        throw new HttpsError('internal', PROVIDER_ERROR_MESSAGES.internal);
       }
 
       await matchRef.set(
         {
           conversationTips: {
+            schemaVersion: 2,
+            suggestionVersion: CONVERSATION_SUGGESTION_VERSION,
             lastMessageId: latestMessageId,
-            suggestions,
+            // 구버전 앱이 읽는 문자열 배열을 함께 저장한다.
+            suggestions: suggestionTextsOf(suggestionItems),
+            suggestionItems,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           },
         },
@@ -1961,10 +2173,10 @@ exports.generateConversationTips = onCall(
       logTextAiEvent('info', 'generateConversationTips', 'generated', {
         callerHash: safeUidHash(request.auth.uid),
         matchHash: safeMatchHash(matchId),
-        count: suggestions.length,
+        count: suggestionItems.length,
         retryable: false,
       });
-      return { suggestions };
+      return conversationTipsResponse(suggestionItems, latestMessageId);
     } finally {
       await releaseTextAiGenerationSlot({
         fn: 'generateConversationTips',

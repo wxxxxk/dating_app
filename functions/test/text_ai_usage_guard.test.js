@@ -179,7 +179,7 @@ test('cache hit returns before text AI guard acquisition', () => {
       'return { narrative: cached, participantAttrs }',
       'return snap.data()',
       'return { icebreakers: cached }',
-      'return { suggestions: cached.suggestions }',
+      'return conversationTipsResponse(cachedItems, latestMessageId)',
     ].map((needle) => fnSrc.indexOf(needle)).filter((idx) => idx >= 0)[0];
     const guardIdx = fnSrc.indexOf('acquireTextAiGenerationSlot({');
     assert.ok(cacheIdx >= 0, `${fn} cache return missing`);
@@ -473,7 +473,8 @@ test('malformed cache is not accepted as cache hit', () => {
   assert.ok(matchSlice.includes('isCurrentMatchEvidenceCache(cached, matchEvidenceMetadata)'));
   assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached) && isCurrentTextContent(cached))'));
   assert.ok(functionSlice(src, 'generateIcebreakers').includes('if (isValidIcebreakerList(cached))'));
-  assert.ok(functionSlice(src, 'generateConversationTips').includes('isValidConversationSuggestions(cached?.suggestions)'));
+  // v2: tone 3종 계약 + suggestionVersion까지 확인해야 hit이다.
+  assert.ok(functionSlice(src, 'generateConversationTips').includes('readConversationTipsCache(matchData.conversationTips'));
 });
 
 test('text content version stamps caches and old caches miss', () => {
@@ -538,7 +539,8 @@ test('result JSON schemas are unchanged', () => {
     '"relationshipStory": null',
     '"relationshipStory": string',
     '{"icebreakers": [{"topic": string, "message": string}]}',
-    '{"suggestions": [string, string, string]}',
+    '{"suggestions":[',
+    '{"id":"natural","tone":"natural","text":"..."},',
     '{"loveScore": number, "mood": string, "message": string, "advice": string}',
     '{"firstImpression": string, "charmPoints": [{"title": string, "description": string}], "appealTip": string}',
   ]) {
@@ -577,6 +579,8 @@ test('no unrelated Flutter or production configuration files are changed for thi
     .filter(Boolean);
   const allowedFlutterFiles = new Set([
     'lib/features/charm/charm_report_screen.dart',
+    // 1-C: 대화 이어가기 복구·보정 대상.
+    'lib/features/chat/chat_screen.dart',
     'lib/features/fortune/fortune_history_screen.dart',
     'lib/features/fortune/fortune_hub_screen.dart',
     'lib/features/fortune/match_fortune_screen.dart',

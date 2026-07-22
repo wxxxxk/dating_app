@@ -71,7 +71,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _inputFocusNode = FocusNode();
   final _scrollController = ScrollController();
   Future<List<Icebreaker>>? _icebreakersFuture;
-  Future<List<ConversationTip>>? _conversationTipsFuture;
+  ConversationHelperStatus _tipsStatus = ConversationHelperStatus.idle;
+  List<ConversationTip> _tips = const [];
+  ConversationTipsErrorKind? _tipsErrorKind;
+
+  /// 요청 세대. 늦게 도착한 이전 응답을 버리는 기준이다.
+  int _tipsGeneration = 0;
+
+  /// 진행 중인 요청이 대상으로 삼은 context.
+  String? _tipsRequestMessageId;
   bool _sending = false;
   bool _checkingBlock = true;
   bool _blocked = false;
@@ -91,8 +99,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final Set<String> _reportedMessageIdsThisSession = {};
   final Map<String, Stream<ChatAppointment?>> _appointmentStreams = {};
   // 카드 rebuild마다 checkin stream을 새로 만들지 않도록 캐시한다.
-  final Map<String, Stream<AppointmentSafetyCheckin?>> _appointmentSafetyStreams =
-      {};
+  final Map<String, Stream<AppointmentSafetyCheckin?>>
+  _appointmentSafetyStreams = {};
   // 안전 확인 제출 중 중복 제출을 막는다.
   bool _submittingSafetyCheck = false;
   String? _lastReadMarker;
@@ -160,17 +168,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   void _watchOtherPresence() {
     _presenceSub = widget.presenceService
-        .watchPresence(
-          matchId: widget.matchId,
-          uid: widget.otherProfile.uid,
-        )
-        .listen(
-          (presence) {
-            if (!mounted) return;
-            setState(() => _otherPresence = presence);
-          },
-          onError: (Object e) => _debugLog('[Chat] presence 구독 실패: $e'),
-        );
+        .watchPresence(matchId: widget.matchId, uid: widget.otherProfile.uid)
+        .listen((presence) {
+          if (!mounted) return;
+          setState(() => _otherPresence = presence);
+        }, onError: (Object e) => _debugLog('[Chat] presence 구독 실패: $e'));
   }
 
   /// presence write는 항상 best-effort — 실패해도 채팅 기능을 막지 않고
@@ -185,7 +187,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             isTyping: isTyping,
           )
           .catchError((Object e) {
-            _debugLog('[Chat] presence 갱신 실패 matchId=${widget.matchId} error=$e');
+            _debugLog(
+              '[Chat] presence 갱신 실패 matchId=${widget.matchId} error=$e',
+            );
           }),
     );
   }
@@ -318,6 +322,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         senderId: widget.currentUid,
         text: text,
       );
+      // 메시지를 보냈으면 이전 추천 context는 더 이상 최신이 아니다.
+      if (mounted) setState(() => _resetTipsState(reason: 'request_cancelled'));
       _scrollToBottom();
     } catch (e) {
       _textController.text = text;
@@ -528,6 +534,67 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _inputFocusNode.requestFocus();
   }
 
+  /// 추천 문장을 composer에 적용한다. **자동 전송하지 않는다.**
+  ///
+  /// 작성 중인 draft가 있으면 확인 없이 덮어쓰지 않는다 — 사용자가 쓰던 문장이
+  /// 사라지는 건 되돌릴 수 없다.
+  Future<void> _applySuggestion(String message) async {
+    if (_blocked || _unmatched) return;
+    final draft = _textController.text.trim();
+    if (draft.isEmpty) {
+      _fillInput(message);
+      return;
+    }
+
+    final action = await showModalBottomSheet<_DraftAction>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Text(
+                '작성 중인 문장이 있어요',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+            ),
+            ListTile(
+              key: const Key('conversation-draft-replace'),
+              leading: const Icon(Icons.swap_horiz_rounded),
+              title: const Text('기존 문장 교체'),
+              onTap: () => Navigator.of(sheetContext).pop(_DraftAction.replace),
+            ),
+            ListTile(
+              key: const Key('conversation-draft-append'),
+              leading: const Icon(Icons.playlist_add_rounded),
+              title: const Text('뒤에 이어 붙이기'),
+              onTap: () => Navigator.of(sheetContext).pop(_DraftAction.append),
+            ),
+            ListTile(
+              key: const Key('conversation-draft-cancel'),
+              leading: const Icon(Icons.close_rounded),
+              title: const Text('취소'),
+              onTap: () => Navigator.of(sheetContext).pop(_DraftAction.cancel),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _DraftAction.replace:
+        _fillInput(message);
+        break;
+      case _DraftAction.append:
+        _fillInput('$draft $message');
+        break;
+      case _DraftAction.cancel:
+      case null:
+        break; // draft를 그대로 둔다.
+    }
+  }
+
   void _syncConversationCoachState({
     required bool hasMessages,
     String? latestMessageId,
@@ -549,24 +616,97 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _hasMessages = hasMessages;
         _latestConversationTipMessageId = latestMessageId;
         if (!hasMessages || messageChanged) {
-          _showConversationTips = false;
-          _conversationTipsFuture = null;
+          // 새 메시지가 오면 이전 추천 context는 무효다.
+          _resetTipsState(reason: 'context_changed');
         }
       });
     });
   }
 
-  void _requestConversationTips({bool forceRefresh = false}) {
+  /// 추천 상태를 초기화한다. 진행 중인 요청도 무효화한다.
+  void _resetTipsState({required String reason}) {
+    _tipsGeneration += 1;
+    _tipsRequestMessageId = null;
+    _showConversationTips = false;
+    _tipsStatus = ConversationHelperStatus.idle;
+    _tips = const [];
+    _tipsErrorKind = null;
+    _debugLog('[ConversationTips] $reason');
+  }
+
+  Future<void> _requestConversationTips({bool forceRefresh = false}) async {
     if (_blocked || _unmatched || !_hasMessages) return;
+    // 진행 중이면 중복 호출하지 않는다.
+    if (_tipsStatus == ConversationHelperStatus.loading) return;
+    if (!forceRefresh && _tipsStatus == ConversationHelperStatus.ready) {
+      setState(() => _showConversationTips = true);
+      return;
+    }
+
+    final requestId = ++_tipsGeneration;
+    final requestMessageId = _latestConversationTipMessageId;
+    _tipsRequestMessageId = requestMessageId;
     setState(() {
       _showConversationTips = true;
-      if (forceRefresh || _conversationTipsFuture == null) {
-        _debugLog('[ConversationTips] 요청 생성 matchId=${widget.matchId}');
-        _conversationTipsFuture = widget.fortuneService.getConversationTips(
-          widget.matchId,
-        );
-      }
+      _tipsStatus = ConversationHelperStatus.loading;
+      _tipsErrorKind = null;
     });
+
+    try {
+      final result = await widget.fortuneService.getConversationTips(
+        widget.matchId,
+      );
+      if (!_isCurrentTipsRequest(requestId, requestMessageId)) {
+        _debugLog('[ConversationTips] stale_response_ignored');
+        return;
+      }
+      if (result.tips.isEmpty) {
+        setState(() {
+          _tipsStatus = ConversationHelperStatus.error;
+          _tipsErrorKind = ConversationTipsErrorKind.invalidResponse;
+        });
+        return;
+      }
+      setState(() {
+        _tips = result.tips;
+        _tipsStatus = ConversationHelperStatus.ready;
+        _tipsErrorKind = null;
+      });
+    } on ConversationTipsFailure catch (failure) {
+      if (!_isCurrentTipsRequest(requestId, requestMessageId)) {
+        _debugLog('[ConversationTips] stale_response_ignored');
+        return;
+      }
+      setState(() {
+        _tipsErrorKind = failure.kind;
+        _tipsStatus = switch (failure.kind) {
+          ConversationTipsErrorKind.rateLimited =>
+            ConversationHelperStatus.rateLimited,
+          ConversationTipsErrorKind.unavailable =>
+            ConversationHelperStatus.unavailable,
+          ConversationTipsErrorKind.unusableChat ||
+          ConversationTipsErrorKind.noMessages =>
+            ConversationHelperStatus.unavailable,
+          _ => ConversationHelperStatus.error,
+        };
+      });
+    } catch (_) {
+      if (!_isCurrentTipsRequest(requestId, requestMessageId)) return;
+      setState(() {
+        _tipsStatus = ConversationHelperStatus.error;
+        _tipsErrorKind = ConversationTipsErrorKind.unknown;
+      });
+    }
+  }
+
+  /// 응답 반영 전 context가 그대로인지 확인한다.
+  bool _isCurrentTipsRequest(int requestId, String? requestMessageId) {
+    if (!mounted) return false;
+    if (requestId != _tipsGeneration) return false;
+    if (_tipsRequestMessageId != requestMessageId) return false;
+    if (_latestConversationTipMessageId != requestMessageId) return false;
+    if (_blocked || _unmatched) return false;
+    return true;
   }
 
   Future<void> _checkBlocked() async {
@@ -678,7 +818,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     } catch (e) {
       // 원문·발신자 정보는 로그에 남기지 않는다. messageId 참조만 남긴다.
-      _debugLog('[Safety] 메시지 신고 실패 matchId=${widget.matchId} messageId=${message.id}');
+      _debugLog(
+        '[Safety] 메시지 신고 실패 matchId=${widget.matchId} messageId=${message.id}',
+      );
       if (mounted) _showSnack('메시지 신고에 실패했어요. 잠시 후 다시 시도해주세요.');
     } finally {
       if (mounted) setState(() => _reportingMessage = false);
@@ -1032,11 +1174,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   Widget _buildConversationCoach() {
     if (!_hasMessages || _unmatched) return const SizedBox.shrink();
     return _ConversationCoachPanel(
-      future: _conversationTipsFuture,
+      status: _tipsStatus,
+      tips: _tips,
+      errorKind: _tipsErrorKind,
       expanded: _showConversationTips,
-      onRequest: () => _requestConversationTips(),
-      onRetry: () => _requestConversationTips(forceRefresh: true),
-      onSelected: _fillInput,
+      onRequest: () => unawaited(_requestConversationTips()),
+      onRetry: () => unawaited(_requestConversationTips(forceRefresh: true)),
+      onSelected: (message) => unawaited(_applySuggestion(message)),
     );
   }
 
@@ -1252,20 +1396,66 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// draft가 있을 때 사용자가 고르는 동작.
+enum _DraftAction { replace, append, cancel }
+
 class _ConversationCoachPanel extends StatelessWidget {
-  final Future<List<ConversationTip>>? future;
+  final ConversationHelperStatus status;
+  final List<ConversationTip> tips;
+  final ConversationTipsErrorKind? errorKind;
   final bool expanded;
   final VoidCallback onRequest;
   final VoidCallback onRetry;
   final ValueChanged<String> onSelected;
 
   const _ConversationCoachPanel({
-    required this.future,
+    required this.status,
+    required this.tips,
+    required this.errorKind,
     required this.expanded,
     required this.onRequest,
     required this.onRetry,
     required this.onSelected,
   });
+
+  String get _errorMessage {
+    switch (errorKind) {
+      case ConversationTipsErrorKind.rateLimited:
+        return '요청이 많아요. 잠시 후 다시 시도해 주세요.';
+      case ConversationTipsErrorKind.unusableChat:
+        return '지금은 이 대화에서 추천을 쓸 수 없어요.';
+      case ConversationTipsErrorKind.noMessages:
+        return '대화가 시작되면 추천을 만들어 드릴게요.';
+      default:
+        return '추천 문장을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+    }
+  }
+
+  Widget _body() {
+    switch (status) {
+      case ConversationHelperStatus.loading:
+        return const _ConversationTipsLoading(
+          key: Key('conversation-helper-loading'),
+        );
+      case ConversationHelperStatus.ready:
+        return _ConversationTipsReady(
+          key: const Key('conversation-helper-ready'),
+          tips: tips,
+          onRetry: onRetry,
+          onSelected: onSelected,
+        );
+      case ConversationHelperStatus.rateLimited:
+      case ConversationHelperStatus.unavailable:
+      case ConversationHelperStatus.error:
+        return _ConversationTipsError(
+          key: const Key('conversation-helper-error'),
+          message: _errorMessage,
+          onRetry: onRetry,
+        );
+      case ConversationHelperStatus.idle:
+        return const SizedBox.shrink();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1281,12 +1471,10 @@ class _ConversationCoachPanel extends StatelessWidget {
       ),
       child: AnimatedSwitcher(
         duration: AppDurations.fast,
-        child: expanded && future != null
-            ? _ConversationTipsFuture(
+        child: expanded && status != ConversationHelperStatus.idle
+            ? KeyedSubtree(
                 key: const ValueKey('conversation-tips'),
-                future: future!,
-                onRetry: onRetry,
-                onSelected: onSelected,
+                child: _body(),
               )
             : Align(
                 key: const ValueKey('conversation-button'),
@@ -1294,6 +1482,7 @@ class _ConversationCoachPanel extends StatelessWidget {
                 // premium accent로 "이건 AI가 돕는 기능"이라는 신호를 준다 —
                 // 전송 버튼(primary)과 구분되게.
                 child: TextButton.icon(
+                  key: const Key('conversation-helper-button'),
                   onPressed: onRequest,
                   icon: const Icon(Icons.auto_awesome_rounded, size: 18),
                   label: const Text(
@@ -1317,84 +1506,66 @@ class _ConversationCoachPanel extends StatelessWidget {
   }
 }
 
-class _ConversationTipsFuture extends StatelessWidget {
-  final Future<List<ConversationTip>> future;
+class _ConversationTipsReady extends StatelessWidget {
+  final List<ConversationTip> tips;
   final VoidCallback onRetry;
   final ValueChanged<String> onSelected;
 
-  const _ConversationTipsFuture({
+  const _ConversationTipsReady({
     super.key,
-    required this.future,
+    required this.tips,
     required this.onRetry,
     required this.onSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<ConversationTip>>(
-      future: future,
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          _debugLog('[ConversationTips] 렌더 상태 loading');
-          return const _ConversationTipsLoading();
-        }
-        if (snap.hasError) {
-          _debugLog('[ConversationTips] 렌더 상태 error');
-          return _ConversationTipsError(onRetry: onRetry);
-        }
-
-        final tips = snap.data ?? [];
-        _debugLog('[ConversationTips] 렌더 상태 done count=${tips.length}');
-        if (tips.isEmpty) {
-          return _ConversationTipsEmpty(onRetry: onRetry);
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 17,
-                  color: AppColors.mint,
-                ),
-                const SizedBox(width: 6),
-                const Expanded(
-                  child: Text(
-                    '대화 이어가기',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: '다시 시도',
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  color: AppColors.textSecondary,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 17,
+              color: AppColors.mint,
             ),
-            const SizedBox(height: 6),
-            ...tips.map(
-              (tip) => _ConversationTipButton(
-                tip: tip,
-                onTap: () => onSelected(tip.message),
+            const SizedBox(width: 6),
+            const Expanded(
+              child: Text(
+                '대화 이어가기',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
+            IconButton(
+              key: const Key('conversation-helper-retry'),
+              tooltip: '다시 시도',
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              color: AppColors.textSecondary,
+              visualDensity: VisualDensity.compact,
+            ),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 6),
+        ...tips.map(
+          (tip) => _ConversationTipButton(
+            key: Key('conversation-suggestion-${tip.keySuffix}'),
+            tip: tip,
+            onTap: () => onSelected(tip.message),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _ConversationTipsLoading extends StatelessWidget {
-  const _ConversationTipsLoading();
+  const _ConversationTipsLoading({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1418,42 +1589,33 @@ class _ConversationTipsLoading extends StatelessWidget {
 }
 
 class _ConversationTipsError extends StatelessWidget {
+  final String message;
   final VoidCallback onRetry;
 
-  const _ConversationTipsError({required this.onRetry});
+  const _ConversationTipsError({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Expanded(
+        Expanded(
           child: Text(
-            '지금은 제안을 불러올 수 없어요.',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            message,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
           ),
         ),
-        TextButton(onPressed: onRetry, child: const Text('재시도')),
-      ],
-    );
-  }
-}
-
-class _ConversationTipsEmpty extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _ConversationTipsEmpty({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Text(
-            '지금은 추천할 화제가 부족해요.',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-          ),
+        TextButton(
+          key: const Key('conversation-helper-retry'),
+          onPressed: onRetry,
+          child: const Text('재시도'),
         ),
-        TextButton(onPressed: onRetry, child: const Text('재시도')),
       ],
     );
   }
@@ -1463,7 +1625,11 @@ class _ConversationTipButton extends StatelessWidget {
   final ConversationTip tip;
   final VoidCallback onTap;
 
-  const _ConversationTipButton({required this.tip, required this.onTap});
+  const _ConversationTipButton({
+    super.key,
+    required this.tip,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {

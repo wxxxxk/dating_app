@@ -130,13 +130,107 @@ class Icebreaker {
   }
 }
 
+/// 추천 문장의 역할. 서버 tone enum과 1:1로 대응한다.
+enum ConversationTipTone { natural, curious, playful }
+
 /// 대화가 잠시 끊겼을 때 입력창에 채워볼 수 있는 AI 대화 코치 문장.
+///
+/// v2부터 서버가 tone을 함께 준다. 구버전 서버(문자열 배열)도 계속 파싱해야
+/// 하므로 tone은 nullable로 둔다.
 class ConversationTip {
   final String message;
+  final ConversationTipTone? tone;
 
-  const ConversationTip({required this.message});
+  const ConversationTip({required this.message, this.tone});
 
   factory ConversationTip.fromValue(Object? value) {
-    return ConversationTip(message: value?.toString() ?? '');
+    return ConversationTip(message: value?.toString().trim() ?? '');
   }
+
+  /// v2 `suggestionItems` 항목. tone이 없거나 알 수 없으면 null로 둔다.
+  factory ConversationTip.fromItem(Map<String, dynamic> map) {
+    final rawTone = map['tone']?.toString() ?? map['id']?.toString();
+    ConversationTipTone? tone;
+    for (final value in ConversationTipTone.values) {
+      if (value.name == rawTone) {
+        tone = value;
+        break;
+      }
+    }
+    return ConversationTip(
+      message: map['text']?.toString().trim() ?? '',
+      tone: tone,
+    );
+  }
+
+  /// 위젯 key에 쓰는 안정적인 식별자.
+  String get keySuffix => tone?.name ?? 'plain';
+}
+
+/// 대화 추천 계약 버전. 서버 CONVERSATION_SUGGESTION_VERSION과 같은 값이어야
+/// 캐시가 hit된다.
+const int kConversationSuggestionVersion = 2;
+
+/// 대화 추천 UI 상태. FutureBuilder의 암묵적 상태 대신 명시적으로 표현한다.
+enum ConversationHelperStatus {
+  idle,
+  loading,
+  ready,
+  rateLimited,
+  unavailable,
+  error,
+}
+
+/// 추천 실패 분류. 화면이 상태를 나눠 보여주기 위한 것이다.
+///
+/// 예전에는 `not-found`를 빈 리스트로 접어서 "추천 없음"과 "오류"를 구분할 수
+/// 없었다. 그래서 실기기에서 원인을 알 수 없었다.
+enum ConversationTipsErrorKind {
+  rateLimited,
+  unavailable,
+  unusableChat,
+  noMessages,
+  invalidResponse,
+  unknown,
+}
+
+/// callable 오류 코드 → 사용자에게 보여줄 분류.
+ConversationTipsErrorKind conversationTipsErrorKindFor(String code) {
+  switch (code) {
+    case 'resource-exhausted':
+      return ConversationTipsErrorKind.rateLimited;
+    case 'unavailable':
+    case 'deadline-exceeded':
+      return ConversationTipsErrorKind.unavailable;
+    case 'failed-precondition':
+    case 'permission-denied':
+      return ConversationTipsErrorKind.unusableChat;
+    case 'not-found':
+      // 빈 상태로 접지 않는다. 조회 자체가 실패한 것이다.
+      return ConversationTipsErrorKind.unavailable;
+    default:
+      return ConversationTipsErrorKind.unknown;
+  }
+}
+
+class ConversationTipsFailure implements Exception {
+  final ConversationTipsErrorKind kind;
+  const ConversationTipsFailure(this.kind);
+
+  @override
+  String toString() => 'ConversationTipsFailure(${kind.name})';
+}
+
+/// 추천 결과 + 요청 시점 context.
+///
+/// [latestMessageId]가 함께 오기 때문에 호출자가 "이 응답이 아직 유효한가"를
+/// 판단할 수 있다. 채팅이 바뀌었거나 새 메시지가 도착했으면 버린다.
+class ConversationTipsResult {
+  final List<ConversationTip> tips;
+  final String latestMessageId;
+
+  const ConversationTipsResult({
+    required this.tips,
+    required this.latestMessageId,
+  });
 }
