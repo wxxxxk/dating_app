@@ -1,3 +1,4 @@
+import '../../core/utils/kst_date.dart' as core_kst;
 import '../../models/public_profile.dart';
 
 /// "오늘의 인연" 추천 결과와 그 선정 규칙.
@@ -121,14 +122,8 @@ class TodayMatchCandidate {
 
 /// KST(Asia/Seoul) 기준 날짜 key. `YYYY-MM-DD`.
 ///
-/// 한국은 1988년 이후 서머타임이 없어 항상 UTC+9다. 과거 날짜를 다루는
-/// 사주 계산과 달리 "오늘"만 필요하므로 고정 오프셋으로 충분하다.
-String kstDateKey(DateTime instant) {
-  final kst = instant.toUtc().add(const Duration(hours: 9));
-  final month = kst.month.toString().padLeft(2, '0');
-  final day = kst.day.toString().padLeft(2, '0');
-  return '${kst.year}-$month-$day';
-}
+/// 9시간 계산은 core/utils/kst_date.dart 한 곳에만 둔다.
+String kstDateKey(DateTime instant) => core_kst.kstDateKey(instant);
 
 /// FNV-1a 32bit. 외부 의존성 없이 안정적인 분산을 얻기 위해 쓴다.
 int _fnv1a(String input) {

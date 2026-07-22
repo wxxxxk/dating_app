@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/kst_date.dart';
 import '../../models/fortune_model.dart';
 import 'fortune_calculator.dart';
 
@@ -332,14 +333,11 @@ class FortuneService {
         .toList();
   }
 
-  static String _dateKey(DateTime d) {
-    final y = d.year.toString().padLeft(4, '0');
-    final m = d.month.toString().padLeft(2, '0');
-    final day = d.day.toString().padLeft(2, '0');
-    return '$y-$m-$day';
-  }
+  /// 서버(`seoulDateKey`)와 같은 기준을 쓴다. 기기 로컬 날짜를 쓰면 시간대가
+  /// 다른 기기나 자정 근처에서 다른 날짜 문서를 읽게 된다.
+  static String _dateKey(DateTime d) => kstDateKey(d);
 
-  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+  static DateTime _dateOnly(DateTime d) => kstDateOnly(d);
 
   Future<HttpsCallableResult<dynamic>> _callFunction(
     Future<HttpsCallableResult<dynamic>> Function() call, {
