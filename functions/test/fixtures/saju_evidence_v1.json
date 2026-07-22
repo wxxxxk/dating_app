@@ -1,0 +1,4408 @@
+{
+  "schemaVersion": 1,
+  "evidenceVersion": 1,
+  "calculationVersion": 3,
+  "conventionVersion": 2,
+  "metadata": {
+    "purpose": "개인 원국 evidence(십성·지장간·음양·오행·지지 관계)의 회귀 고정. 모든 입력은 합성 날짜이며 실제 사용자 생년월일을 포함하지 않는다.",
+    "provenanceLevel": "regression-baseline",
+    "provenanceNote": "기대값은 현재 엔진 출력을 고정한 회귀 baseline이다. 명리 규칙 자체의 정확성은 ten_gods/hidden_stems/branch_relations의 전수 표 테스트가 검증한다. 한국천문연구원 자료는 절기·달력 검증용이며 이 fixture의 출처가 아니다.",
+    "conventionSource": "자평명리 표준 표(십성 규칙, 지장간 본기/중기/여기, 육합·육충·삼합)",
+    "retrievedAt": "2026-07-22"
+  },
+  "cases": [
+    {
+      "id": "personal_01_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "갑",
+          "element": "목",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "jeongJae"
+          },
+          {
+            "position": "month",
+            "stem": "병",
+            "key": "sikSin"
+          },
+          {
+            "position": "day",
+            "stem": "갑",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 3,
+          "yang": 3,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 1,
+            "금": 2,
+            "수": 1,
+            "total": 6
+          },
+          "hidden": {
+            "목": 0,
+            "화": 0,
+            "토": 1,
+            "금": 2,
+            "수": 2,
+            "total": 5
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_02_threeHarmony",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "갑",
+          "element": "목",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "jeongJae"
+          },
+          {
+            "position": "month",
+            "stem": "병",
+            "key": "sikSin"
+          },
+          {
+            "position": "day",
+            "stem": "갑",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "무",
+            "key": "pyeonJae"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "진",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "을",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "계",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 3,
+          "yang": 5,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 2,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 1,
+            "화": 0,
+            "토": 2,
+            "금": 2,
+            "수": 3,
+            "total": 8
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "유",
+              "진"
+            ],
+            "pillars": [
+              "year",
+              "hour"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "threeHarmony",
+            "branches": [
+              "신",
+              "자",
+              "진"
+            ],
+            "pillars": [
+              "day",
+              "month",
+              "hour"
+            ],
+            "resultingElement": "수"
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_03_none",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "갑",
+          "element": "목",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "jeongJae"
+          },
+          {
+            "position": "month",
+            "stem": "병",
+            "key": "sikSin"
+          },
+          {
+            "position": "day",
+            "stem": "갑",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "임",
+            "key": "pyeonIn"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 4,
+          "yang": 4,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 1,
+            "금": 3,
+            "수": 2,
+            "total": 8
+          },
+          "hidden": {
+            "목": 0,
+            "화": 0,
+            "토": 2,
+            "금": 3,
+            "수": 3,
+            "total": 8
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_04_none",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "갑",
+          "element": "목",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "jeongJae"
+          },
+          {
+            "position": "month",
+            "stem": "병",
+            "key": "sikSin"
+          },
+          {
+            "position": "day",
+            "stem": "갑",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "갑",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 3,
+          "yang": 5,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 2,
+            "화": 1,
+            "토": 1,
+            "금": 2,
+            "수": 2,
+            "total": 8
+          },
+          "hidden": {
+            "목": 0,
+            "화": 0,
+            "토": 1,
+            "금": 2,
+            "수": 3,
+            "total": 6
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_05_boundary",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "병",
+          "element": "화",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainMonthPillar",
+          "uncertainElementBalance"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "sangGwan"
+          },
+          {
+            "position": "day",
+            "stem": "병",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 2,
+          "total": 4
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 1,
+            "토": 2,
+            "금": 1,
+            "수": 0,
+            "total": 4
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 1,
+            "금": 2,
+            "수": 0,
+            "total": 4
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_06_sixClash",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "병",
+          "element": "화",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "sangGwan"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "geopJae"
+          },
+          {
+            "position": "day",
+            "stem": "병",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "임",
+            "key": "pyeonGwan"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "진",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "을",
+                "position": "secondary",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "계",
+                "position": "residual",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 4,
+          "yang": 4,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 2,
+            "토": 4,
+            "금": 1,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 3,
+            "수": 2,
+            "total": 10
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "유",
+              "진"
+            ],
+            "pillars": [
+              "year",
+              "hour"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "sixClash",
+            "branches": [
+              "술",
+              "진"
+            ],
+            "pillars": [
+              "day",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_07_none",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "병",
+          "element": "화",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "sangGwan"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "geopJae"
+          },
+          {
+            "position": "day",
+            "stem": "병",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "병",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "sikSin"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 5,
+          "yang": 3,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 3,
+            "토": 3,
+            "금": 2,
+            "수": 0,
+            "total": 8
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 3,
+            "금": 4,
+            "수": 2,
+            "total": 10
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_08_sixHarmony",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "병",
+          "element": "화",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "sangGwan"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "geopJae"
+          },
+          {
+            "position": "day",
+            "stem": "병",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "무",
+            "key": "sikSin"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 4,
+          "yang": 4,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 2,
+            "토": 4,
+            "금": 1,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 2,
+            "금": 3,
+            "수": 2,
+            "total": 8
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "축",
+              "자"
+            ],
+            "pillars": [
+              "month",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_09_sixClash",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "신",
+          "element": "금",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "pyeonIn"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "day",
+            "stem": "신",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 6,
+          "yang": 0,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 2,
+            "금": 2,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 0,
+            "토": 1,
+            "금": 2,
+            "수": 1,
+            "total": 5
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "유",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "day"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_10_sixClash",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "신",
+          "element": "금",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "pyeonIn"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "day",
+            "stem": "신",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "임",
+            "key": "sangGwan"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "진",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "을",
+                "position": "secondary",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "계",
+                "position": "residual",
+                "tenGod": "sikSin"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 6,
+          "yang": 2,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 2,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 2,
+            "화": 0,
+            "토": 2,
+            "금": 2,
+            "수": 2,
+            "total": 8
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "유",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "day"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "유",
+              "진"
+            ],
+            "pillars": [
+              "year",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_11_sixClash",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "신",
+          "element": "금",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "pyeonIn"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "day",
+            "stem": "신",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "병",
+            "key": "jeongGwan"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 7,
+          "yang": 1,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 2,
+            "토": 2,
+            "금": 3,
+            "수": 0,
+            "total": 8
+          },
+          "hidden": {
+            "목": 1,
+            "화": 0,
+            "토": 2,
+            "금": 3,
+            "수": 2,
+            "total": 8
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "유",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "day"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_12_sixClash",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "신",
+          "element": "금",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "pyeonIn"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "day",
+            "stem": "신",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "무",
+            "key": "jeongIn"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "sikSin"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 6,
+          "yang": 2,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 2,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 1,
+            "화": 0,
+            "토": 1,
+            "금": 2,
+            "수": 2,
+            "total": 6
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "유",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "day"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "축",
+              "자"
+            ],
+            "pillars": [
+              "month",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_13_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "geopJae"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "jeongIn"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 4,
+          "yang": 2,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 1,
+            "토": 4,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 2,
+            "금": 3,
+            "수": 1,
+            "total": 7
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_14_knownTime",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "geopJae"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "jeongIn"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "병",
+            "key": "pyeonIn"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "진",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "을",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "계",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 4,
+          "yang": 4,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 2,
+            "토": 5,
+            "금": 1,
+            "수": 0,
+            "total": 8
+          },
+          "hidden": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 3,
+            "수": 2,
+            "total": 10
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "유",
+              "진"
+            ],
+            "pillars": [
+              "year",
+              "hour"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "sixClash",
+            "branches": [
+              "술",
+              "진"
+            ],
+            "pillars": [
+              "day",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_15_knownTime",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "geopJae"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "jeongIn"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "경",
+            "key": "sikSin"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 5,
+          "yang": 3,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 1,
+            "토": 4,
+            "금": 3,
+            "수": 0,
+            "total": 8
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 3,
+            "금": 4,
+            "수": 2,
+            "total": 10
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_16_knownTime",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "geopJae"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "jeongIn"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "임",
+            "key": "pyeonJae"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 4,
+          "yang": 4,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 1,
+            "토": 4,
+            "금": 1,
+            "수": 2,
+            "total": 8
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 2,
+            "금": 3,
+            "수": 2,
+            "total": 8
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "축",
+              "자"
+            ],
+            "pillars": [
+              "month",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_17_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 23,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "계",
+          "element": "수",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "pyeonJae"
+          },
+          {
+            "position": "day",
+            "stem": "계",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "pyeonIn"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "pyeonIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "sikSin"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 6,
+          "yang": 0,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 2,
+            "금": 1,
+            "수": 1,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 0,
+            "토": 1,
+            "금": 2,
+            "수": 1,
+            "total": 5
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "유",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "day"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_18_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 1,
+        "day": 27,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "정",
+          "element": "화",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "기",
+            "key": "sikSin"
+          },
+          {
+            "position": "month",
+            "stem": "정",
+            "key": "biGyeon"
+          },
+          {
+            "position": "day",
+            "stem": "정",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "축",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "계",
+                "position": "secondary",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "신",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "미",
+            "stems": [
+              {
+                "stem": "기",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "정",
+                "position": "secondary",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "을",
+                "position": "residual",
+                "tenGod": "pyeonIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 6,
+          "yang": 0,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 2,
+            "토": 3,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 1,
+            "토": 2,
+            "금": 2,
+            "수": 1,
+            "total": 7
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "축",
+              "미"
+            ],
+            "pillars": [
+              "month",
+              "day"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_19_boundary",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "을",
+          "element": "목",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainYearPillar",
+          "uncertainMonthPillar",
+          "uncertainElementBalance"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "day",
+            "stem": "을",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "biGyeon"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 0,
+          "total": 2
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 2,
+            "화": 0,
+            "토": 0,
+            "금": 0,
+            "수": 0,
+            "total": 2
+          },
+          "hidden": {
+            "목": 1,
+            "화": 0,
+            "토": 0,
+            "금": 0,
+            "수": 0,
+            "total": 1
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_20_hiddenBranch",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "을",
+          "element": "목",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "jeongGwan"
+          },
+          {
+            "position": "month",
+            "stem": "무",
+            "key": "jeongJae"
+          },
+          {
+            "position": "day",
+            "stem": "을",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "갑",
+            "key": "geopJae"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "sikSin"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 3,
+          "yang": 5,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 4,
+            "화": 0,
+            "토": 2,
+            "금": 2,
+            "수": 0,
+            "total": 8
+          },
+          "hidden": {
+            "목": 2,
+            "화": 2,
+            "토": 3,
+            "금": 2,
+            "수": 1,
+            "total": 10
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "술",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "day"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "sixClash",
+            "branches": [
+              "인",
+              "신"
+            ],
+            "pillars": [
+              "month",
+              "hour"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_21_hiddenBranch",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "정",
+          "element": "화",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "jeongJae"
+          },
+          {
+            "position": "month",
+            "stem": "무",
+            "key": "sangGwan"
+          },
+          {
+            "position": "day",
+            "stem": "정",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "사",
+            "stems": [
+              {
+                "stem": "병",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "무",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "경",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 4,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 2,
+            "토": 2,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 3,
+            "토": 3,
+            "금": 2,
+            "수": 0,
+            "total": 9
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_22_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "임",
+          "element": "수",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "pyeonIn"
+          },
+          {
+            "position": "month",
+            "stem": "무",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "day",
+            "stem": "임",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonGwan"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 0,
+          "yang": 6,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 0,
+            "토": 3,
+            "금": 1,
+            "수": 1,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 3,
+            "토": 3,
+            "금": 2,
+            "수": 0,
+            "total": 9
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_23_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 18,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "기",
+          "element": "토",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "sangGwan"
+          },
+          {
+            "position": "month",
+            "stem": "무",
+            "key": "geopJae"
+          },
+          {
+            "position": "day",
+            "stem": "기",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "pyeonIn"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "사",
+            "stems": [
+              {
+                "stem": "병",
+                "position": "main",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "무",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "경",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 4,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 3,
+            "토": 3,
+            "금": 2,
+            "수": 0,
+            "total": 9
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_24_unknownTime",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 23,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "갑",
+          "element": "목",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "month",
+            "stem": "무",
+            "key": "pyeonJae"
+          },
+          {
+            "position": "day",
+            "stem": "갑",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 0,
+          "yang": 6,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 2,
+            "화": 0,
+            "토": 3,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 3,
+            "토": 3,
+            "금": 2,
+            "수": 0,
+            "total": 9
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_25_unknownTime",
+      "input": {
+        "year": 1970,
+        "month": 2,
+        "day": 27,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "sikSin"
+          },
+          {
+            "position": "month",
+            "stem": "무",
+            "key": "biGyeon"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 0,
+          "yang": 6,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 2,
+            "화": 0,
+            "토": 3,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 2,
+            "화": 3,
+            "토": 3,
+            "금": 1,
+            "수": 0,
+            "total": 9
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_26_boundary",
+      "input": {
+        "year": 1970,
+        "month": 3,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "을",
+          "element": "목",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainMonthPillar",
+          "uncertainElementBalance"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "jeongGwan"
+          },
+          {
+            "position": "day",
+            "stem": "을",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "sikSin"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "유",
+            "stems": [
+              {
+                "stem": "신",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 2,
+          "total": 4
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 0,
+            "토": 1,
+            "금": 2,
+            "수": 0,
+            "total": 4
+          },
+          "hidden": {
+            "목": 0,
+            "화": 1,
+            "토": 1,
+            "금": 2,
+            "수": 0,
+            "total": 4
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_27_dayMaster",
+      "input": {
+        "year": 1970,
+        "month": 3,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "경",
+          "element": "금",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "biGyeon"
+          },
+          {
+            "position": "month",
+            "stem": "기",
+            "key": "jeongIn"
+          },
+          {
+            "position": "day",
+            "stem": "경",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "jeongJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 4,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 2,
+            "화": 0,
+            "토": 2,
+            "금": 2,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 2,
+            "화": 2,
+            "토": 2,
+            "금": 1,
+            "수": 0,
+            "total": 7
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "술",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "month"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_28_hiddenBranch",
+      "input": {
+        "year": 1970,
+        "month": 3,
+        "day": 27,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "병",
+          "element": "화",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "pyeonJae"
+          },
+          {
+            "position": "month",
+            "stem": "기",
+            "key": "sangGwan"
+          },
+          {
+            "position": "day",
+            "stem": "병",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "묘",
+            "stems": [
+              {
+                "stem": "을",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "오",
+            "stems": [
+              {
+                "stem": "정",
+                "position": "main",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "기",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 4,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 2,
+            "토": 2,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 2,
+            "토": 2,
+            "금": 1,
+            "수": 0,
+            "total": 6
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixHarmony",
+            "branches": [
+              "술",
+              "묘"
+            ],
+            "pillars": [
+              "year",
+              "month"
+            ],
+            "resultingElement": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_29_threeHarmony",
+      "input": {
+        "year": 1970,
+        "month": 5,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "갑",
+          "element": "목",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "month",
+            "stem": "경",
+            "key": "pyeonGwan"
+          },
+          {
+            "position": "day",
+            "stem": "갑",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "갑",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "sangGwan"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "진",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "을",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              },
+              {
+                "stem": "계",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "신",
+            "stems": [
+              {
+                "stem": "경",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "임",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "pyeonJae"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "자",
+            "stems": [
+              {
+                "stem": "계",
+                "position": "main",
+                "tenGod": "jeongIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 1,
+          "yang": 7,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 2,
+            "화": 0,
+            "토": 2,
+            "금": 3,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 1,
+            "화": 1,
+            "토": 3,
+            "금": 2,
+            "수": 3,
+            "total": 10
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "술",
+              "진"
+            ],
+            "pillars": [
+              "year",
+              "month"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "threeHarmony",
+            "branches": [
+              "신",
+              "자",
+              "진"
+            ],
+            "pillars": [
+              "day",
+              "hour",
+              "month"
+            ],
+            "resultingElement": "수"
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_30_boundary",
+      "input": {
+        "year": 1970,
+        "month": 5,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "병",
+          "element": "화",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainMonthPillar",
+          "uncertainElementBalance"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "pyeonJae"
+          },
+          {
+            "position": "day",
+            "stem": "병",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sikSin"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "jeongJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "geopJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 0,
+          "yang": 4,
+          "total": 4
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 1,
+            "토": 2,
+            "금": 1,
+            "수": 0,
+            "total": 4
+          },
+          "hidden": {
+            "목": 0,
+            "화": 2,
+            "토": 2,
+            "금": 2,
+            "수": 0,
+            "total": 6
+          }
+        },
+        "branchRelations": []
+      }
+    },
+    {
+      "id": "personal_31_threeHarmony",
+      "input": {
+        "year": 1970,
+        "month": 6,
+        "day": 27,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "sikSin"
+          },
+          {
+            "position": "month",
+            "stem": "임",
+            "key": "pyeonJae"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "오",
+            "stems": [
+              {
+                "stem": "정",
+                "position": "main",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "기",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 0,
+          "yang": 6,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 1,
+            "토": 2,
+            "금": 1,
+            "수": 1,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 3,
+            "토": 3,
+            "금": 1,
+            "수": 0,
+            "total": 8
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "threeHarmony",
+            "branches": [
+              "인",
+              "오",
+              "술"
+            ],
+            "pillars": [
+              "day",
+              "month",
+              "year"
+            ],
+            "resultingElement": "화"
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_32_threeHarmony",
+      "input": {
+        "year": 1970,
+        "month": 6,
+        "day": 27,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "full",
+        "precision": "dateAndTime",
+        "dayMaster": {
+          "stem": "무",
+          "element": "토",
+          "yinYang": "yang"
+        },
+        "omittedEvidence": [],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "sikSin"
+          },
+          {
+            "position": "month",
+            "stem": "임",
+            "key": "pyeonJae"
+          },
+          {
+            "position": "day",
+            "stem": "무",
+            "key": "biGyeon"
+          },
+          {
+            "position": "hour",
+            "stem": "병",
+            "key": "pyeonIn"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "jeongIn"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "오",
+            "stems": [
+              {
+                "stem": "정",
+                "position": "main",
+                "tenGod": "jeongIn"
+              },
+              {
+                "stem": "기",
+                "position": "secondary",
+                "tenGod": "geopJae"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "인",
+            "stems": [
+              {
+                "stem": "갑",
+                "position": "main",
+                "tenGod": "pyeonGwan"
+              },
+              {
+                "stem": "병",
+                "position": "secondary",
+                "tenGod": "pyeonIn"
+              },
+              {
+                "stem": "무",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "hour",
+            "branch": "진",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "을",
+                "position": "secondary",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "계",
+                "position": "residual",
+                "tenGod": "jeongJae"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 0,
+          "yang": 8,
+          "total": 8
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 1,
+            "화": 2,
+            "토": 3,
+            "금": 1,
+            "수": 1,
+            "total": 8
+          },
+          "hidden": {
+            "목": 2,
+            "화": 3,
+            "토": 4,
+            "금": 1,
+            "수": 1,
+            "total": 11
+          }
+        },
+        "branchRelations": [
+          {
+            "type": "sixClash",
+            "branches": [
+              "술",
+              "진"
+            ],
+            "pillars": [
+              "year",
+              "hour"
+            ],
+            "resultingElement": null
+          },
+          {
+            "type": "threeHarmony",
+            "branches": [
+              "인",
+              "오",
+              "술"
+            ],
+            "pillars": [
+              "day",
+              "month",
+              "year"
+            ],
+            "resultingElement": "화"
+          }
+        ]
+      }
+    },
+    {
+      "id": "personal_33_hiddenBranch",
+      "input": {
+        "year": 1970,
+        "month": 7,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "precision": "dateOnly",
+        "dayMaster": {
+          "stem": "정",
+          "element": "화",
+          "yinYang": "yin"
+        },
+        "omittedEvidence": [
+          "missingHourPillar"
+        ],
+        "visibleTenGods": [
+          {
+            "position": "year",
+            "stem": "경",
+            "key": "jeongJae"
+          },
+          {
+            "position": "month",
+            "stem": "임",
+            "key": "jeongGwan"
+          },
+          {
+            "position": "day",
+            "stem": "정",
+            "key": "biGyeon"
+          }
+        ],
+        "hiddenStems": [
+          {
+            "position": "year",
+            "branch": "술",
+            "stems": [
+              {
+                "stem": "무",
+                "position": "main",
+                "tenGod": "sangGwan"
+              },
+              {
+                "stem": "신",
+                "position": "secondary",
+                "tenGod": "pyeonJae"
+              },
+              {
+                "stem": "정",
+                "position": "residual",
+                "tenGod": "biGyeon"
+              }
+            ]
+          },
+          {
+            "position": "month",
+            "branch": "오",
+            "stems": [
+              {
+                "stem": "정",
+                "position": "main",
+                "tenGod": "biGyeon"
+              },
+              {
+                "stem": "기",
+                "position": "secondary",
+                "tenGod": "sikSin"
+              }
+            ]
+          },
+          {
+            "position": "day",
+            "branch": "해",
+            "stems": [
+              {
+                "stem": "임",
+                "position": "main",
+                "tenGod": "jeongGwan"
+              },
+              {
+                "stem": "갑",
+                "position": "secondary",
+                "tenGod": "jeongIn"
+              }
+            ]
+          }
+        ],
+        "yinYangVisible": {
+          "yin": 2,
+          "yang": 4,
+          "total": 6
+        },
+        "elementPresence": {
+          "surface": {
+            "목": 0,
+            "화": 2,
+            "토": 1,
+            "금": 1,
+            "수": 2,
+            "total": 6
+          },
+          "hidden": {
+            "목": 1,
+            "화": 2,
+            "토": 2,
+            "금": 1,
+            "수": 1,
+            "total": 7
+          }
+        },
+        "branchRelations": []
+      }
+    }
+  ]
+}

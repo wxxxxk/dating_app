@@ -1,0 +1,2244 @@
+{
+  "schemaVersion": 1,
+  "evidenceVersion": 1,
+  "calculationVersion": 3,
+  "conventionVersion": 2,
+  "metadata": {
+    "purpose": "두 사람 궁합 evidence의 회귀 고정. 점수·퍼센트·자연어 성격 결과는 담지 않는다. 모든 입력은 합성 날짜다.",
+    "provenanceLevel": "regression-baseline",
+    "provenanceNote": "기대값은 현재 엔진 출력을 고정한 회귀 baseline이다. 관계 표 자체의 정확성은 branch_relations 전수 테스트가 검증한다.",
+    "conventionSource": "자평명리 표준 표(오행 생극, 육합·육충)",
+    "retrievedAt": "2026-07-22"
+  },
+  "cases": [
+    {
+      "id": "compat_01_oneDateOnly",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": true,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "hour",
+            "secondBranch": "진"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_02_oneDateOnly",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": true,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_03_oneDateOnly",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": true,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_04_boundaryAmbiguous",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainElementBalance",
+          "uncertainMonthPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_05_crossHarmony",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "hour",
+            "secondBranch": "진"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_06_crossHarmony",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_07_crossHarmony",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 6,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_08_harmonyAndClash",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_09_harmonyAndClash",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "hour",
+            "secondBranch": "진"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_10_harmonyAndClash",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_11_crossClash",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_12_bothDateOnly",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstControlsSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "controls",
+          "secondToFirst": "controlledBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "firstControlsSecond"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_13_firstControlsSecond",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstControlsSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "controls",
+          "secondToFirst": "controlledBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "hour",
+            "secondBranch": "진"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "firstControlsSecond"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_14_firstControlsSecond",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstControlsSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "controls",
+          "secondToFirst": "controlledBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "firstControlsSecond"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_15_firstControlsSecond",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 18,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstControlsSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "controls",
+          "secondToFirst": "controlledBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "firstControlsSecond"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_16_bothDateOnly",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 23,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondGeneratesFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "generatedBy",
+          "secondToFirst": "generates"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "secondGeneratesFirst",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_17_bothDateOnly",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 27,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_18_boundaryAmbiguous",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": false,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          }
+        ],
+        "sharedElements": [
+          "목"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "금",
+            "수",
+            "토",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainElementBalance",
+          "uncertainMonthPillar",
+          "uncertainYearPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_19_crossClash",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": false,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "month",
+            "secondBranch": "인"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_20_crossClash",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "month",
+            "secondBranch": "인"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "day",
+            "secondBranch": "사"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_21_secondGeneratesFirst",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondGeneratesFirst",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generatedBy",
+          "secondToFirst": "generates"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "month",
+            "secondBranch": "인"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "secondGeneratesFirst",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_22_sameElement",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 23,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": true,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "month",
+            "secondBranch": "인"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_23_boundaryAmbiguous",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 3,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": false,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [],
+        "sharedElements": [
+          "금",
+          "목",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainElementBalance",
+          "uncertainMonthPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_24_secondControlsFirst",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 3,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "month",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "day",
+            "secondBranch": "인"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_25_firstGeneratesSecond",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 3,
+        "day": 27,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "month",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "day",
+            "secondBranch": "오"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_26_sameElement",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 5,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 1390
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": true,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "month",
+            "secondBranch": "진"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_27_firstGeneratesSecond",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 5,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [],
+        "sharedElements": [
+          "금",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목",
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainElementBalance",
+          "uncertainMonthPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_28_firstGeneratesSecond",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "second": {
+        "year": 1970,
+        "month": 7,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "firstGeneratesSecond",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "generates",
+          "secondToFirst": "generatedBy"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "오"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "목"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "firstGeneratesSecond",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_29_sameElement",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": true,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixHarmony",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "유"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_30_secondControlsFirst",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "유"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_31_secondControlsFirst",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 11,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "expected": {
+        "confidence": "full",
+        "dayMasterInteraction": {
+          "summary": "secondControlsFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "controlledBy",
+          "secondToFirst": "controls"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "hour",
+            "secondBranch": "진"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "유"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash",
+          "secondControlsFirst"
+        ],
+        "omittedEvidence": []
+      }
+    },
+    {
+      "id": "compat_32_secondGeneratesFirst",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 1,
+        "day": 23,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondGeneratesFirst",
+          "sameElement": false,
+          "sameYinYang": false,
+          "firstToSecond": "generatedBy",
+          "secondToFirst": "generates"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "month",
+            "firstBranch": "자",
+            "secondPillar": "month",
+            "secondBranch": "축"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "유"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토",
+          "화"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "secondGeneratesFirst",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_33_sameElementDifferentYinYang",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 4,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": false,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          }
+        ],
+        "sharedElements": [
+          "목"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "금",
+            "수",
+            "토",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainElementBalance",
+          "uncertainMonthPillar",
+          "uncertainYearPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_34_sameElementDifferentYinYang",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 945
+      },
+      "expected": {
+        "confidence": "full",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": false,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "year",
+            "firstBranch": "유",
+            "secondPillar": "day",
+            "secondBranch": "묘"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "month",
+            "secondBranch": "인"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "술"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": []
+      }
+    },
+    {
+      "id": "compat_35_secondGeneratesFirst",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 2,
+        "day": 11,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "secondGeneratesFirst",
+          "sameElement": false,
+          "sameYinYang": true,
+          "firstToSecond": "generatedBy",
+          "secondToFirst": "generates"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "day",
+            "firstBranch": "신",
+            "secondPillar": "month",
+            "secondBranch": "인"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "술"
+          },
+          {
+            "type": "sixClash",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "day",
+            "secondBranch": "술"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "수",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "secondGeneratesFirst",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar"
+        ]
+      }
+    },
+    {
+      "id": "compat_36_sameElementDifferentYinYang",
+      "first": {
+        "year": 1970,
+        "month": 1,
+        "day": 4,
+        "birthTimeKnown": true,
+        "birthTimeMinutes": 500
+      },
+      "second": {
+        "year": 1970,
+        "month": 3,
+        "day": 6,
+        "birthTimeKnown": false,
+        "birthTimeMinutes": null
+      },
+      "expected": {
+        "confidence": "partial",
+        "dayMasterInteraction": {
+          "summary": "sameElement",
+          "sameElement": true,
+          "sameYinYang": false,
+          "firstToSecond": "same",
+          "secondToFirst": "same"
+        },
+        "crossBranchRelations": [
+          {
+            "type": "sixClash",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "year",
+            "secondBranch": "술"
+          },
+          {
+            "type": "sixHarmony",
+            "firstPillar": "hour",
+            "firstBranch": "진",
+            "secondPillar": "day",
+            "secondBranch": "유"
+          }
+        ],
+        "sharedElements": [
+          "금",
+          "목",
+          "토"
+        ],
+        "complementaryElements": {
+          "onlyInFirst": [
+            "수",
+            "화"
+          ],
+          "onlyInSecond": []
+        },
+        "supports": [
+          "crossSixHarmony",
+          "dayMasterSameElement",
+          "sharedElementPresence"
+        ],
+        "tensions": [
+          "contrastingYinYang",
+          "crossSixClash"
+        ],
+        "omittedEvidence": [
+          "missingHourPillar",
+          "uncertainElementBalance",
+          "uncertainMonthPillar"
+        ]
+      }
+    }
+  ]
+}

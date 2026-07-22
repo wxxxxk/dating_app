@@ -60,8 +60,6 @@ const {
 } = require('./lib/photo_verification_review');
 const { tokensForRecipient } = require('./lib/push_tokens');
 const {
-  SAJU_CALCULATION_VERSION,
-  SAJU_CONVENTION_VERSION,
   SUPPORTED_CALENDAR_TYPE,
   SUPPORTED_TIME_ZONE,
   STATUS: BIRTH_PROFILE_STATUS,
@@ -74,6 +72,17 @@ const {
   legacyAttrsFromChart,
   hasBoundaryUncertainty,
 } = require('./lib/saju/saju_engine_v2');
+const { buildPersonalSajuEvidence } = require('./lib/saju/saju_evidence_v1');
+const {
+  buildCompatibilityEvidence,
+} = require('./lib/saju/compatibility_evidence_v1');
+const {
+  sajuCacheMetadata: sajuCacheMetadataBase,
+  sajuEvidenceCacheMetadata: sajuEvidenceCacheMetadataBase,
+  isCurrentSajuCache: isCurrentSajuCacheBase,
+  matchEvidenceCacheMetadata,
+  isCurrentMatchEvidenceCache,
+} = require('./lib/saju/evidence_cache');
 const {
   createLoungePostCore,
   createFeedPostCore,
@@ -433,36 +442,17 @@ function isCurrentTextContent(value) {
 // 아래 helper들이 users/{uid} 비공개 출생정보만 근거로 계산하고, 그 입력의
 // 지문을 캐시에 함께 저장해 생년월일·출생시간이 바뀌면 캐시가 자연히 만료된다.
 
-/**
- * 캐시 문서에 붙일 계산 근거 metadata.
- *
- * raw 생년월일·시각은 넣지 않는다 — 지문만 저장한다.
- */
-function sajuCacheMetadata(profile) {
-  return {
-    calculationVersion: SAJU_CALCULATION_VERSION,
-    conventionVersion: SAJU_CONVENTION_VERSION,
-    interpretationVersion: TEXT_CONTENT_VERSION,
-    inputFingerprint: profile.inputFingerprint,
-  };
-}
+// 캐시 유효성 판정은 functions/lib/saju/evidence_cache.js로 옮겼다.
+// 여기서는 문구 버전(TEXT_CONTENT_VERSION)만 주입해 얇게 감싼다.
 
-/**
- * 캐시가 지금의 출생정보·계산 convention·문구 버전으로 만들어진 것인지.
- *
- * metadata가 아예 없는 기존 캐시(Phase 5-2 이전)는 항상 miss로 처리한다.
- * production 캐시를 일괄 삭제하지 않고 자연스럽게 재생성되게 하기 위함이다.
- */
-function isCurrentSajuCache(cached, profile) {
-  return !!(
-    cached &&
-    cached.calculationVersion === SAJU_CALCULATION_VERSION &&
-    cached.conventionVersion === SAJU_CONVENTION_VERSION &&
-    cached.interpretationVersion === TEXT_CONTENT_VERSION &&
-    typeof cached.inputFingerprint === 'string' &&
-    cached.inputFingerprint === profile.inputFingerprint
-  );
-}
+const sajuCacheMetadata = (profile) =>
+  sajuCacheMetadataBase(profile, TEXT_CONTENT_VERSION);
+
+const sajuEvidenceCacheMetadata = (profile) =>
+  sajuEvidenceCacheMetadataBase(profile, TEXT_CONTENT_VERSION);
+
+const isCurrentSajuCache = (cached, profile, options) =>
+  isCurrentSajuCacheBase(cached, profile, TEXT_CONTENT_VERSION, options);
 
 /**
  * 본인 출생정보를 읽어 사주 원국을 계산한다.
@@ -504,12 +494,12 @@ function birthChartFromUserData(data, { fn, callerUid }) {
 function birthChartForCounterpart(data, { fn, callerUid, matchId }) {
   const parsed = parseBirthProfile(data);
   if (parsed.status === BIRTH_PROFILE_STATUS.OK) {
-    return computeSajuChart(parsed.profile);
+    return { profile: parsed.profile, chart: computeSajuChart(parsed.profile) };
   }
   if (parsed.status === BIRTH_PROFILE_STATUS.LEGACY_MISSING) {
     const fallback = parseBirthProfile({ ...data, birthTimeKnown: false });
     if (fallback.status === BIRTH_PROFILE_STATUS.OK) {
-      return computeSajuChart(fallback.profile);
+      return { profile: fallback.profile, chart: computeSajuChart(fallback.profile) };
     }
   }
   logTextAiEvent('warn', fn, 'birth_date_missing', {
@@ -551,6 +541,15 @@ function fortuneSystemPrompt() {
     '   null이면 오행 분포를 계산하거나 지어내지 않고, 오행 이야기를 꺼내지 않는다.',
     '1-4. 확정하지 못한 항목이 있으면 태어난 시간을 입력하면 더 볼 수 있다고',
     '   자연스럽게 한 번 안내할 수 있다. 정확도를 과장하지 않는다.',
+    '1-5. "원국근거"에는 십성·지장간·음양·오행 개수·지지 관계가 이미 계산돼 있다.',
+    '   여기 없는 관계(합·충·십성 등)를 새로 계산하거나 추가하지 않는다.',
+    '   omittedEvidence에 있는 항목은 근거가 없다는 뜻이므로 언급하지 않는다.',
+    '   confidence가 partial이면 제한된 근거만으로 이야기한다.',
+    '1-6. 오행 개수는 존재 분포일 뿐 강약·용신 판정이 아니다. 많은 오행을 좋은 것으로,',
+    '   없는 오행을 결함으로 표현하지 않는다. surface와 hidden을 더하지 않는다.',
+    '1-7. 합이 항상 좋고 충이 항상 나쁘다고 쓰지 않는다. 같은 관계도 상황에 따라',
+    '   끌림이 되기도 갈등이 되기도 한다.',
+    '1-8. 명리 용어를 쓰더라도 반드시 연애·대화·관계의 실제 장면으로 풀어 설명한다.',
     '2. 명리학 용어를 나열하지 말고, 연애·대화·관계에서 겪는 실제 상황으로 풀어 쓴다.',
     '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
     '3. 점수·퍼센트·순위 등 숫자 지표나 확정적 운명 예측은 만들지 않는다.',
@@ -580,6 +579,14 @@ function matchSystemPrompt() {
     '1-2. 어느 한쪽의 yearPillar·monthPillar가 null이거나 fiveElementBalance가',
     '   null이면 절기 경계 때문에 확정하지 못한 항목이다. 그 값을 추측하거나',
     '   지어내지 않고, 확정된 항목만으로 두 사람의 궁합을 이야기한다.',
+    '1-3. "궁합근거"의 supports·tensions·crossBranchRelations·dayMasterInteraction은',
+    '   이미 계산된 값이다. 여기 없는 관계를 새로 만들지 않는다.',
+    '1-4. supports가 많다고 좋은 궁합, tensions가 있다고 나쁜 궁합이라고 쓰지 않는다.',
+    '   tension은 갈등이 아니라 두 사람이 다르게 반응하는 지점으로 풀어 쓴다.',
+    '1-5. omittedEvidence에 있는 항목은 근거가 없다는 뜻이므로 언급하지 않는다.',
+    '   confidence가 partial이면 확정된 근거만으로 이야기한다.',
+    '1-6. 명리 용어(십성·지장간·합충)를 나열하지 말고, 두 사람이 실제로 겪는',
+    '   대화·데이트·갈등 장면으로 바꿔 설명한다.',
     '2. 명리학 용어를 나열하기보다, 두 사람이 대화하고 가까워지는 실제 상황으로 풀어 쓴다.',
     '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
     '3. 점수·퍼센트·순위·궁합도 같은 숫자 지표나 확정적 예측은 만들지 않는다.',
@@ -878,6 +885,7 @@ async function readMatchParticipantAttrs({ fn, matchId, participants, callerUid 
   });
   const participantAttrs = {};
   const participantCharts = {};
+  const participantFingerprints = {};
   for (let i = 0; i < participants.length; i += 1) {
     const uid = participants[i];
     const snap = snaps[i];
@@ -890,15 +898,16 @@ async function readMatchParticipantAttrs({ fn, matchId, participants, callerUid 
       });
       throw new HttpsError('not-found', '프로필을 찾을 수 없습니다.');
     }
-    const chart = birthChartForCounterpart(snap.data(), {
+    const { profile, chart } = birthChartForCounterpart(snap.data(), {
       fn,
       callerUid,
       matchId,
     });
     participantCharts[uid] = chart;
+    participantFingerprints[uid] = profile.inputFingerprint;
     participantAttrs[uid] = legacyAttrsFromChart(chart);
   }
-  return { participantAttrs, participantCharts };
+  return { participantAttrs, participantCharts, participantFingerprints };
 }
 
 /**
@@ -1074,12 +1083,15 @@ exports.generateFortuneNarrative = onCall(
     });
     const attrs = legacyAttrsFromChart(chart);
     const evidence = buildEvidencePayload(chart);
+    // Phase 5-3: 십성·지장간·음양·오행·지지 관계를 서버가 계산해 넘긴다.
+    // AI는 이 근거를 해석만 하고 명리 규칙을 직접 계산하지 않는다.
+    const personalEvidence = buildPersonalSajuEvidence(chart);
 
     const cached = snap.data()?.fortuneNarrative;
     if (
       isValidNarrative(cached) &&
       isCurrentTextContent(cached) &&
-      isCurrentSajuCache(cached, profile)
+      isCurrentSajuCache(cached, profile, { requireEvidenceVersion: true })
     ) {
       logTextAiEvent('info', 'generateFortuneNarrative', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
@@ -1104,7 +1116,11 @@ exports.generateFortuneNarrative = onCall(
       try {
         const rawNarrative = await callOpenAiForNarrative({
           systemPrompt: fortuneSystemPrompt(),
-          userPayload: { 속성: attrs, 사주근거: evidence },
+          userPayload: {
+            속성: attrs,
+            사주근거: evidence,
+            원국근거: personalEvidence,
+          },
         });
         narrative = sanitizeNarrative(rawNarrative, { requireStory: false });
         if (!isValidNarrative(narrative)) {
@@ -1125,11 +1141,12 @@ exports.generateFortuneNarrative = onCall(
       }
 
       narrative.contentVersion = TEXT_CONTENT_VERSION;
-      Object.assign(narrative, sajuCacheMetadata(profile), {
+      Object.assign(narrative, sajuEvidenceCacheMetadata(profile), {
         precision: chart.precision,
         // 절기 경계 때문에 연주·월주를 확정하지 못했으면 화면이 오행 레이더를
         // 숨기고 안내를 띄울 수 있게 한다.
         boundaryUncertain: hasBoundaryUncertainty(chart),
+        evidenceConfidence: personalEvidence.confidence,
       });
       await userRef.set({ fortuneNarrative: narrative }, { merge: true });
       success = true;
@@ -1194,7 +1211,11 @@ exports.generateMatchNarrative = onCall(
       callerUid: request.auth.uid,
     });
 
-    const { participantAttrs, participantCharts } = await readMatchParticipantAttrs({
+    const {
+      participantAttrs,
+      participantCharts,
+      participantFingerprints,
+    } = await readMatchParticipantAttrs({
       fn: 'generateMatchNarrative',
       matchId,
       participants,
@@ -1206,13 +1227,28 @@ exports.generateMatchNarrative = onCall(
     const precision = matchPrecisionMetadata(participantCharts);
     const evidenceA = buildEvidencePayload(participantCharts[uidA]);
     const evidenceB = buildEvidencePayload(participantCharts[uidB]);
+    // Phase 5-3: 두 원국의 상호작용을 서버가 결정론적으로 계산한다.
+    const personalEvidenceA = buildPersonalSajuEvidence(participantCharts[uidA]);
+    const personalEvidenceB = buildPersonalSajuEvidence(participantCharts[uidB]);
+    const compatibilityEvidence = buildCompatibilityEvidence({
+      firstChart: participantCharts[uidA],
+      secondChart: participantCharts[uidB],
+      firstPersonalEvidence: personalEvidenceA,
+      secondPersonalEvidence: personalEvidenceB,
+    });
+    // participants는 매치 문서의 canonical order다 — 호출 순서로 바뀌지 않는다.
+    // key에 실제 UID를 쓰지 않고 first/second 자리만 남긴다.
+    const matchEvidenceMetadata = matchEvidenceCacheMetadata({
+      firstFingerprint: participantFingerprints[uidA],
+      secondFingerprint: participantFingerprints[uidB],
+      interpretationVersion: TEXT_CONTENT_VERSION,
+    });
 
     const cached = matchData.fortuneMatch;
     if (
       isValidNarrative(cached) &&
       isCurrentTextContent(cached) &&
-      cached.calculationVersion === SAJU_CALCULATION_VERSION &&
-      cached.conventionVersion === SAJU_CONVENTION_VERSION
+      isCurrentMatchEvidenceCache(cached, matchEvidenceMetadata)
     ) {
       logTextAiEvent('info', 'generateMatchNarrative', 'cache_hit', {
         callerHash: safeUidHash(request.auth.uid),
@@ -1244,6 +1280,9 @@ exports.generateMatchNarrative = onCall(
             속성B: userB,
             사주근거A: evidenceA,
             사주근거B: evidenceB,
+            원국근거A: personalEvidenceA,
+            원국근거B: personalEvidenceB,
+            궁합근거: compatibilityEvidence,
           },
         });
         narrative = sanitizeNarrative(rawNarrative, { requireStory: true });
@@ -1267,9 +1306,8 @@ exports.generateMatchNarrative = onCall(
       }
 
       narrative.contentVersion = TEXT_CONTENT_VERSION;
-      Object.assign(narrative, precision, {
-        calculationVersion: SAJU_CALCULATION_VERSION,
-        conventionVersion: SAJU_CONVENTION_VERSION,
+      Object.assign(narrative, precision, matchEvidenceMetadata, {
+        evidenceConfidence: compatibilityEvidence.confidence,
       });
       await matchRef.set({ fortuneMatch: narrative }, { merge: true });
       success = true;

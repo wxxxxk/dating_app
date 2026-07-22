@@ -456,7 +456,12 @@ test('malformed cache is not accepted as cache hit', () => {
   const fortuneSlice = functionSlice(src, 'generateFortuneNarrative');
   assert.ok(fortuneSlice.includes('isValidNarrative(cached)'));
   assert.ok(fortuneSlice.includes('isCurrentTextContent(cached)'));
-  assert.ok(fortuneSlice.includes('isCurrentSajuCache(cached, profile)'));
+  // Phase 5-3: evidenceVersion까지 일치해야 hit이다.
+  assert.ok(
+    fortuneSlice.includes(
+      "isCurrentSajuCache(cached, profile, { requireEvidenceVersion: true })",
+    ),
+  );
   const dailySlice = functionSlice(src, 'generateDailyFortune');
   assert.ok(dailySlice.includes('isValidDailyFortune(snap.data())'));
   assert.ok(dailySlice.includes('isCurrentTextContent(snap.data())'));
@@ -464,7 +469,8 @@ test('malformed cache is not accepted as cache hit', () => {
   const matchSlice = functionSlice(src, 'generateMatchNarrative');
   assert.ok(matchSlice.includes('isValidNarrative(cached)'));
   assert.ok(matchSlice.includes('isCurrentTextContent(cached)'));
-  assert.ok(matchSlice.includes('cached.calculationVersion === SAJU_CALCULATION_VERSION'));
+  // 궁합은 두 참가자 지문 + evidenceVersion까지 확인한다.
+  assert.ok(matchSlice.includes('isCurrentMatchEvidenceCache(cached, matchEvidenceMetadata)'));
   assert.ok(functionSlice(src, 'generateCharmReport').includes('if (!refresh && isValidCharmReport(cached) && isCurrentTextContent(cached))'));
   assert.ok(functionSlice(src, 'generateIcebreakers').includes('if (isValidIcebreakerList(cached))'));
   assert.ok(functionSlice(src, 'generateConversationTips').includes('isValidConversationSuggestions(cached?.suggestions)'));

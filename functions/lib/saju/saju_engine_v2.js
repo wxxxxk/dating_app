@@ -31,38 +31,16 @@ const {
   SAJU_CONVENTION_VERSION,
 } = require('./birth_profile');
 
-/** 천간 10개. index는 60갑자 계산에 그대로 쓰인다. */
-const STEMS = Object.freeze([
-  { korean: '갑', hanja: '甲', element: '목', yin: false },
-  { korean: '을', hanja: '乙', element: '목', yin: true },
-  { korean: '병', hanja: '丙', element: '화', yin: false },
-  { korean: '정', hanja: '丁', element: '화', yin: true },
-  { korean: '무', hanja: '戊', element: '토', yin: false },
-  { korean: '기', hanja: '己', element: '토', yin: true },
-  { korean: '경', hanja: '庚', element: '금', yin: false },
-  { korean: '신', hanja: '辛', element: '금', yin: true },
-  { korean: '임', hanja: '壬', element: '수', yin: false },
-  { korean: '계', hanja: '癸', element: '수', yin: true },
-]);
-
-/** 지지 12개. 대표 오행만 쓰고 지장간(藏干) 세부 가중치는 반영하지 않는다. */
-const BRANCHES = Object.freeze([
-  { korean: '자', hanja: '子', element: '수' },
-  { korean: '축', hanja: '丑', element: '토' },
-  { korean: '인', hanja: '寅', element: '목' },
-  { korean: '묘', hanja: '卯', element: '목' },
-  { korean: '진', hanja: '辰', element: '토' },
-  { korean: '사', hanja: '巳', element: '화' },
-  { korean: '오', hanja: '午', element: '화' },
-  { korean: '미', hanja: '未', element: '토' },
-  { korean: '신', hanja: '申', element: '금' },
-  { korean: '유', hanja: '酉', element: '금' },
-  { korean: '술', hanja: '戌', element: '토' },
-  { korean: '해', hanja: '亥', element: '수' },
-]);
-
-/** 오행 순서를 고정해 동점일 때도 결과가 항상 같게 만든다. */
-const ELEMENT_KEYS = Object.freeze(['목', '화', '토', '금', '수']);
+// 천간·지지·오행 표는 Phase 5-3에서 saju_constants.js로 옮겼다.
+// 십성·지장간·지지 관계 모듈이 같은 표를 공유해야 하기 때문이다.
+// 기존 import 경로가 깨지지 않도록 여기서 그대로 re-export한다.
+const {
+  ELEMENT_KEYS,
+  STEMS,
+  BRANCHES,
+  elementRelation,
+  emptyElementCounts,
+} = require('./saju_constants');
 
 const ZODIAC_BOUNDARIES = Object.freeze([
   { month: 1, day: 20, sign: '물병자리', element: '공기' },
@@ -147,7 +125,7 @@ function yearAndMonthPillarsAt(instantUtc, calendarYear) {
 
 /** 오행 count를 센다. */
 function countElements(pillars) {
-  const counts = Object.fromEntries(ELEMENT_KEYS.map((k) => [k, 0]));
+  const counts = emptyElementCounts();
   for (const pillar of pillars) {
     counts[pillar.stemElement] += 1;
     counts[pillar.branchElement] += 1;
@@ -348,6 +326,8 @@ function legacyAttrsFromChart(chart) {
 
 module.exports = {
   STEMS,
+  ELEMENT_KEYS,
+  elementRelation,
   hasBoundaryUncertainty,
   BRANCHES,
   ELEMENT_KEYS,
