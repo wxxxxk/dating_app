@@ -9,19 +9,35 @@ import '../../../core/theme/app_colors.dart';
 class SajuPrecisionNotice extends StatelessWidget {
   final bool hasKnownTime;
 
+  /// 절기 경계에 걸려 연주·월주를 확정하지 못한 상태(Phase 5-2A).
+  /// 출생시간을 아는 사용자에게는 발생하지 않는다.
+  final bool boundaryUncertain;
+
   /// null이면 "추가하기" 버튼을 표시하지 않는다.
   final VoidCallback? onAddBirthTime;
 
   const SajuPrecisionNotice({
     super.key,
     required this.hasKnownTime,
+    this.boundaryUncertain = false,
     this.onAddBirthTime,
   });
+
+  /// 어떤 근거를 제외했는지를 알려준다. 정확도를 깎아내리는 경고문이 아니다.
+  String get _headline {
+    if (hasKnownTime) return '생년월일과 태어난 시간을 기준으로 해석했어요.';
+    if (boundaryUncertain) {
+      return '태어난 시간이 없어 절기 경계에 걸린 일부 항목은 제외하고 해석했어요.';
+    }
+    return '태어난 시간 없이 기본 사주를 해석했어요.';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      key: const Key('saju-precision-notice'),
+      key: boundaryUncertain && !hasKnownTime
+          ? const Key('saju-boundary-uncertainty-notice')
+          : const Key('saju-precision-notice'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -46,9 +62,7 @@ class SajuPrecisionNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  hasKnownTime
-                      ? '생년월일과 태어난 시간을 기준으로 해석했어요.'
-                      : '태어난 시간 없이 기본 사주를 해석했어요.',
+                  _headline,
                   style: const TextStyle(
                     fontSize: 12.5,
                     color: AppColors.textPrimary,
@@ -90,15 +104,22 @@ class SajuPrecisionNotice extends StatelessWidget {
   }
 }
 
-/// 궁합 화면용 — 두 사람 중 한 명이라도 출생시간이 없을 때만 표시한다.
+/// 궁합 화면용 — 두 사람 중 확정하지 못한 근거가 있을 때만 표시한다.
 class MatchPrecisionNotice extends StatelessWidget {
   final bool missingBirthTime;
 
-  const MatchPrecisionNotice({super.key, required this.missingBirthTime});
+  /// 절기 경계 때문에 연주·월주를 확정하지 못한 참가자가 있으면 true.
+  final bool boundaryUncertain;
+
+  const MatchPrecisionNotice({
+    super.key,
+    required this.missingBirthTime,
+    this.boundaryUncertain = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    if (!missingBirthTime) return const SizedBox.shrink();
+    if (!missingBirthTime && !boundaryUncertain) return const SizedBox.shrink();
     return Container(
       key: const Key('match-precision-notice'),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -107,15 +128,21 @@ class MatchPrecisionNotice extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.schedule_rounded, size: 18, color: AppColors.textSecondary),
-          SizedBox(width: 10),
+          const Icon(
+            Icons.schedule_rounded,
+            size: 18,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '두 사람 중 일부의 출생시간이 없어 기본 궁합으로 해석했어요.',
-              style: TextStyle(
+              boundaryUncertain
+                  ? '두 사람 중 일부의 출생시간이 없어 확정 가능한 항목만으로 궁합을 해석했어요.'
+                  : '두 사람 중 일부의 출생시간이 없어 기본 궁합으로 해석했어요.',
+              style: const TextStyle(
                 fontSize: 12.5,
                 color: AppColors.textPrimary,
                 height: 1.5,

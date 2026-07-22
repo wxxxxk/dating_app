@@ -160,13 +160,18 @@ class _MyFortuneScreenState extends State<MyFortuneScreen> {
             const SizedBox(height: 16),
             SajuPrecisionNotice(
               hasKnownTime: widget.profile.birthProfile.hasKnownTime,
+              boundaryUncertain: narrative.boundaryUncertain,
               onAddBirthTime: widget.onAddBirthTime,
             ),
             const SizedBox(height: 24),
             _CharacterCard(narrative: narrative),
             const SizedBox(height: 24),
-            _OhaengSection(balance: _balance, saju: _saju),
-            const SizedBox(height: 20),
+            // 절기 경계에 걸려 연주·월주가 확정되지 않으면 오행 분포도 확정되지
+            // 않는다. 가짜 중간값을 보여주는 대신 아예 감춘다(Phase 5-2A).
+            if (!narrative.boundaryUncertain) ...[
+              _OhaengSection(balance: _balance, saju: _saju),
+              const SizedBox(height: 20),
+            ],
             _ShareButton(
               label: '결과 공유하기',
               onPressed: _sharing ? null : _shareFortuneResult,

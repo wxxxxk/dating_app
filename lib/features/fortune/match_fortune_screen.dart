@@ -147,8 +147,12 @@ class _MatchFortuneScreenState extends State<MatchFortuneScreen> {
               otherSaju: otherSaju,
             ),
             const SizedBox(height: 24),
-            MatchPrecisionNotice(missingBirthTime: narrative.missingBirthTime),
-            if (narrative.missingBirthTime) const SizedBox(height: 16),
+            MatchPrecisionNotice(
+              missingBirthTime: narrative.missingBirthTime,
+              boundaryUncertain: narrative.boundaryUncertain,
+            ),
+            if (narrative.missingBirthTime || narrative.boundaryUncertain)
+              const SizedBox(height: 16),
             _CharacterCard(narrative: narrative),
             const SizedBox(height: 20),
             _AiRecommendationReasons(narrative: narrative),

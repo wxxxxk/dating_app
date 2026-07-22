@@ -13,8 +13,14 @@
 
 const crypto = require('crypto');
 
-/** 계산 알고리즘 버전. 계산 결과가 달라지는 변경이면 올린다. */
-const SAJU_CALCULATION_VERSION = 2;
+/**
+ * 계산 알고리즘 버전. 계산 결과가 달라지는 변경이면 올린다.
+ *
+ * 3 (Phase 5-2A): 출생시간 미상일 때 00:00 대입을 없애고 하루 구간 평가로
+ * 바꿨다. 태양 황경도 VSOP87 절단판으로 교체해 절입 시각 오차를 7분 → 1분으로
+ * 줄였다. 명리 convention 자체는 그대로라 conventionVersion은 2를 유지한다.
+ */
+const SAJU_CALCULATION_VERSION = 3;
 
 /** 계산 convention 버전(입춘 연주 / 절기 월주 / 자정 일주 / 진태양시 미적용). */
 const SAJU_CONVENTION_VERSION = 2;

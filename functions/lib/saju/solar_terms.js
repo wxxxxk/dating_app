@@ -1,20 +1,27 @@
 'use strict';
 
 /**
- * 절기(태양 황경) 계산 — Phase 5-2.
+ * 절기(태양 황경) 계산 — Phase 5-2 / 5-2A.
  *
- * Flutter가 쓰는 `saju` 패키지(lib/src/utils/solar_longitude.dart,
- * lib/src/core/four_pillars.dart)와 **같은 알고리즘**을 서버로 옮긴 것이다.
- * 서버가 사주 계산의 source of truth가 되려면 연주(입춘 경계)와 월주(절기 경계)를
- * 서버에서 직접 구할 수 있어야 한다.
+ * 서버가 사주 계산의 source of truth이므로, 연주(입춘 경계)와 월주(절기 경계)를
+ * 서버에서 직접 구한다.
  *
- * 두 구현이 어긋나면 사용자가 보는 값이 흔들리므로, 동일 입력에 대한 parity를
- * test/saju_engine_v2.test.js의 고정 fixture로 검증한다.
+ * Phase 5-2A 변경: 태양 황경을 Meeus 저정밀 해(Flutter `saju` 패키지와 동일)에서
+ * VSOP87D 절단판(solar_longitude_vsop.js)으로 교체했다. 저정밀 해는 절입 시각이
+ * 공표값과 **최대 7분** 어긋나, 절입 직전·직후에 태어난 사용자의 월주(입춘이면
+ * 연주까지)가 틀렸다. 지금은 공표값과 1분 이내로 일치한다.
+ *
+ * 그 결과 Flutter `saju` 패키지와는 **절입 전후 약 ±7분 구간에서만** 결과가
+ * 갈릴 수 있다. 서버 계산이 canonical이고, Flutter 계산은 오행 레이더 표시용
+ * 보조값이라 이 차이를 허용한다(test/saju_engine_v2.test.js의 parity 테스트가
+ * 경계 구간을 제외하고 대조한다).
  *
  * 시간대: Asia/Seoul만 지원한다. 다만 한국 표준시는 역사적으로 바뀌었으므로
  * (1954~1961 UTC+8:30, 1987~1988 서머타임 UTC+10:00) 고정 +9시간으로
  * 계산하지 않고, Intl의 IANA 시간대 데이터에서 그 시점의 실제 offset을 찾는다.
  */
+
+const { sunApparentLongitude } = require('./solar_longitude_vsop');
 
 const SEOUL = 'Asia/Seoul';
 
@@ -58,55 +65,6 @@ function seoulWallClockToUtc(year, month, day, minutesOfDay = 0) {
 function normDeg(x) {
   const v = x % 360;
   return v < 0 ? v + 360 : v;
-}
-
-function deg2rad(deg) {
-  return (deg * Math.PI) / 180;
-}
-
-/**
- * 주어진 UTC 시점의 태양 겉보기 황경(도).
- *
- * saju 패키지 `sunApparentLongitude`와 같은 식(Meeus 저정밀 해)을 쓴다.
- */
-function sunApparentLongitude(dateUtc) {
-  let y = dateUtc.getUTCFullYear();
-  let m = dateUtc.getUTCMonth() + 1;
-  const d =
-    dateUtc.getUTCDate() +
-    (dateUtc.getUTCHours() +
-      (dateUtc.getUTCMinutes() + dateUtc.getUTCSeconds() / 60) / 60) /
-      24;
-
-  if (m <= 2) {
-    y -= 1;
-    m += 12;
-  }
-
-  const a = Math.floor(y / 100);
-  const b = 2 - a + Math.floor(a / 4);
-  const jd =
-    Math.floor(365.25 * (y + 4716)) +
-    Math.floor(30.6001 * (m + 1)) +
-    d +
-    b -
-    1524.5;
-
-  const t = (jd - 2451545.0) / 36525.0;
-
-  const l0 = normDeg(280.46646 + 36000.76983 * t + 0.0003032 * t * t);
-  const mAnomaly = normDeg(357.52911 + 35999.05029 * t - 0.0001537 * t * t);
-
-  const c =
-    (1.914602 - 0.004817 * t - 0.000014 * t * t) * Math.sin(deg2rad(mAnomaly)) +
-    (0.019993 - 0.000101 * t) * Math.sin(deg2rad(2 * mAnomaly)) +
-    0.000289 * Math.sin(deg2rad(3 * mAnomaly));
-
-  const trueLong = l0 + c;
-  const omega = 125.04 - 1934.136 * t;
-  const lambda = trueLong - 0.00569 - 0.00478 * Math.sin(deg2rad(omega));
-
-  return normDeg(lambda);
 }
 
 /** 두 각도의 차이를 -180~180으로 표현한다. */

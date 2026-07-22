@@ -72,6 +72,7 @@ const {
   computeSajuChart,
   buildEvidencePayload,
   legacyAttrsFromChart,
+  hasBoundaryUncertainty,
 } = require('./lib/saju/saju_engine_v2');
 const {
   createLoungePostCore,
@@ -541,8 +542,15 @@ function fortuneSystemPrompt() {
     '   주어지지 않은 정보(정확한 생년월일, 이름, 성별 등)를 추측하거나 지어내지 않는다.',
     '1-1. "사주근거"의 hourPillar가 null이거나 missingBirthTime이 true이면,',
     '   출생시간을 모르는 것이다. 시주(時柱)나 태어난 시간대에서 온 성향을 언급하거나',
-    '   지어내지 않는다. 연/월/일주와 오행 분포만으로 해석한다.',
-    '1-2. fiveElementBalance는 이미 계산된 값이다. 직접 다시 세거나 바꾸지 않는다.',
+    '   지어내지 않는다.',
+    '1-2. yearPillar 또는 monthPillar가 null이면, 태어난 날이 절기 경계에 걸려',
+    '   출생시간 없이는 확정할 수 없는 항목이다. 그 기둥을 해석 근거로 쓰지 않고,',
+    '   절기 경계의 어느 쪽인지 추측하지도 않는다. boundaryUncertainty가 true인',
+    '   항목도 마찬가지다. 확정된 일주·일간과 나머지 값만 근거로 삼는다.',
+    '1-3. fiveElementBalance는 이미 계산된 값이다. 직접 다시 세거나 바꾸지 않는다.',
+    '   null이면 오행 분포를 계산하거나 지어내지 않고, 오행 이야기를 꺼내지 않는다.',
+    '1-4. 확정하지 못한 항목이 있으면 태어난 시간을 입력하면 더 볼 수 있다고',
+    '   자연스럽게 한 번 안내할 수 있다. 정확도를 과장하지 않는다.',
     '2. 명리학 용어를 나열하지 말고, 연애·대화·관계에서 겪는 실제 상황으로 풀어 쓴다.',
     '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
     '3. 점수·퍼센트·순위 등 숫자 지표나 확정적 운명 예측은 만들지 않는다.',
@@ -569,6 +577,9 @@ function matchSystemPrompt() {
     '   주어지지 않은 정보(이름, 나이, 외모 등)를 추측하거나 지어내지 않는다.',
     '1-1. 사주근거의 missingBirthTime이 true인 사람은 출생시간을 모르는 것이다.',
     '   그 사람의 시주나 태어난 시간대 성향을 언급하거나 지어내지 않는다.',
+    '1-2. 어느 한쪽의 yearPillar·monthPillar가 null이거나 fiveElementBalance가',
+    '   null이면 절기 경계 때문에 확정하지 못한 항목이다. 그 값을 추측하거나',
+    '   지어내지 않고, 확정된 항목만으로 두 사람의 궁합을 이야기한다.',
     '2. 명리학 용어를 나열하기보다, 두 사람이 대화하고 가까워지는 실제 상황으로 풀어 쓴다.',
     '   존댓말로, 조사와 문법이 자연스러운 완성 문장을 쓴다.',
     '3. 점수·퍼센트·순위·궁합도 같은 숫자 지표나 확정적 예측은 만들지 않는다.',
@@ -890,13 +901,21 @@ async function readMatchParticipantAttrs({ fn, matchId, participants, callerUid 
   return { participantAttrs, participantCharts };
 }
 
-/** 매치 결과에 붙일 precision metadata. 두 사람 중 한 명이라도 시간이 없으면 표시한다. */
+/**
+ * 매치 결과에 붙일 precision metadata.
+ *
+ * 두 사람 중 한 명이라도 출생시간이 없거나(dateOnly), 절기 경계 때문에 연주·월주를
+ * 확정하지 못했으면(boundaryUncertain) 화면이 "확정 가능한 항목만으로 해석했다"고
+ * 알릴 수 있게 한다.
+ */
 function matchPrecisionMetadata(participantCharts) {
   const charts = Object.values(participantCharts);
   const missing = charts.some((chart) => chart.precision === 'dateOnly');
+  const boundaryUncertain = charts.some((chart) => hasBoundaryUncertainty(chart));
   return {
     precision: missing ? 'dateOnly' : 'dateAndTime',
     missingBirthTime: missing,
+    boundaryUncertain,
   };
 }
 
@@ -1108,6 +1127,9 @@ exports.generateFortuneNarrative = onCall(
       narrative.contentVersion = TEXT_CONTENT_VERSION;
       Object.assign(narrative, sajuCacheMetadata(profile), {
         precision: chart.precision,
+        // 절기 경계 때문에 연주·월주를 확정하지 못했으면 화면이 오행 레이더를
+        // 숨기고 안내를 띄울 수 있게 한다.
+        boundaryUncertain: hasBoundaryUncertainty(chart),
       });
       await userRef.set({ fortuneNarrative: narrative }, { merge: true });
       success = true;
@@ -1929,6 +1951,8 @@ function dailyFortuneSystemPrompt() {
     '   주어지지 않은 정보를 추측하거나 지어내지 않는다.',
     '1-1. "사주근거"의 missingBirthTime이 true이면 출생시간을 모르는 것이다.',
     '   시주나 태어난 시간대 이야기를 지어내지 않는다.',
+    '1-2. yearPillar·monthPillar가 null이거나 fiveElementBalance가 null이면',
+    '   확정되지 않은 항목이다. 추측하거나 지어내지 않고 근거에서 제외한다.',
     '2. 점술 설명문이 아니라 오늘 하루 참고할 수 있는 짧고 구체적인 연애 조언으로 쓴다.',
     '   존댓말로, 확정적 예언 대신 공감과 응원 위주로 표현한다.',
     '   매일 비슷한 generic 문구를 반복하지 말고 그날의 결을 담는다.',
@@ -2058,6 +2082,7 @@ exports.generateDailyFortune = onCall(
       fortune.contentVersion = TEXT_CONTENT_VERSION;
       Object.assign(fortune, sajuCacheMetadata(profile), {
         precision: chart.precision,
+        boundaryUncertain: hasBoundaryUncertainty(chart),
       });
       await dailyRef.set(fortune);
       success = true;

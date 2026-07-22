@@ -30,6 +30,10 @@ class FortuneNarrative {
   /// 궁합의 경우 두 사람 중 한 명이라도 출생시간이 없으면 true.
   final bool missingBirthTime;
 
+  /// 절기 경계에 걸려 연주·월주를 확정하지 못했으면 true (Phase 5-2A).
+  /// 이 경우 오행 분포도 확정되지 않으므로 화면에서 오행 표시를 감춘다.
+  final bool boundaryUncertain;
+
   const FortuneNarrative({
     required this.characterType,
     required this.summary,
@@ -37,6 +41,7 @@ class FortuneNarrative {
     this.relationshipStory,
     this.precision,
     this.missingBirthTime = false,
+    this.boundaryUncertain = false,
   });
 
   factory FortuneNarrative.fromMap(Map<String, dynamic> map) {
@@ -56,6 +61,7 @@ class FortuneNarrative {
           : _stripDecorativeSymbols(map['relationshipStory'] as String),
       precision: map['precision'] as String?,
       missingBirthTime: map['missingBirthTime'] as bool? ?? false,
+      boundaryUncertain: map['boundaryUncertain'] as bool? ?? false,
     );
   }
 }

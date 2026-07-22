@@ -38,9 +38,42 @@ function userDoc(overrides = {}) {
   };
 }
 
-test('버전 상수가 convention 2로 고정돼 있다', () => {
-  assert.equal(SAJU_CALCULATION_VERSION, 2);
+test('버전 상수 — Phase 5-2A에서 calculationVersion만 3으로 올랐다', () => {
+  // 명리 convention(입춘 연주/절기 월주/자정 일주/진태양시 미적용)은 그대로다.
+  // 바뀐 것은 미상 시간 처리와 황경 정밀도, 즉 계산 알고리즘뿐이다.
+  assert.equal(SAJU_CALCULATION_VERSION, 3);
   assert.equal(SAJU_CONVENTION_VERSION, 2);
+});
+
+test('calculationVersion이 바뀌면 같은 출생정보라도 지문이 달라진다', () => {
+  // 기존 calculationVersion 2로 만들어진 캐시가 자연스럽게 miss돼야 한다.
+  const profile = parseBirthProfile(userDoc(), { now: NOW }).profile;
+  const canonical = {
+    birthDate: '1995-02-04',
+    birthCalendarType: 'solar',
+    birthTimeKnown: true,
+    birthTimeMinutes: 455,
+    birthTimeZone: 'Asia/Seoul',
+    conventionVersion: SAJU_CONVENTION_VERSION,
+  };
+  const crypto = require('node:crypto');
+  const hashWith = (calculationVersion) =>
+    crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({
+          ...canonical,
+          calculationVersion,
+          conventionVersion: SAJU_CONVENTION_VERSION,
+        }),
+      )
+      .digest('hex');
+
+  // 현재 버전으로 만든 지문은 엔진 지문과 같아야 한다(키 순서까지 동일한 계약).
+  const v2 = hashWith(2);
+  const v3 = hashWith(3);
+  assert.notEqual(v2, v3, 'calculationVersion이 지문에 반영되지 않는다');
+  assert.notEqual(profile.inputFingerprint, v2, 'v2 캐시가 그대로 hit되면 안 된다');
 });
 
 test('실재하지 않는 양력 날짜를 rollover 없이 거부한다', () => {

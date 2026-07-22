@@ -561,7 +561,7 @@ test('profile insight and ideal image guard tests remain present', () => {
 
 // 이 가드는 phase 단위로 갱신한다 — 현재 작업 중인 phase가 손대도 되는
 // Flutter 파일 범위를 고정해, 관련 없는 화면이 함께 바뀌는 것을 막는다.
-// 현재 기준: Phase 5-2 (출생정보 정밀화 및 서버 원천 계산 전환).
+// 현재 기준: Phase 5-2A (출생시간 미상 경계 처리 및 절기 독립 검증).
 test('no unrelated Flutter or production configuration files are changed for this phase', () => {
   const changed = require('child_process')
     .execFileSync('git', ['diff', '--name-only'], { cwd: path.join(__dirname, '..', '..') })
@@ -575,6 +575,7 @@ test('no unrelated Flutter or production configuration files are changed for thi
     'lib/features/fortune/fortune_hub_screen.dart',
     'lib/features/fortune/match_fortune_screen.dart',
     'lib/features/fortune/my_fortune_screen.dart',
+    'lib/features/fortune/widgets/saju_precision_notice.dart',
     'lib/features/home/home_screen.dart',
     'lib/features/onboarding/basic_info_step.dart',
     'lib/features/onboarding/onboarding_screen.dart',
