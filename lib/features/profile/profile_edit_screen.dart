@@ -285,7 +285,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   Future<void> _pickAndUploadPhoto(int index) async {
     // 온보딩과 같은 processor를 쓴다. 진입점마다 기준이 달라지면
     // 같은 사진도 등록 경로에 따라 화질이 달라진다.
-    final processed = await _profilePhotoProcessor.pickFromGallery();
+    final ProcessedProfilePhoto? processed;
+    try {
+      processed = await _profilePhotoProcessor.pickFromGallery();
+    } on ProfilePhotoFailure catch (failure) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failure.userMessage)));
+      }
+      return;
+    }
     if (processed == null || !mounted) return;
     processed.logDiagnostics();
 
@@ -293,10 +303,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     try {
       final url = await widget.storageService.uploadProfilePhoto(
         uid: widget.profile.uid,
-        fileName:
-            '${index == 0 ? 'main' : 'sub'}_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        file: processed.file,
-        contentType: processed.contentType,
+        role: index == 0 ? 'main' : 'sub_$index',
+        photo: processed,
       );
       if (!mounted) return;
       setState(() {

@@ -7,6 +7,7 @@ import 'package:dating_app/features/onboarding/onboarding_screen.dart';
 import 'package:dating_app/models/user_profile.dart';
 import 'package:dating_app/services/auth/auth_service.dart';
 import 'package:dating_app/services/database/firestore_service.dart';
+import 'package:dating_app/services/storage/profile_photo_processor.dart';
 import 'package:dating_app/services/storage/storage_service.dart';
 import 'package:firebase_core_platform_interface/firebase_core_platform_interface.dart';
 import 'package:flutter/material.dart';
@@ -64,8 +65,8 @@ class _FakeStorageService extends StorageService {
   @override
   Future<List<String>> uploadMultipleProfilePhotos({
     required String uid,
-    required File mainPhoto,
-    List<File> subPhotos = const [],
+    required ProcessedProfilePhoto mainPhoto,
+    List<ProcessedProfilePhoto> subPhotos = const [],
     void Function(double progress)? onProgress,
   }) async => const ['https://example.com/main.jpg'];
 }

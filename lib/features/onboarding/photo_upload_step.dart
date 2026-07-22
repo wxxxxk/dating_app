@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import '../../services/storage/profile_photo_processor.dart';
 
@@ -11,16 +9,20 @@ import '../../shared/widgets/primary_button.dart';
 /// 선택 결과는 콜백으로 상위(OnboardingScreen)에 올려 보낸다.
 /// 이 위젯은 UI와 이미지 피커 호출에만 집중한다.
 class PhotosUploadStep extends StatefulWidget {
-  final File? mainImage;
-  final List<File> subImages; // 최대 3장
+  final ProcessedProfilePhoto? mainImage;
+  final List<ProcessedProfilePhoto> subImages; // 최대 3장
 
   /// 메인 사진이 바뀔 때 호출. null 전달 시 선택 취소.
-  final void Function(File?) onMainImageChanged;
+  final void Function(ProcessedProfilePhoto?) onMainImageChanged;
 
   /// 일상 사진 목록 전체가 바뀔 때 호출.
-  final void Function(List<File>) onSubImagesChanged;
+  final void Function(List<ProcessedProfilePhoto>) onSubImagesChanged;
 
   final VoidCallback onNext;
+
+  /// 사진 선택기. 기본값은 실제 갤러리 picker다.
+  /// 위젯 테스트가 native platform fake 없이 결정론적으로 돌 수 있게 주입한다.
+  final ProfilePhotoPicker? photoPicker;
 
   const PhotosUploadStep({
     super.key,
@@ -29,6 +31,7 @@ class PhotosUploadStep extends StatefulWidget {
     required this.onMainImageChanged,
     required this.onSubImagesChanged,
     required this.onNext,
+    this.photoPicker,
   });
 
   @override
@@ -39,22 +42,42 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
   // 사진 처리 기준은 ProfilePhotoProcessor 한 곳에만 둔다.
   // 예전에는 여기서 대표 85/서브 80, maxWidth 1080으로 각각 달랐고,
   // 프로필 편집 화면은 또 다른 값을 썼다.
-  final ProfilePhotoProcessor _processor = ProfilePhotoProcessor();
+  late final ProfilePhotoPicker _processor =
+      widget.photoPicker ?? ProfilePhotoProcessor();
 
   Future<void> _pickMainImage() async {
-    final processed = await _processor.pickFromGallery();
+    final ProcessedProfilePhoto? processed;
+    try {
+      processed = await _processor.pickFromGallery();
+    } on ProfilePhotoFailure catch (failure) {
+      _showFailure(failure);
+      return;
+    }
     if (processed == null) return;
     processed.logDiagnostics();
-    widget.onMainImageChanged(processed.file);
+    widget.onMainImageChanged(processed);
+  }
+
+  void _showFailure(ProfilePhotoFailure failure) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(failure.userMessage)));
   }
 
   Future<void> _pickSubImage(int index) async {
     // index: 0~2 (서브 슬롯 번호)
-    final processed = await _processor.pickFromGallery();
+    final ProcessedProfilePhoto? processed;
+    try {
+      processed = await _processor.pickFromGallery();
+    } on ProfilePhotoFailure catch (failure) {
+      _showFailure(failure);
+      return;
+    }
     if (processed == null) return;
     processed.logDiagnostics();
-    final image = processed.file;
-    final updated = List<File>.from(widget.subImages);
+    final image = processed;
+    final updated = List<ProcessedProfilePhoto>.from(widget.subImages);
     if (index < updated.length) {
       updated[index] = image;
     } else {
@@ -64,7 +87,8 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
   }
 
   void _removeSubImage(int index) {
-    final updated = List<File>.from(widget.subImages)..removeAt(index);
+    final updated = List<ProcessedProfilePhoto>.from(widget.subImages)
+      ..removeAt(index);
     widget.onSubImagesChanged(updated);
   }
 
@@ -169,7 +193,7 @@ class _PhotosUploadStepState extends State<PhotosUploadStep> {
 
 /// 메인 사진 슬롯 — 큰 정사각형, 탭하면 갤러리 열림.
 class _MainPhotoSlot extends StatelessWidget {
-  final File? image;
+  final ProcessedProfilePhoto? image;
   final VoidCallback onTap;
 
   const _MainPhotoSlot({required this.image, required this.onTap});
@@ -191,7 +215,10 @@ class _MainPhotoSlot extends StatelessWidget {
               width: image == null ? 1 : 1.5,
             ),
             image: image != null
-                ? DecorationImage(image: FileImage(image!), fit: BoxFit.cover)
+                ? DecorationImage(
+                    image: MemoryImage(image!.bytes),
+                    fit: BoxFit.cover,
+                  )
                 : null,
           ),
           child: image == null
@@ -229,7 +256,7 @@ class _MainPhotoSlot extends StatelessWidget {
 
 /// 일상 사진 슬롯 (3개) — 작은 정사각형.
 class _SubPhotoSlot extends StatelessWidget {
-  final File? image;
+  final ProcessedProfilePhoto? image;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
 
@@ -260,7 +287,7 @@ class _SubPhotoSlot extends StatelessWidget {
                 ),
                 image: image != null
                     ? DecorationImage(
-                        image: FileImage(image!),
+                        image: MemoryImage(image!.bytes),
                         fit: BoxFit.cover,
                       )
                     : null,

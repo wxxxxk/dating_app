@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/profile/profile_keyword_summary_service.dart';
+import '../../services/storage/profile_photo_processor.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../models/fortune/birth_profile.dart';
@@ -64,6 +64,9 @@ class OnboardingScreen extends StatefulWidget {
   final String? Function()? currentAuthUid;
   final ProfileKeywordSummaryService? profileKeywordSummaryService;
 
+  /// 사진 선택기 주입점(위젯 테스트용). production은 기본 구현을 쓴다.
+  final ProfilePhotoPicker? photoPicker;
+
   const OnboardingScreen({
     super.key,
     required this.uid,
@@ -74,6 +77,7 @@ class OnboardingScreen extends StatefulWidget {
     this.onSignOut,
     this.currentAuthUid,
     this.profileKeywordSummaryService,
+    this.photoPicker,
   });
 
   @override
@@ -87,8 +91,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _isLoading = false;
 
   // ── 스텝 0: 사진 ──────────────────────────────────────────────────────────
-  File? _mainImage;
-  final List<File> _subImages = [];
+  ProcessedProfilePhoto? _mainImage;
+  final List<ProcessedProfilePhoto> _subImages = [];
 
   // ── 스텝 1: 기본 정보 ────────────────────────────────────────────────────
   String _name = '';
@@ -259,6 +263,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     switch (_step) {
       case 0:
         return PhotosUploadStep(
+          photoPicker: widget.photoPicker,
           mainImage: _mainImage,
           subImages: _subImages,
           onMainImageChanged: (f) => setState(() => _mainImage = f),
@@ -389,7 +394,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               if (widget.onSignOut != null)
                 TextButton(
                   key: const Key('onboarding-sign-out-button'),
-                  onPressed: (_isLoading || _signingOut) ? null : _handleSignOut,
+                  onPressed: (_isLoading || _signingOut)
+                      ? null
+                      : _handleSignOut,
                   child: const Text('로그아웃'),
                 ),
             ],

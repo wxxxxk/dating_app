@@ -1,215 +1,430 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:dating_app/services/storage/image_metadata_sanitizer.dart';
 import 'package:dating_app/services/storage/profile_photo_processor.dart';
+import 'package:dating_app/services/storage/storage_service.dart';
 
-// 1-D 회귀 테스트.
+// 1-D 최종 보정 회귀 테스트.
 //
-// 수정 전 상태:
-// - 온보딩 대표: imageQuality 85, maxWidth 1080
-// - 온보딩 서브: imageQuality 80, maxWidth 1080
-// - 프로필 편집: imageQuality 85, 해상도 제한 없음
+// 수정 전: describe()가 파일 내용과 무관하게 항상 image/jpeg / jpg를 반환했다.
+// PNG·텍스트 파일도 JPEG로 위장돼 업로드될 수 있었고, GPS·EXIF가 실제로
+// 제거됐는지 아무도 확인하지 않았다.
 //
-// maxWidth만 걸면 가로 사진의 짧은 변이 무너진다(4000x3000 → 1080x810).
-// 카드가 1080px 폭으로 그리는 순간 확대되어 흐려졌다.
+// 저장소에 binary를 추가하지 않고 fixture bytes를 코드로 만든다.
 
-String _read(String relativePath) => File(relativePath).readAsStringSync();
+Uint8List _bytes(List<int> values) => Uint8List.fromList(values);
+
+/// 최소 JPEG: SOI + APP segment들 + DQT + SOS + payload + EOI
+Uint8List jpegFixture({
+  bool withExif = false,
+  bool withGps = false,
+  bool withXmp = false,
+  bool withComment = false,
+  List<int> payload = const [0x11, 0x22, 0x33, 0x44],
+}) {
+  final out = <int>[0xFF, 0xD8];
+
+  void app(int marker, List<int> body) {
+    final length = body.length + 2;
+    out.addAll([0xFF, marker, (length >> 8) & 0xFF, length & 0xFF]);
+    out.addAll(body);
+  }
+
+  // APP0(JFIF) — 개인정보가 아니라 유지 대상
+  app(0xE0, [...ascii.encode('JFIF'), 0x00, 0x01, 0x01, 0x00]);
+
+  if (withExif || withGps) {
+    final exif = <int>[...ascii.encode('Exif'), 0x00, 0x00];
+    if (withGps) exif.addAll(ascii.encode('GPSLatitude37.5665'));
+    app(0xE1, exif);
+  }
+  if (withXmp) {
+    app(0xE1, ascii.encode('http://ns.adobe.com/xap/1.0/<x:xmpmeta/>'));
+  }
+  if (withComment) {
+    app(0xFE, ascii.encode('Canon EOS R5 serial 12345'));
+  }
+
+  app(0xDB, [0x00, ...List.filled(64, 0x10)]); // DQT — 유지돼야 함
+
+  out.addAll([0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00]);
+  out.addAll(payload);
+  out.addAll([0xFF, 0xD9]);
+  return _bytes(out);
+}
+
+int _crc32(List<int> data) {
+  var crc = 0xFFFFFFFF;
+  for (final byte in data) {
+    crc ^= byte;
+    for (var i = 0; i < 8; i += 1) {
+      crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
+}
+
+/// 최소 PNG: signature + IHDR + (선택)metadata + IDAT + IEND
+Uint8List pngFixture({bool withExif = false, bool withText = false}) {
+  final out = <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+  void chunk(String type, List<int> data) {
+    final length = data.length;
+    out.addAll([
+      (length >> 24) & 0xFF,
+      (length >> 16) & 0xFF,
+      (length >> 8) & 0xFF,
+      length & 0xFF,
+    ]);
+    final typed = [...ascii.encode(type), ...data];
+    out.addAll(typed);
+    final crc = _crc32(typed);
+    out.addAll([
+      (crc >> 24) & 0xFF,
+      (crc >> 16) & 0xFF,
+      (crc >> 8) & 0xFF,
+      crc & 0xFF,
+    ]);
+  }
+
+  chunk('IHDR', [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
+  if (withExif) chunk('eXIf', ascii.encode('GPSLatitude37.5665'));
+  if (withText) chunk('tEXt', ascii.encode('ArtistHong'));
+  chunk('IDAT', [0x78, 0x9C, 0x63, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01]);
+  chunk('IEND', const []);
+  return _bytes(out);
+}
+
+/// 최소 WebP: RIFF + WEBP + VP8X + (선택)EXIF/XMP + VP8
+Uint8List webpFixture({bool withExif = false, bool withXmp = false}) {
+  final body = <int>[...ascii.encode('WEBP')];
+
+  void chunk(String fourcc, List<int> data) {
+    body.addAll(ascii.encode(fourcc));
+    final size = data.length;
+    body.addAll([
+      size & 0xFF,
+      (size >> 8) & 0xFF,
+      (size >> 16) & 0xFF,
+      (size >> 24) & 0xFF,
+    ]);
+    body.addAll(data);
+    if (size.isOdd) body.add(0);
+  }
+
+  // VP8X flags: bit3=EXIF, bit2=XMP
+  final flags = (withExif ? 0x08 : 0) | (withXmp ? 0x04 : 0);
+  chunk('VP8X', [flags, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  if (withExif) chunk('EXIF', ascii.encode('GPSLatitude37.5665'));
+  if (withXmp) chunk('XMP ', ascii.encode('<x:xmpmeta/>'));
+  chunk('VP8 ', [0x01, 0x02, 0x03, 0x04]);
+
+  final out = <int>[...ascii.encode('RIFF')];
+  final size = body.length;
+  out.addAll([
+    size & 0xFF,
+    (size >> 8) & 0xFF,
+    (size >> 16) & 0xFF,
+    (size >> 24) & 0xFF,
+  ]);
+  out.addAll(body);
+  return _bytes(out);
+}
+
+Uint8List heicFixture() => _bytes([
+  0,
+  0,
+  0,
+  0x18,
+  ...ascii.encode('ftyp'),
+  ...ascii.encode('heic'),
+  0,
+  0,
+  0,
+  0,
+  ...ascii.encode('heicmif1'),
+]);
+
+String _text(Uint8List bytes) => ascii.decode(bytes, allowInvalid: true);
 
 void main() {
-  group('처리 기준 계약', () {
-    test('1/2. 긴 변 제한이 가로·세로 양쪽에 적용된다', () {
-      // maxWidth/maxHeight를 같은 값으로 주면 image_picker가 비율을 유지한 채
-      // 정사각형 안에 맞춘다 → 방향과 무관하게 긴 변이 제한된다.
-      final source = _read('lib/services/storage/profile_photo_processor.dart');
-      expect(source.contains('maxWidth: maxLongEdge.toDouble()'), isTrue);
-      expect(source.contains('maxHeight: maxLongEdge.toDouble()'), isTrue);
+  final processor = ProfilePhotoProcessor();
+
+  group('1~7. 실제 bytes 기반 포맷 판정', () {
+    test('1. JPEG signature → image/jpeg / jpg', () async {
+      final result = await processor.processBytes(jpegFixture());
+      expect(result.contentType, 'image/jpeg');
+      expect(result.extension, 'jpg');
     });
 
-    test('긴 변 기준이 권장 범위(1600~2048) 안이다', () {
-      expect(ProfilePhotoProcessor.maxLongEdge, greaterThanOrEqualTo(1600));
-      expect(ProfilePhotoProcessor.maxLongEdge, lessThanOrEqualTo(2048));
+    test('2. PNG signature → image/png / png', () async {
+      final result = await processor.processBytes(pngFixture());
+      expect(result.contentType, 'image/png');
+      expect(result.extension, 'png');
     });
 
-    test('4:3 가로 사진도 짧은 변 1080을 넘긴다', () {
-      // 긴 변이 maxLongEdge일 때 4:3이면 짧은 변은 그 3/4이다.
-      final shortEdge = (ProfilePhotoProcessor.maxLongEdge * 3) ~/ 4;
-      expect(shortEdge, greaterThanOrEqualTo(1080));
+    test('3. WebP signature → image/webp / webp', () async {
+      final result = await processor.processBytes(webpFixture());
+      expect(result.contentType, 'image/webp');
+      expect(result.extension, 'webp');
     });
 
-    test('16:9 가로 사진의 짧은 변도 1080 이상이다', () {
-      final shortEdge = (ProfilePhotoProcessor.maxLongEdge * 9) ~/ 16;
-      expect(shortEdge, greaterThanOrEqualTo(1080));
-    });
-
-    test('6/7. JPEG 품질이 권장 범위(88~92) 안이다', () {
-      expect(ProfilePhotoProcessor.jpegQuality, greaterThanOrEqualTo(88));
-      expect(ProfilePhotoProcessor.jpegQuality, lessThanOrEqualTo(92));
-      // 과도한 저용량 압축(80 이하)으로 되돌아가지 않게 고정한다.
-      expect(ProfilePhotoProcessor.jpegQuality, greaterThan(85));
-    });
-
-    test('3. upscale하지 않는다 (제한은 상한일 뿐이다)', () {
-      final source = _read('lib/services/storage/profile_photo_processor.dart');
-      // 최소 크기를 강제하거나 확대하는 코드가 없다.
-      expect(source.contains('minWidth'), isFalse);
-      expect(source.contains('upscale'), isFalse);
-    });
-
-    test('9. 출력 contentType과 확장자가 일치한다', () {
-      final file = File('pubspec.yaml'); // 존재하는 아무 파일
-      final processed = ProfilePhotoProcessor.describe(file);
-      expect(processed.contentType, 'image/jpeg');
-      expect(processed.extension, 'jpg');
-    });
-
-    test('없는 파일도 예외 없이 describe된다', () {
-      final processed = ProfilePhotoProcessor.describe(
-        File('does-not-exist-${DateTime.now().microsecondsSinceEpoch}.jpg'),
+    test('4. 일반 텍스트는 invalidImage로 거부한다', () async {
+      await expectLater(
+        processor.processBytes(
+          _bytes(ascii.encode('hello world, this is not an image at all')),
+        ),
+        throwsA(
+          isA<ProfilePhotoFailure>().having(
+            (f) => f.kind,
+            'kind',
+            ProfilePhotoFailureKind.invalidImage,
+          ),
+        ),
       );
-      expect(processed.byteLength, 0);
     });
 
-    test('processingVersion이 기록된다', () {
-      final processed = ProfilePhotoProcessor.describe(File('pubspec.yaml'));
+    test('5. pubspec.yaml 내용은 이미지로 판정되지 않는다', () async {
+      const yaml =
+          'name: dating_app\nversion: 1.0.0\nenvironment:\n  sdk: ^3.0.0\n';
       expect(
-        processed.processingVersion,
-        ProfilePhotoProcessor.processingVersion,
+        detectImageFormat(_bytes(ascii.encode(yaml))),
+        DetectedImageFormat.unknown,
       );
-      expect(ProfilePhotoProcessor.processingVersion, greaterThanOrEqualTo(2));
+      await expectLater(
+        processor.processBytes(_bytes(ascii.encode(yaml))),
+        throwsA(isA<ProfilePhotoFailure>()),
+      );
+    });
+
+    test('6. 잘린 JPEG은 거부한다', () async {
+      final truncated = Uint8List.sublistView(jpegFixture(), 0, 6);
+      await expectLater(
+        processor.processBytes(truncated),
+        throwsA(isA<ProfilePhotoFailure>()),
+      );
+    });
+
+    test('7. 확장자와 bytes가 충돌하면 bytes를 우선한다', () async {
+      // 이름이 .jpg여도 내용이 PNG면 PNG로 판정돼야 한다.
+      final result = await processor.processBytes(pngFixture());
+      expect(result.extension, 'png', reason: '경로 확장자를 신뢰하면 안 된다');
+      expect(result.contentType, 'image/png');
+    });
+
+    test('HEIC은 unsupportedFormat으로 거부한다', () async {
+      expect(detectImageFormat(heicFixture()), DetectedImageFormat.heic);
+      await expectLater(
+        processor.processBytes(heicFixture()),
+        throwsA(
+          isA<ProfilePhotoFailure>().having(
+            (f) => f.kind,
+            'kind',
+            ProfilePhotoFailureKind.unsupportedFormat,
+          ),
+        ),
+      );
+    });
+
+    test('빈 파일은 readFailed다', () async {
+      await expectLater(
+        processor.processBytes(Uint8List(0)),
+        throwsA(
+          isA<ProfilePhotoFailure>().having(
+            (f) => f.kind,
+            'kind',
+            ProfilePhotoFailureKind.readFailed,
+          ),
+        ),
+      );
     });
   });
 
-  group('10/11/12. 단일 처리 파이프라인', () {
-    final processorSource = _read(
-      'lib/services/storage/profile_photo_processor.dart',
-    );
-    final onboardingSource = _read(
-      'lib/features/onboarding/photo_upload_step.dart',
-    );
-    final editSource = _read('lib/features/profile/profile_edit_screen.dart');
-    final storageSource = _read('lib/services/storage/storage_service.dart');
+  group('8~13. metadata 제거', () {
+    test('8. JPEG EXIF APP1이 제거된다', () async {
+      final source = jpegFixture(withExif: true);
+      expect(hasPrivacyMetadata(source), isTrue);
+      final result = await processor.processBytes(source);
+      expect(hasPrivacyMetadata(result.bytes), isFalse);
+      expect(result.metadataSanitized, isTrue);
+    });
 
-    test('10. 압축은 pickImage 한 번뿐이다 (2차 압축 경로 없음)', () {
-      // 저장소 전체에 별도 compressor가 없어야 한다.
-      for (final source in [
-        processorSource,
-        onboardingSource,
-        editSource,
-        storageSource,
-      ]) {
-        expect(source.contains('FlutterImageCompress'), isFalse);
-        expect(source.contains('compressWithFile'), isFalse);
-        expect(source.contains('encodeJpg'), isFalse);
-        expect(source.contains('copyResize'), isFalse);
+    test('9. JPEG GPS 좌표가 남지 않는다', () async {
+      final source = jpegFixture(withGps: true);
+      expect(_text(source).contains('GPSLatitude'), isTrue);
+      final result = await processor.processBytes(source);
+      expect(
+        _text(result.bytes).contains('GPSLatitude'),
+        isFalse,
+        reason: 'GPS 좌표가 공개 프로필 사진에 남으면 안 된다',
+      );
+    });
+
+    test('10. JPEG XMP와 카메라 comment가 제거된다', () async {
+      final source = jpegFixture(withXmp: true, withComment: true);
+      final result = await processor.processBytes(source);
+      final text = _text(result.bytes);
+      expect(text.contains('xmpmeta'), isFalse);
+      expect(text.contains('Canon EOS R5'), isFalse);
+      expect(text.contains('serial'), isFalse);
+    });
+
+    test('JFIF APP0는 유지된다 (표시 호환성, 개인정보 아님)', () async {
+      final result = await processor.processBytes(jpegFixture(withExif: true));
+      expect(_text(result.bytes).contains('JFIF'), isTrue);
+    });
+
+    test('11. PNG eXIf·tEXt가 제거된다', () async {
+      final source = pngFixture(withExif: true, withText: true);
+      expect(hasPrivacyMetadata(source), isTrue);
+      final result = await processor.processBytes(source);
+      final text = _text(result.bytes);
+      expect(text.contains('eXIf'), isFalse);
+      expect(text.contains('tEXt'), isFalse);
+      expect(text.contains('GPSLatitude'), isFalse);
+      expect(text.contains('Hong'), isFalse);
+      expect(result.metadataSanitized, isTrue);
+    });
+
+    test('12. WebP EXIF·XMP chunk가 제거되고 VP8X flag가 내려간다', () async {
+      final source = webpFixture(withExif: true, withXmp: true);
+      expect(hasPrivacyMetadata(source), isTrue);
+      final result = await processor.processBytes(source);
+      final text = _text(result.bytes);
+      expect(text.contains('GPSLatitude'), isFalse);
+      expect(text.contains('xmpmeta'), isFalse);
+      expect(hasPrivacyMetadata(result.bytes), isFalse);
+      // VP8X payload 첫 바이트(flags)에서 EXIF/XMP 비트가 꺼졌는지.
+      expect(result.bytes[12 + 8] & 0x0C, 0);
+    });
+
+    test('13. 픽셀 payload는 보존된다 (무손실 sanitization)', () async {
+      const payload = [0xAB, 0xCD, 0xEF, 0x12];
+      final result = await processor.processBytes(
+        jpegFixture(withExif: true, withGps: true, payload: payload),
+      );
+      var found = false;
+      for (var i = 0; i + 4 <= result.bytes.length; i += 1) {
+        if (result.bytes[i] == payload[0] &&
+            result.bytes[i + 1] == payload[1] &&
+            result.bytes[i + 2] == payload[2] &&
+            result.bytes[i + 3] == payload[3]) {
+          found = true;
+          break;
+        }
       }
-      // processor 안에서 pickImage는 정확히 한 번 호출된다.
-      expect('pickImage('.allMatches(processorSource).length, 1);
+      expect(found, isTrue, reason: '픽셀 데이터를 재인코딩하면 안 된다');
+      expect(result.bytes[result.bytes.length - 2], 0xFF);
+      expect(result.bytes.last, 0xD9);
     });
 
-    test('11. 온보딩과 프로필 편집이 같은 processor를 쓴다', () {
-      expect(onboardingSource.contains('ProfilePhotoProcessor()'), isTrue);
-      expect(editSource.contains('ProfilePhotoProcessor()'), isTrue);
-      // 화면이 직접 pickImage 옵션을 정하지 않는다.
-      expect(onboardingSource.contains('imageQuality:'), isFalse);
-      expect(editSource.contains('imageQuality:'), isFalse);
-      expect(onboardingSource.contains('maxWidth: 1080'), isFalse);
-    });
-
-    test('StorageService는 다시 resize·compress하지 않는다', () {
-      expect(storageSource.contains('imageQuality'), isFalse);
-      // 주석이 아니라 실제 호출이 없어야 한다.
-      expect(storageSource.contains('copyResize('), isFalse);
-      expect(storageSource.contains('ResizeImage('), isFalse);
-      expect(storageSource.contains('pickImage('), isFalse);
-      // 처리된 contentType을 그대로 받는다.
-      expect(storageSource.contains('String contentType'), isTrue);
-    });
-
-    test('12. 기존 remote URL은 processor를 거치지 않는다', () {
-      // processor는 로컬 File만 다룬다. http URL을 내려받는 경로가 없다.
-      expect(processorSource.contains('http://'), isFalse);
-      expect(processorSource.contains('https://'), isFalse);
-      expect(processorSource.contains('HttpClient'), isFalse);
-      expect(processorSource.contains('NetworkAssetBundle'), isFalse);
+    test('metadata가 없는 파일은 그대로 통과한다', () async {
+      final source = jpegFixture();
+      final result = await processor.processBytes(source);
+      expect(result.metadataSanitized, isTrue);
+      expect(result.byteLength, lessThanOrEqualTo(source.length));
     });
   });
 
-  group('26/27. Storage object path와 캐시 무효화', () {
-    final storageSource = _read('lib/services/storage/storage_service.dart');
-    final editSource = _read('lib/features/profile/profile_edit_screen.dart');
+  group('14/17~19. 업로드 계약', () {
+    test('14/19. metadataSanitized=false면 업로드가 차단된다', () {
+      final unsafe = ProcessedProfilePhoto(
+        file: null,
+        bytes: jpegFixture(),
+        byteLength: 10,
+        contentType: 'image/jpeg',
+        extension: 'jpg',
+        processingVersion: ProfilePhotoProcessor.processingVersion,
+        metadataSanitized: false,
+        compressionPassCount: 1,
+      );
+      // Storage 호출 전에 막힌다(Firebase 초기화 없이 검증 가능).
+      expect(() => ensureUploadablePhoto(unsafe), throwsA(isA<StateError>()));
 
-    test('26/27. 업로드마다 timestamp가 들어간 새 경로를 만든다', () {
+      final safe = ProcessedProfilePhoto(
+        file: null,
+        bytes: jpegFixture(),
+        byteLength: 10,
+        contentType: 'image/jpeg',
+        extension: 'jpg',
+        processingVersion: ProfilePhotoProcessor.processingVersion,
+        metadataSanitized: true,
+        compressionPassCount: 1,
+      );
+      expect(() => ensureUploadablePhoto(safe), returnsNormally);
+    });
+
+    test('17/18. object 이름이 실제 확장자를 쓴다', () {
       expect(
-        storageSource.contains(
-          "'main_\${DateTime.now().millisecondsSinceEpoch}.jpg'",
-        ),
-        isTrue,
+        buildProfilePhotoObjectName(role: 'main', extension: 'png'),
+        endsWith('.png'),
       );
       expect(
-        storageSource.contains(
-          'sub_\${i}_\${DateTime.now().millisecondsSinceEpoch}',
-        ),
-        isTrue,
-      );
-      // 프로필 편집 교체도 새 경로를 만든다(고정 경로 덮어쓰기 없음).
-      expect(
-        editSource.contains('DateTime.now().millisecondsSinceEpoch'),
-        isTrue,
+        buildProfilePhotoObjectName(role: 'sub_1', extension: 'webp'),
+        startsWith('sub_1_'),
       );
     });
 
-    test('사용자 제공 파일명을 경로에 쓰지 않는다', () {
-      expect(storageSource.contains('picked.name'), isFalse);
-      expect(storageSource.contains('basename'), isFalse);
-      expect(editSource.contains('picked.name'), isFalse);
+    test('object 이름에 nonce가 있어 같은 밀리초에도 충돌하지 않는다', () {
+      final names = <String>{};
+      for (var i = 0; i < 200; i += 1) {
+        names.add(buildProfilePhotoObjectName(role: 'main', extension: 'jpg'));
+      }
+      expect(names.length, 200);
     });
 
-    test('immutable object에 맞는 cacheControl을 붙인다', () {
-      expect(storageSource.contains('immutable'), isTrue);
-      expect(storageSource.contains('cacheControl'), isTrue);
-      expect(storageSource.contains('contentType: contentType'), isTrue);
+    test('object 이름에 사용자 파일명이 들어가지 않는다', () {
+      final name = buildProfilePhotoObjectName(role: 'main', extension: 'jpg');
+      expect(
+        RegExp(r'^main_\d+_[a-z0-9]+\.jpg$').hasMatch(name),
+        isTrue,
+        reason: name,
+      );
     });
   });
 
-  group('13. 진단 로그 비식별화', () {
-    final processorSource = _read(
-      'lib/services/storage/profile_photo_processor.dart',
-    );
-
-    test('로그에 UID·경로·파일명·URL이 없다', () {
-      final processed = ProfilePhotoProcessor.describe(File('pubspec.yaml'));
-      final summary = processed.diagnosticSummary;
-      expect(summary.contains('pubspec'), isFalse);
-      // contentType(image/jpeg) 외에 경로 구분자가 없어야 한다.
-      expect(summary.replaceAll('image/jpeg', '').contains('/'), isFalse);
-      expect(summary.contains('http'), isFalse);
-      // 허용된 수치만 담는다.
+  group('20. 진단 로그 비식별화', () {
+    test('허용된 수치만 담고 경로·URL·파일명이 없다', () async {
+      final result = await processor.processBytes(jpegFixture());
+      final summary = result.diagnosticSummary;
       expect(summary.contains('outputBytes='), isTrue);
+      expect(summary.contains('outputFormat='), isTrue);
+      expect(summary.contains('metadataSanitized=true'), isTrue);
       expect(summary.contains('compressionPassCount=1'), isTrue);
       expect(summary.contains('processingVersion='), isTrue);
+      expect(summary.contains('http'), isFalse);
+      expect(summary.contains('.jpg'), isFalse);
+      expect(summary.replaceAll('image/jpeg', '').contains('/'), isFalse);
     });
 
-    test('로그는 debug 모드에서만 남는다', () {
-      expect(processorSource.contains('if (kDebugMode) debugPrint'), isTrue);
+    test('processingVersion이 올라갔다', () {
+      expect(ProfilePhotoProcessor.processingVersion, greaterThanOrEqualTo(3));
     });
   });
 
-  group('14/15/28. 재업로드 방지 계약', () {
-    final editSource = _read('lib/features/profile/profile_edit_screen.dart');
+  group('처리 기준 유지 (직전 작업 회귀 방지)', () {
+    test('긴 변 2048, 품질 90이 유지된다', () {
+      expect(ProfilePhotoProcessor.maxLongEdge, 2048);
+      expect(ProfilePhotoProcessor.jpegQuality, 90);
+    });
 
-    test('14/15/28. 대표 사진 변경·순서 변경은 업로드를 호출하지 않는다', () {
-      // 업로드는 사진을 새로 고른 경로에서만 일어난다.
-      final uploadIdx = editSource.indexOf('uploadProfilePhoto(');
-      expect(uploadIdx, greaterThan(0));
-      final pickIdx = editSource.indexOf('_pickAndUploadPhoto');
-      expect(pickIdx, greaterThan(0));
-      // 대표 설정 경로에는 업로드 호출이 없다.
-      final setMainIdx = editSource.indexOf("case 'main':");
-      if (setMainIdx > 0) {
-        final slice = editSource.substring(setMainIdx, setMainIdx + 400);
-        expect(slice.contains('uploadProfilePhoto('), isFalse);
-      }
+    test('4:3 가로 사진의 짧은 변이 1080을 넘는다', () {
+      expect(
+        (ProfilePhotoProcessor.maxLongEdge * 3) ~/ 4,
+        greaterThanOrEqualTo(1080),
+      );
+    });
+
+    test('지원 포맷에 HEIC이 없다', () {
+      expect(
+        ProfilePhotoProcessor.supportedFormats.contains(
+          DetectedImageFormat.heic,
+        ),
+        isFalse,
+      );
     });
   });
 }

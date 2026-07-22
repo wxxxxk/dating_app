@@ -8,11 +8,11 @@ import 'package:dating_app/models/user_profile.dart';
 import 'package:dating_app/services/auth/auth_service.dart';
 import 'package:dating_app/services/database/firestore_service.dart';
 import 'package:dating_app/services/profile/profile_keyword_summary_service.dart';
+import 'package:dating_app/services/storage/profile_photo_processor.dart';
 import 'package:dating_app/services/storage/storage_service.dart';
 import 'package:firebase_core_platform_interface/firebase_core_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 class _FakeApp extends Fake
@@ -45,17 +45,23 @@ class _FakeFirebasePlatform extends FirebasePlatform {
   List<FirebaseAppPlatform> get apps => [_FakeApp()];
 }
 
-class _FakeImagePickerPlatform extends ImagePickerPlatform {
-  _FakeImagePickerPlatform(this.imagePath);
+/// 결정론적 사진 선택기.
+///
+/// 예전에는 native ImagePickerPlatform을 fake로 갈아끼웠는데, 그러면 이
+/// 위젯 테스트가 image_picker 구현 세부사항(옵션 전달·플랫폼 설치 시점)에
+/// 묶인다. 실제 bytes 판정과 metadata 제거는 profile_photo_processor_test가
+/// 따로 검증하므로, 여기서는 "처리된 사진이 돌아왔을 때 온보딩이 어떻게
+/// 동작하는가"만 본다.
+class _FakePhotoPicker implements ProfilePhotoPicker {
+  _FakePhotoPicker(this.photo);
 
-  final String imagePath;
+  final ProcessedProfilePhoto photo;
+  int calls = 0;
 
   @override
-  Future<XFile?> getImageFromSource({
-    required ImageSource source,
-    ImagePickerOptions options = const ImagePickerOptions(),
-  }) async {
-    return XFile(imagePath);
+  Future<ProcessedProfilePhoto?> pickFromGallery() async {
+    calls += 1;
+    return photo;
   }
 }
 
@@ -94,8 +100,8 @@ class _FakeStorageService extends StorageService {
   @override
   Future<List<String>> uploadMultipleProfilePhotos({
     required String uid,
-    required File mainPhoto,
-    List<File> subPhotos = const [],
+    required ProcessedProfilePhoto mainPhoto,
+    List<ProcessedProfilePhoto> subPhotos = const [],
     void Function(double progress)? onProgress,
   }) async {
     uploadCalls += 1;
@@ -139,9 +145,11 @@ Widget _host({
   required StorageService storageService,
   required ProfileKeywordSummaryService keywordService,
   required VoidCallback onCompleted,
+  required ProfilePhotoPicker photoPicker,
 }) {
   return MaterialApp(
     home: OnboardingScreen(
+      photoPicker: photoPicker,
       uid: 'me',
       authService: authService,
       firestoreService: firestoreService,
@@ -153,76 +161,45 @@ Widget _host({
 }
 
 Future<String> _writeTinyImage() async {
+  // 유효한 최소 PNG(IHDR + IDAT + IEND). ProfilePhotoProcessor가 실제 bytes로
+  // 포맷을 판정하므로 signature만 있는 조각으로는 통과하지 못한다.
+  int crc32(List<int> data) {
+    var crc = 0xFFFFFFFF;
+    for (final byte in data) {
+      crc ^= byte;
+      for (var i = 0; i < 8; i += 1) {
+        crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1;
+      }
+    }
+    return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
+  }
+
+  final out = <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+  void chunk(String type, List<int> data) {
+    final length = data.length;
+    out.addAll([
+      (length >> 24) & 0xFF,
+      (length >> 16) & 0xFF,
+      (length >> 8) & 0xFF,
+      length & 0xFF,
+    ]);
+    final typed = [...type.codeUnits, ...data];
+    out.addAll(typed);
+    final crc = crc32(typed);
+    out.addAll([
+      (crc >> 24) & 0xFF,
+      (crc >> 16) & 0xFF,
+      (crc >> 8) & 0xFF,
+      crc & 0xFF,
+    ]);
+  }
+
+  chunk('IHDR', [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]);
+  chunk('IDAT', [0x78, 0x9C, 0x63, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01]);
+  chunk('IEND', const []);
+
   final file = File('${Directory.systemTemp.path}/cvr_onboarding_test.png');
-  await file.writeAsBytes(const [
-    0x89,
-    0x50,
-    0x4E,
-    0x47,
-    0x0D,
-    0x0A,
-    0x1A,
-    0x0A,
-    0x00,
-    0x00,
-    0x00,
-    0x0D,
-    0x49,
-    0x48,
-    0x44,
-    0x52,
-    0x00,
-    0x00,
-    0x00,
-    0x01,
-    0x00,
-    0x00,
-    0x00,
-    0x01,
-    0x08,
-    0x06,
-    0x00,
-    0x00,
-    0x00,
-    0x1F,
-    0x15,
-    0xC4,
-    0x89,
-    0x00,
-    0x00,
-    0x00,
-    0x0A,
-    0x49,
-    0x44,
-    0x41,
-    0x54,
-    0x78,
-    0x9C,
-    0x63,
-    0x00,
-    0x01,
-    0x00,
-    0x00,
-    0x05,
-    0x00,
-    0x01,
-    0x0D,
-    0x0A,
-    0x2D,
-    0xB4,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x49,
-    0x45,
-    0x4E,
-    0x44,
-    0xAE,
-    0x42,
-    0x60,
-    0x82,
-  ]);
+  await file.writeAsBytes(out);
   return file.path;
 }
 
@@ -259,21 +236,12 @@ Future<void> _setLargeSurface(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   FirebasePlatform.instance = _FakeFirebasePlatform();
-
-  late ImagePickerPlatform originalImagePickerPlatform;
-  late String imagePath;
+  late ProcessedProfilePhoto fixturePhoto;
 
   setUpAll(() async {
-    originalImagePickerPlatform = ImagePickerPlatform.instance;
-    imagePath = await _writeTinyImage();
-  });
-
-  setUp(() {
-    ImagePickerPlatform.instance = _FakeImagePickerPlatform(imagePath);
-  });
-
-  tearDown(() {
-    ImagePickerPlatform.instance = originalImagePickerPlatform;
+    fixturePhoto = await ProfilePhotoProcessor().processFile(
+      File(await _writeTinyImage()),
+    );
   });
 
   testWidgets(
@@ -304,6 +272,7 @@ void main() {
           firestoreService: firestore,
           storageService: storage,
           keywordService: keywordService,
+          photoPicker: _FakePhotoPicker(fixturePhoto),
           onCompleted: () {
             completedCalls += 1;
             events.add('completed');
@@ -360,6 +329,7 @@ void main() {
         firestoreService: firestore,
         storageService: storage,
         keywordService: keywordService,
+        photoPicker: _FakePhotoPicker(fixturePhoto),
         onCompleted: () => completedCalls += 1,
       ),
     );
@@ -402,6 +372,7 @@ void main() {
           firestoreService: firestore,
           storageService: storage,
           keywordService: keywordService,
+          photoPicker: _FakePhotoPicker(fixturePhoto),
           onCompleted: () => completedCalls += 1,
         ),
       );
@@ -443,6 +414,7 @@ void main() {
         firestoreService: firestore,
         storageService: storage,
         keywordService: keywordService,
+        photoPicker: _FakePhotoPicker(fixturePhoto),
         onCompleted: () => completedCalls += 1,
       ),
     );
