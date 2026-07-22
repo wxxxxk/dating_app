@@ -6,6 +6,9 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/kst_date.dart';
 import '../../models/fortune_model.dart';
 import 'fortune_calculator.dart';
+import 'fortune_data_source.dart';
+
+export 'fortune_data_source.dart' show FortuneDataSource, FortuneFailure;
 
 /// 사주/궁합 GPT 서사를 요청·표시하는 서비스.
 ///
@@ -20,7 +23,7 @@ import 'fortune_calculator.dart';
 /// 저장해두므로, 여기서 먼저 그 문서를 직접 읽어 캐시가 있으면 함수 호출
 /// (콜드스타트 포함) 없이 즉시 보여준다. 캐시가 없을 때만 함수를 호출하고,
 /// 함수도 내부적으로 한 번 더 캐시를 확인해 같은 요청이 중복 과금되지 않게 한다.
-class FortuneService {
+class FortuneService implements FortuneDataSource {
   FortuneService({FirebaseFirestore? firestore, FirebaseFunctions? functions})
     : _db = firestore ?? FirebaseFirestore.instance,
       _functions =
@@ -96,6 +99,7 @@ class FortuneService {
   ///
   /// Phase 5-2부터 날짜와 사주 근거를 모두 서버가 정한다 — 클라이언트 날짜와
   /// 계산값은 보내지 않는다. 로컬 날짜는 캐시 선조회에만 쓴다.
+  @override
   Future<DailyFortune> getDailyFortune({
     required String uid,
     DateTime? now,
@@ -126,6 +130,7 @@ class FortuneService {
   /// 문서 ID가 yyyy-MM-dd라 최근 날짜 목록을 클라이언트에서 만든 뒤 각 문서를
   /// 직접 조회한다. 운세가 없는 날짜는 [FortuneHistoryEntry.fortune]을 null로
   /// 두어 "앱을 열지 않은 날"로 표시한다.
+  @override
   Future<List<FortuneHistoryEntry>> getFortuneHistory({
     required String uid,
     int days = 7,
@@ -154,21 +159,6 @@ class FortuneService {
       }),
     );
     return entries;
-  }
-
-  /// 최근 [days]일의 운세 캐시를 생성한다.
-  ///
-  /// 발표/데모용 개발 기능에서만 호출한다. 실제 서비스에서는 사용자가 매일
-  /// 사주 탭을 열 때 [getDailyFortune]이 자연스럽게 그날 문서를 만든다.
-  ///
-  /// Phase 5-2부터 서버가 Asia/Seoul 기준 오늘 날짜만 생성하므로, 이 호출은
-  /// 과거 날짜 문서를 만들지 못하고 오늘 문서만 확인한다. 데모용 잔재다.
-  Future<void> backfillRecentDailyFortunes({
-    required String uid,
-    int days = 7,
-    DateTime? now,
-  }) async {
-    await getDailyFortune(uid: uid, now: now);
   }
 
   /// 매칭 채팅의 첫 대화 물꼬를 가져온다.
@@ -358,26 +348,6 @@ class FortuneService {
       debugPrint(message);
     }
   }
-}
-
-class FortuneFailure implements Exception {
-  final String code;
-
-  const FortuneFailure(this.code);
-
-  static const _allowedCodes = {
-    'unauthenticated',
-    'permission-denied',
-    'failed-precondition',
-    'resource-exhausted',
-    'unavailable',
-    'deadline-exceeded',
-    'internal',
-    'unknown',
-  };
-
-  static String safeCode(String code) =>
-      _allowedCodes.contains(code) ? code : 'unknown';
 }
 
 class MatchFortuneResult {

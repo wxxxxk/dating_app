@@ -1,84 +1,55 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
-import '../../models/user_profile.dart';
-import '../../services/fortune/fortune_service.dart';
+import 'fortune_hub_controller.dart';
 
-/// 최근 오늘의 운세 기록 화면.
+/// 최근 오늘의 운세 **기록** 화면(미래 예보가 아니다).
 ///
-/// users/{uid}/dailyFortune/{yyyy-MM-dd} 캐시를 최근 7일 타임라인으로 보여주고,
-/// loveScore 흐름을 작은 그래프로 시각화한다.
+/// users/{uid}/dailyFortune/{yyyy-MM-dd} 캐시를 오늘부터 과거 6일까지
+/// 타임라인으로 보여주고, loveScore 흐름을 작은 그래프로 시각화한다.
+///
+/// 상태는 [FortuneHubController]가 소유한다 — 오늘의 운세 카드와 같은 KST
+/// 날짜·계정 context를 공유해야 day 0이 어긋나지 않기 때문이다. 허브에서
+/// 넘겨준 controller는 여기서 dispose하지 않는다.
 class FortuneHistoryScreen extends StatefulWidget {
-  final UserProfile profile;
-  final FortuneService fortuneService;
-  final int days;
+  final FortuneHubController controller;
 
-  const FortuneHistoryScreen({
-    super.key,
-    required this.profile,
-    required this.fortuneService,
-    this.days = 7,
-  });
+  const FortuneHistoryScreen({super.key, required this.controller});
 
   @override
   State<FortuneHistoryScreen> createState() => _FortuneHistoryScreenState();
 }
 
-class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
-
-  bool _loading = true;
-  bool _backfilling = false;
-  String? _error;
-  List<FortuneHistoryEntry> _entries = const [];
+class _FortuneHistoryScreenState extends State<FortuneHistoryScreen>
+    with WidgetsBindingObserver {
+  FortuneHubController get _controller => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _controller.addListener(_onControllerChanged);
+    WidgetsBinding.instance.addObserver(this);
+    // 허브가 이미 같은 날짜로 읽어뒀으면 추가 요청은 나가지 않는다.
+    _controller.refreshForCurrentContext();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final entries = await widget.fortuneService.getFortuneHistory(
-        uid: widget.profile.uid,
-        days: widget.days,
-      );
-      if (mounted) setState(() => _entries = entries);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // controller의 소유자는 허브 화면이다. 여기서는 구독만 해제한다.
+    _controller.removeListener(_onControllerChanged);
+    super.dispose();
   }
 
-  // 개발용, 출시 전 제거: 발표/데모에서 히스토리를 빠르게 채우기 위한 버튼.
-  Future<void> _backfillRecentFortunes() async {
-    if (_backfilling) return;
-    setState(() => _backfilling = true);
-    try {
-      await widget.fortuneService.backfillRecentDailyFortunes(
-        uid: widget.profile.uid,
-        days: widget.days,
-      );
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('최근 7일 운세를 채웠어요.')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('운세 채우기 실패: $e')));
-    } finally {
-      if (mounted) setState(() => _backfilling = false);
-    }
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) _controller.handleResume();
   }
 
   void _showDetail(FortuneHistoryEntry entry) {
@@ -109,78 +80,63 @@ class _FortuneHistoryScreenState extends State<FortuneHistoryScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '운세 기록을 불러오지 못했어요\n$_error',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              OutlinedButton(onPressed: _load, child: const Text('다시 시도')),
-            ],
+    switch (_controller.historyStatus) {
+      case FortuneHistoryStatus.idle:
+      case FortuneHistoryStatus.loading:
+        return const Center(
+          key: Key('fortune-history-loading'),
+          child: CircularProgressIndicator(),
+        );
+      case FortuneHistoryStatus.error:
+        return Center(
+          key: const Key('fortune-history-error'),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 48,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '최근 운세 기록을 불러오지 못했어요.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton(
+                  key: const Key('fortune-history-retry'),
+                  onPressed: _controller.retryHistory,
+                  child: const Text('다시 시도'),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
+        );
+      case FortuneHistoryStatus.ready:
+        break;
     }
 
+    final entries = _controller.history;
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: _controller.retryHistory,
       child: ListView(
+        key: const Key('fortune-history-ready'),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         children: [
-          _LoveTrendSection(entries: _entries),
+          _LoveTrendSection(entries: entries),
           const SizedBox(height: 20),
-          if (kDebugMode) ...[
-            // 개발용, 출시 전 제거: 자연 축적 전 발표 데이터 생성용.
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _backfilling ? null : _backfillRecentFortunes,
-                icon: _backfilling
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_fix_high_rounded),
-                label: const Text('최근 7일 운세 채우기'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.mint,
-                  foregroundColor: AppColors.onMint,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.button),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
           const _HistoryTitle(),
           const SizedBox(height: 10),
-          ..._entries.map(
-            (entry) =>
-                _HistoryTile(entry: entry, onTap: () => _showDetail(entry)),
-          ),
+          for (var i = 0; i < entries.length; i++)
+            _HistoryTile(
+              key: Key('fortune-history-day-$i'),
+              entry: entries[i],
+              onTap: () => _showDetail(entries[i]),
+            ),
         ],
       ),
     );
@@ -206,7 +162,7 @@ class _LoveTrendSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '이번 주 애정운 흐름',
+            '최근 7일 애정운 흐름',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -556,7 +512,7 @@ class _HistoryTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Text(
-      '최근 기록',
+      '지난 7일 기록',
       style: TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.bold,
@@ -570,7 +526,7 @@ class _HistoryTile extends StatelessWidget {
   final FortuneHistoryEntry entry;
   final VoidCallback onTap;
 
-  const _HistoryTile({required this.entry, required this.onTap});
+  const _HistoryTile({super.key, required this.entry, required this.onTap});
 
   static const _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
 

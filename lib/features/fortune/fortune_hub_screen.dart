@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/fortune_model.dart';
 import '../../models/match_model.dart';
-import '../../models/user_profile.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/fortune/fortune_calculator.dart';
@@ -13,6 +11,7 @@ import '../../services/profile/birth_profile_service.dart';
 import '../../services/ideal_type/ideal_type_service.dart';
 import '../../services/matches/matches_service.dart';
 import 'birth_time_completion_screen.dart';
+import 'fortune_hub_controller.dart';
 import 'fortune_route_names.dart';
 import 'fortune_history_screen.dart';
 import '../ideal_type/ideal_type_screen.dart';
@@ -37,6 +36,9 @@ class FortuneHubScreen extends StatefulWidget {
   /// "새로운 인연을 만나보세요" CTA 탭 시 둘러보기 탭으로 전환한다.
   final VoidCallback onExploreTap;
 
+  /// 테스트용 시계 주입. production에서는 [DateTime.now]를 쓴다.
+  final DateTime Function()? nowProvider;
+
   const FortuneHubScreen({
     super.key,
     required this.authService,
@@ -44,24 +46,22 @@ class FortuneHubScreen extends StatefulWidget {
     required this.matchesService,
     required this.fortuneService,
     required this.onExploreTap,
+    this.nowProvider,
   });
 
   @override
   State<FortuneHubScreen> createState() => _FortuneHubScreenState();
 }
 
-class _FortuneHubScreenState extends State<FortuneHubScreen> {
-  bool _loading = true;
-  String? _error;
-
-  UserProfile? _profile;
-  /// 출생시간을 아직 물어본 적이 없는 기존 사용자면 true. 보완 화면을 띄운다.
-  bool _needsBirthTime = false;
+class _FortuneHubScreenState extends State<FortuneHubScreen>
+    with WidgetsBindingObserver {
+  late final FortuneHubController _controller;
   final _birthProfileService = BirthProfileService();
-  ZodiacInfo? _zodiac;
-  SajuInfo? _saju;
-  DailyFortune? _daily;
   final _idealTypeService = IdealTypeService();
+
+  /// 시간을 몰라요로 저장한 사용자가 "지금 입력"을 골랐을 때만 true.
+  /// 컨트롤러의 needsBirthProfile 판정과는 별개의 사용자 선택이다.
+  bool _birthTimeRequested = false;
 
   Stream<List<MatchWithProfile>>? _matchesStream;
 
@@ -87,63 +87,50 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
     if (uid != null) {
       _matchesStream = widget.matchesService.watchMatches(currentUid: uid);
     }
-    _load();
+    _controller = FortuneHubController(
+      fortuneService: widget.fortuneService,
+      loadProfile: widget.firestoreService.getUserProfile,
+      initialUid: uid,
+      nowProvider: widget.nowProvider,
+    )..addListener(_onControllerChanged);
+    WidgetsBinding.instance.addObserver(this);
+    _controller.loadInitial();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final uid = widget.authService.currentUser?.uid;
-      if (uid == null) throw StateError('로그인이 필요합니다.');
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller
+      ..removeListener(_onControllerChanged)
+      ..dispose();
+    super.dispose();
+  }
 
-      final profile = await widget.firestoreService.getUserProfile(uid);
-      if (profile == null) throw StateError('프로필을 찾을 수 없습니다.');
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
 
-      // 출생시간을 물어본 적이 없으면 사주를 계산하지 않고 보완 화면을 띄운다.
-      // 앱의 다른 기능은 막지 않는다.
-      if (profile.birthProfile.needsCompletion) {
-        if (mounted) {
-          setState(() {
-            _profile = profile;
-            _needsBirthTime = true;
-          });
-        }
-        return;
-      }
-
-      final zodiac = FortuneCalculator.getZodiacSign(profile.birthDate);
-      final saju = FortuneCalculator.getSaju(profile.birthDate);
-      final daily = await widget.fortuneService.getDailyFortune(uid: uid);
-
-      if (mounted) {
-        setState(() {
-          _profile = profile;
-          _needsBirthTime = false;
-          _zodiac = zodiac;
-          _saju = saju;
-          _daily = daily;
-        });
-      }
-    } on FortuneFailure catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FortuneHub] load_failed code=${e.code}');
-      }
-      if (mounted) setState(() => _error = 'load_failed');
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[FortuneHub] load_failed category=${e.runtimeType}');
-      }
-      if (mounted) setState(() => _error = 'load_failed');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.resumed) return;
+    // 계정이 바뀌어 있으면 이전 사용자 결과를 먼저 버린다.
+    final uid = widget.authService.currentUser?.uid;
+    if (uid != _controller.activeUid) {
+      _controller.updateAccount(uid);
+      return;
     }
+    _controller.handleResume();
+  }
+
+  /// 상세 화면에서 돌아왔을 때도 날짜 context를 다시 확인한다.
+  void _onReturnFromDetail() {
+    if (!mounted) return;
+    _controller.handleResume();
   }
 
   void _openMyFortune() {
-    final profile = _profile;
+    final profile = _controller.profile;
     if (profile == null) return;
     _pushFortuneDetail<void>(
       routeName: FortuneRouteNames.my,
@@ -155,26 +142,24 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
             ? null
             : () {
                 Navigator.of(context).pop();
-                setState(() => _needsBirthTime = true);
+                setState(() => _birthTimeRequested = true);
               },
       ),
-    );
+    ).then((_) => _onReturnFromDetail());
   }
 
   void _openFortuneHistory() {
-    final profile = _profile;
-    if (profile == null) return;
+    if (_controller.activeUid == null) return;
     _pushFortuneDetail<void>(
       routeName: FortuneRouteNames.history,
-      builder: (_) => FortuneHistoryScreen(
-        profile: profile,
-        fortuneService: widget.fortuneService,
-      ),
-    );
+      // 같은 controller를 넘겨 오늘 운세와 최근 기록이 같은 KST 날짜·계정
+      // context를 공유하게 한다. 소유권은 이 화면에 남는다(dispose하지 않는다).
+      builder: (_) => FortuneHistoryScreen(controller: _controller),
+    ).then((_) => _onReturnFromDetail());
   }
 
   void _openIdealType() {
-    final profile = _profile;
+    final profile = _controller.profile;
     if (profile == null) return;
     _pushFortuneDetail<void>(
       routeName: FortuneRouteNames.idealType,
@@ -182,7 +167,7 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
         profile: profile,
         idealTypeService: _idealTypeService,
       ),
-    );
+    ).then((_) => _onReturnFromDetail());
   }
 
   void _openMatchFortune(MatchWithProfile match) {
@@ -215,34 +200,68 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return _FortuneHubErrorState(
-        message: '사주 정보를 불러오지 못했어요.\n잠시 후 다시 시도해주세요.',
-        onRetry: _load,
-      );
-    }
+    final status = _controller.dailyStatus;
+    final profile = _controller.profile;
 
     // 기존 사용자 출생시간 보완 — 저장하면 다시 표시되지 않는다.
-    final profile = _profile;
-    if (_needsBirthTime && profile != null) {
+    final needsBirthTime =
+        status == DailyFortuneStatus.needsBirthProfile || _birthTimeRequested;
+    if (needsBirthTime && profile != null) {
       return BirthTimeCompletionScreen(
+        key: const Key('daily-fortune-needs-birth-profile'),
         birthDate: profile.birthDate,
         birthProfileService: _birthProfileService,
-        onCompleted: _load,
+        onCompleted: () {
+          setState(() => _birthTimeRequested = false);
+          _controller.refreshAfterBirthProfileCompleted();
+        },
       );
     }
 
-    final daily = _daily;
-    final zodiac = _zodiac;
-    final saju = _saju;
+    switch (status) {
+      case DailyFortuneStatus.idle:
+      case DailyFortuneStatus.loading:
+        return const Center(
+          key: Key('daily-fortune-loading'),
+          child: CircularProgressIndicator(),
+        );
+      case DailyFortuneStatus.rateLimited:
+        return _FortuneHubErrorState(
+          key: const Key('daily-fortune-rate-limited'),
+          message: '요청이 많아요. 잠시 후 다시 시도해 주세요.',
+          onRetry: _controller.retryDaily,
+        );
+      case DailyFortuneStatus.unavailable:
+        return _FortuneHubErrorState(
+          key: const Key('daily-fortune-unavailable'),
+          message: '오늘의 운세를 불러오지 못했어요.\n네트워크를 확인하고 다시 시도해 주세요.',
+          onRetry: _controller.retryDaily,
+        );
+      case DailyFortuneStatus.error:
+        return _FortuneHubErrorState(
+          key: const Key('daily-fortune-error'),
+          message: '오늘의 운세를 불러오지 못했어요.',
+          onRetry: _controller.retryDaily,
+        );
+      case DailyFortuneStatus.needsBirthProfile:
+        // 프로필이 아직 없으면 위 분기를 못 탄다. 로딩으로 유지한다.
+        return const Center(
+          key: Key('daily-fortune-loading'),
+          child: CircularProgressIndicator(),
+        );
+      case DailyFortuneStatus.ready:
+        break;
+    }
+
+    final daily = _controller.dailyFortune;
+    final zodiac = _controller.zodiac;
+    final saju = _controller.saju;
     if (daily == null || zodiac == null || saju == null) {
       return const SizedBox.shrink();
     }
 
     return ListView(
+      key: const Key('daily-fortune-ready'),
       padding: EdgeInsets.fromLTRB(
         20,
         16,
@@ -250,7 +269,10 @@ class _FortuneHubScreenState extends State<FortuneHubScreen> {
         40 + MediaQuery.of(context).padding.bottom,
       ),
       children: [
-        _DailyFortuneCard(daily: daily),
+        _DailyFortuneCard(
+          daily: daily,
+          dateKey: _controller.loadedDailyDateKey ?? _controller.currentDateKey,
+        ),
         const SizedBox(height: 12),
         _HistoryEntryCard(onTap: _openFortuneHistory),
         const SizedBox(height: 12),
@@ -300,7 +322,11 @@ class _FortuneHubErrorState extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
 
-  const _FortuneHubErrorState({required this.message, required this.onRetry});
+  const _FortuneHubErrorState({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -329,7 +355,11 @@ class _FortuneHubErrorState extends StatelessWidget {
                 style: const TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 20),
-              OutlinedButton(onPressed: onRetry, child: const Text('다시 시도')),
+              OutlinedButton(
+                key: const Key('daily-fortune-retry'),
+                onPressed: onRetry,
+                child: const Text('다시 시도'),
+              ),
             ],
           ),
         ),
@@ -341,15 +371,25 @@ class _FortuneHubErrorState extends StatelessWidget {
 /// 오늘의 운세 카드 (애정 중심).
 class _DailyFortuneCard extends StatelessWidget {
   final DailyFortune daily;
-  const _DailyFortuneCard({required this.daily});
+
+  /// 이 운세가 속한 KST 날짜. 기기 로컬 날짜(`DateTime.now()`)로 라벨을 만들면
+  /// 자정 근처나 다른 시간대 기기에서 카드 내용과 날짜가 어긋난다.
+  final String dateKey;
+
+  const _DailyFortuneCard({required this.daily, required this.dateKey});
 
   static const _weekdays = ['월', '화', '수', '목', '금', '토', '일'];
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
+    final parts = dateKey.split('-');
+    final date = DateTime.utc(
+      int.tryParse(parts.first) ?? 2000,
+      parts.length > 1 ? int.tryParse(parts[1]) ?? 1 : 1,
+      parts.length > 2 ? int.tryParse(parts[2]) ?? 1 : 1,
+    );
     final dateLabel =
-        '${now.month}월 ${now.day}일 (${_weekdays[now.weekday - 1]})';
+        '${date.month}월 ${date.day}일 (${_weekdays[date.weekday - 1]})';
 
     return Container(
       width: double.infinity,
