@@ -11,6 +11,7 @@
     "audit:orphan-accounts": "node scripts/audit_orphan_accounts.js",
     "cleanup:orphan-accounts": "node scripts/cleanup_orphan_accounts.js",
     "migrate:auth-verification-badges:apply": "node scripts/auth_verification_badge_apply.js",
+    "eval:saju-narrative": "node evals/saju_narrative_eval.js",
     "test": "node --test test/*.test.js",
     "test:public-profile-backfill": "node --test test/public_profile_backfill.test.js test/public_profile_backfill_apply.test.js"
   },
