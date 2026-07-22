@@ -1,0 +1,2116 @@
+{
+  "schemaVersion": 1,
+  "conventionVersion": 1,
+  "metadata": {
+    "purpose": "Phase 5-1 사주 계산 기준선. 모든 입력은 합성 데이터이며 실제 사용자 생년월일을 포함하지 않는다.",
+    "source": {
+      "provider": "한국천문연구원(KASI)",
+      "service": "음양력 변환 (astro.kasi.re.kr/life)",
+      "endpoints": [
+        "/life/solc",
+        "/life/lunc"
+      ],
+      "retrievedAt": "2026-07-22"
+    },
+    "fieldSemantics": {
+      "julianDay": "KASI SOLC_JD. 정오 기준이 아니라 해당 날짜의 적일 정수값.",
+      "dayGanji": "KASI LUNC_ILJIN(일진). 사주 일주와 동일한 60갑자 순환.",
+      "lunarYearGanji": "KASI LUNC_PRCN(세차). **설날 기준**으로 바뀐다. 입춘 기준 사주 연주와 다르므로 연주 기대값으로 쓰면 안 된다.",
+      "lunarMonthGanji": "KASI LUNC_WLGN(월건). 음력 월 기준이며 절기 기준 사주 월주와 다르다. 윤달에는 빈 값이다. 월주 기대값으로 쓰면 안 된다."
+    },
+    "unavailableExpectations": [
+      "사주 연주(입춘 경계) — 절기 순간 공식값 미확보",
+      "사주 월주(절기 경계) — 절기 순간 공식값 미확보",
+      "시주 — 제품 convention 미확정"
+    ]
+  },
+  "cases": [
+    {
+      "id": "solar_1990_01_15_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 1990,
+        "month": 1,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1990-01-15",
+        "lunarDate": {
+          "year": 1989,
+          "month": 12,
+          "day": 19,
+          "isLeapMonth": false
+        },
+        "julianDay": 2447907,
+        "dayGanji": {
+          "korean": "경진",
+          "hanja": "庚辰"
+        },
+        "lunarYearGanji": {
+          "korean": "기사",
+          "hanja": "己巳"
+        },
+        "lunarMonthGanji": {
+          "korean": "정축",
+          "hanja": "丁丑"
+        },
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1992_02_29_leap_year_feb29",
+      "input": {
+        "calendarType": "solar",
+        "year": 1992,
+        "month": 2,
+        "day": 29,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1992-02-29",
+        "lunarDate": {
+          "year": 1992,
+          "month": 1,
+          "day": 26,
+          "isLeapMonth": false
+        },
+        "julianDay": 2448682,
+        "dayGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarYearGanji": {
+          "korean": "임신",
+          "hanja": "壬申"
+        },
+        "lunarMonthGanji": {
+          "korean": "임인",
+          "hanja": "壬寅"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1993_02_28_common_year_feb28",
+      "input": {
+        "calendarType": "solar",
+        "year": 1993,
+        "month": 2,
+        "day": 28,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1993-02-28",
+        "lunarDate": {
+          "year": 1993,
+          "month": 2,
+          "day": 8,
+          "isLeapMonth": false
+        },
+        "julianDay": 2449047,
+        "dayGanji": {
+          "korean": "경진",
+          "hanja": "庚辰"
+        },
+        "lunarYearGanji": {
+          "korean": "계유",
+          "hanja": "癸酉"
+        },
+        "lunarMonthGanji": {
+          "korean": "을묘",
+          "hanja": "乙卯"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1995_02_03_before_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 1995,
+        "month": 2,
+        "day": 3,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1995-02-03",
+        "lunarDate": {
+          "year": 1995,
+          "month": 1,
+          "day": 4,
+          "isLeapMonth": false
+        },
+        "julianDay": 2449752,
+        "dayGanji": {
+          "korean": "을축",
+          "hanja": "乙丑"
+        },
+        "lunarYearGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarMonthGanji": {
+          "korean": "무인",
+          "hanja": "戊寅"
+        },
+        "weekday": "금"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1995_02_04_ipchun_day",
+      "input": {
+        "calendarType": "solar",
+        "year": 1995,
+        "month": 2,
+        "day": 4,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1995-02-04",
+        "lunarDate": {
+          "year": 1995,
+          "month": 1,
+          "day": 5,
+          "isLeapMonth": false
+        },
+        "julianDay": 2449753,
+        "dayGanji": {
+          "korean": "병인",
+          "hanja": "丙寅"
+        },
+        "lunarYearGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarMonthGanji": {
+          "korean": "무인",
+          "hanja": "戊寅"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1995_02_05_after_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 1995,
+        "month": 2,
+        "day": 5,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1995-02-05",
+        "lunarDate": {
+          "year": 1995,
+          "month": 1,
+          "day": 6,
+          "isLeapMonth": false
+        },
+        "julianDay": 2449754,
+        "dayGanji": {
+          "korean": "정묘",
+          "hanja": "丁卯"
+        },
+        "lunarYearGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarMonthGanji": {
+          "korean": "무인",
+          "hanja": "戊寅"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1996_06_30_month_end",
+      "input": {
+        "calendarType": "solar",
+        "year": 1996,
+        "month": 6,
+        "day": 30,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1996-06-30",
+        "lunarDate": {
+          "year": 1996,
+          "month": 5,
+          "day": 15,
+          "isLeapMonth": false
+        },
+        "julianDay": 2450265,
+        "dayGanji": {
+          "korean": "무술",
+          "hanja": "戊戌"
+        },
+        "lunarYearGanji": {
+          "korean": "병자",
+          "hanja": "丙子"
+        },
+        "lunarMonthGanji": {
+          "korean": "갑오",
+          "hanja": "甲午"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1996_07_01_month_start",
+      "input": {
+        "calendarType": "solar",
+        "year": 1996,
+        "month": 7,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1996-07-01",
+        "lunarDate": {
+          "year": 1996,
+          "month": 5,
+          "day": 16,
+          "isLeapMonth": false
+        },
+        "julianDay": 2450266,
+        "dayGanji": {
+          "korean": "기해",
+          "hanja": "己亥"
+        },
+        "lunarYearGanji": {
+          "korean": "병자",
+          "hanja": "丙子"
+        },
+        "lunarMonthGanji": {
+          "korean": "갑오",
+          "hanja": "甲午"
+        },
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1999_12_31_year_end",
+      "input": {
+        "calendarType": "solar",
+        "year": 1999,
+        "month": 12,
+        "day": 31,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1999-12-31",
+        "lunarDate": {
+          "year": 1999,
+          "month": 11,
+          "day": 24,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451544,
+        "dayGanji": {
+          "korean": "정사",
+          "hanja": "丁巳"
+        },
+        "lunarYearGanji": {
+          "korean": "기묘",
+          "hanja": "己卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "병자",
+          "hanja": "丙子"
+        },
+        "weekday": "금"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2000_01_01_year_start",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 1,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2000-01-01",
+        "lunarDate": {
+          "year": 1999,
+          "month": 11,
+          "day": 25,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451545,
+        "dayGanji": {
+          "korean": "무오",
+          "hanja": "戊午"
+        },
+        "lunarYearGanji": {
+          "korean": "기묘",
+          "hanja": "己卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "병자",
+          "hanja": "丙子"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2000_02_29_century_leap_year",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 29,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2000-02-29",
+        "lunarDate": {
+          "year": 2000,
+          "month": 1,
+          "day": 25,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451604,
+        "dayGanji": {
+          "korean": "정사",
+          "hanja": "丁巳"
+        },
+        "lunarYearGanji": {
+          "korean": "경진",
+          "hanja": "庚辰"
+        },
+        "lunarMonthGanji": {
+          "korean": "무인",
+          "hanja": "戊寅"
+        },
+        "weekday": "화"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2001_03_31_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2001,
+        "month": 3,
+        "day": 31,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2001-03-31",
+        "lunarDate": {
+          "year": 2001,
+          "month": 3,
+          "day": 7,
+          "isLeapMonth": false
+        },
+        "julianDay": 2452000,
+        "dayGanji": {
+          "korean": "계사",
+          "hanja": "癸巳"
+        },
+        "lunarYearGanji": {
+          "korean": "신사",
+          "hanja": "辛巳"
+        },
+        "lunarMonthGanji": {
+          "korean": "임진",
+          "hanja": "壬辰"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2002_04_01_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2002,
+        "month": 4,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2002-04-01",
+        "lunarDate": {
+          "year": 2002,
+          "month": 2,
+          "day": 19,
+          "isLeapMonth": false
+        },
+        "julianDay": 2452366,
+        "dayGanji": {
+          "korean": "기해",
+          "hanja": "己亥"
+        },
+        "lunarYearGanji": {
+          "korean": "임오",
+          "hanja": "壬午"
+        },
+        "lunarMonthGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2003_05_15_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2003,
+        "month": 5,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2003-05-15",
+        "lunarDate": {
+          "year": 2003,
+          "month": 4,
+          "day": 15,
+          "isLeapMonth": false
+        },
+        "julianDay": 2452775,
+        "dayGanji": {
+          "korean": "무자",
+          "hanja": "戊子"
+        },
+        "lunarYearGanji": {
+          "korean": "계미",
+          "hanja": "癸未"
+        },
+        "lunarMonthGanji": {
+          "korean": "정사",
+          "hanja": "丁巳"
+        },
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2004_08_31_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2004,
+        "month": 8,
+        "day": 31,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2004-08-31",
+        "lunarDate": {
+          "year": 2004,
+          "month": 7,
+          "day": 16,
+          "isLeapMonth": false
+        },
+        "julianDay": 2453249,
+        "dayGanji": {
+          "korean": "임오",
+          "hanja": "壬午"
+        },
+        "lunarYearGanji": {
+          "korean": "갑신",
+          "hanja": "甲申"
+        },
+        "lunarMonthGanji": {
+          "korean": "임신",
+          "hanja": "壬申"
+        },
+        "weekday": "화"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2005_09_01_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2005,
+        "month": 9,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2005-09-01",
+        "lunarDate": {
+          "year": 2005,
+          "month": 7,
+          "day": 28,
+          "isLeapMonth": false
+        },
+        "julianDay": 2453615,
+        "dayGanji": {
+          "korean": "무자",
+          "hanja": "戊子"
+        },
+        "lunarYearGanji": {
+          "korean": "을유",
+          "hanja": "乙酉"
+        },
+        "lunarMonthGanji": {
+          "korean": "갑신",
+          "hanja": "甲申"
+        },
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2006_10_15_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2006,
+        "month": 10,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2006-10-15",
+        "lunarDate": {
+          "year": 2006,
+          "month": 8,
+          "day": 24,
+          "isLeapMonth": false
+        },
+        "julianDay": 2454024,
+        "dayGanji": {
+          "korean": "정축",
+          "hanja": "丁丑"
+        },
+        "lunarYearGanji": {
+          "korean": "병술",
+          "hanja": "丙戌"
+        },
+        "lunarMonthGanji": {
+          "korean": "정유",
+          "hanja": "丁酉"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2007_11_30_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2007,
+        "month": 11,
+        "day": 30,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2007-11-30",
+        "lunarDate": {
+          "year": 2007,
+          "month": 10,
+          "day": 21,
+          "isLeapMonth": false
+        },
+        "julianDay": 2454435,
+        "dayGanji": {
+          "korean": "무진",
+          "hanja": "戊辰"
+        },
+        "lunarYearGanji": {
+          "korean": "정해",
+          "hanja": "丁亥"
+        },
+        "lunarMonthGanji": {
+          "korean": "신해",
+          "hanja": "辛亥"
+        },
+        "weekday": "금"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2008_12_01_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2008,
+        "month": 12,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2008-12-01",
+        "lunarDate": {
+          "year": 2008,
+          "month": 11,
+          "day": 4,
+          "isLeapMonth": false
+        },
+        "julianDay": 2454802,
+        "dayGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarYearGanji": {
+          "korean": "무자",
+          "hanja": "戊子"
+        },
+        "lunarMonthGanji": {
+          "korean": "갑자",
+          "hanja": "甲子"
+        },
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1984_02_02_before_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 1984,
+        "month": 2,
+        "day": 2,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1984-02-02",
+        "lunarDate": {
+          "year": 1984,
+          "month": 1,
+          "day": 1,
+          "isLeapMonth": false
+        },
+        "julianDay": 2445733,
+        "dayGanji": {
+          "korean": "병인",
+          "hanja": "丙寅"
+        },
+        "lunarYearGanji": {
+          "korean": "갑자",
+          "hanja": "甲子"
+        },
+        "lunarMonthGanji": {
+          "korean": "병인",
+          "hanja": "丙寅"
+        },
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1984_02_05_after_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 1984,
+        "month": 2,
+        "day": 5,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1984-02-05",
+        "lunarDate": {
+          "year": 1984,
+          "month": 1,
+          "day": 4,
+          "isLeapMonth": false
+        },
+        "julianDay": 2445736,
+        "dayGanji": {
+          "korean": "기사",
+          "hanja": "己巳"
+        },
+        "lunarYearGanji": {
+          "korean": "갑자",
+          "hanja": "甲子"
+        },
+        "lunarMonthGanji": {
+          "korean": "병인",
+          "hanja": "丙寅"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1988_09_17_ordinary",
+      "input": {
+        "calendarType": "solar",
+        "year": 1988,
+        "month": 9,
+        "day": 17,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1988-09-17",
+        "lunarDate": {
+          "year": 1988,
+          "month": 8,
+          "day": 7,
+          "isLeapMonth": false
+        },
+        "julianDay": 2447422,
+        "dayGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarYearGanji": {
+          "korean": "무진",
+          "hanja": "戊辰"
+        },
+        "lunarMonthGanji": {
+          "korean": "신유",
+          "hanja": "辛酉"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2000_02_03_before_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 3,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2000-02-03",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 28,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451578,
+        "dayGanji": {
+          "korean": "신묘",
+          "hanja": "辛卯"
+        },
+        "lunarYearGanji": {
+          "korean": "기묘",
+          "hanja": "己卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "정축",
+          "hanja": "丁丑"
+        },
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2000_02_05_after_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 2000,
+          "month": 1,
+          "day": 1,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanji": {
+          "korean": "계사",
+          "hanja": "癸巳"
+        },
+        "lunarYearGanji": {
+          "korean": "경진",
+          "hanja": "庚辰"
+        },
+        "lunarMonthGanji": {
+          "korean": "무인",
+          "hanja": "戊寅"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2024_02_03_before_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 2024,
+        "month": 2,
+        "day": 3,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2024-02-03",
+        "lunarDate": {
+          "year": 2023,
+          "month": 12,
+          "day": 24,
+          "isLeapMonth": false
+        },
+        "julianDay": 2460344,
+        "dayGanji": {
+          "korean": "정유",
+          "hanja": "丁酉"
+        },
+        "lunarYearGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "을축",
+          "hanja": "乙丑"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2024_02_04_ipchun_day",
+      "input": {
+        "calendarType": "solar",
+        "year": 2024,
+        "month": 2,
+        "day": 4,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2024-02-04",
+        "lunarDate": {
+          "year": 2023,
+          "month": 12,
+          "day": 25,
+          "isLeapMonth": false
+        },
+        "julianDay": 2460345,
+        "dayGanji": {
+          "korean": "무술",
+          "hanja": "戊戌"
+        },
+        "lunarYearGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "을축",
+          "hanja": "乙丑"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2024_02_05_after_ipchun",
+      "input": {
+        "calendarType": "solar",
+        "year": 2024,
+        "month": 2,
+        "day": 5,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2024-02-05",
+        "lunarDate": {
+          "year": 2023,
+          "month": 12,
+          "day": 26,
+          "isLeapMonth": false
+        },
+        "julianDay": 2460346,
+        "dayGanji": {
+          "korean": "기해",
+          "hanja": "己亥"
+        },
+        "lunarYearGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "을축",
+          "hanja": "乙丑"
+        },
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2020_12_21_solstice_period",
+      "input": {
+        "calendarType": "solar",
+        "year": 2020,
+        "month": 12,
+        "day": 21,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2020-12-21",
+        "lunarDate": {
+          "year": 2020,
+          "month": 11,
+          "day": 7,
+          "isLeapMonth": false
+        },
+        "julianDay": 2459205,
+        "dayGanji": {
+          "korean": "무술",
+          "hanja": "戊戌"
+        },
+        "lunarYearGanji": {
+          "korean": "경자",
+          "hanja": "庚子"
+        },
+        "lunarMonthGanji": {
+          "korean": "무자",
+          "hanja": "戊子"
+        },
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2021_01_05_soHan_period",
+      "input": {
+        "calendarType": "solar",
+        "year": 2021,
+        "month": 1,
+        "day": 5,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2021-01-05",
+        "lunarDate": {
+          "year": 2020,
+          "month": 11,
+          "day": 22,
+          "isLeapMonth": false
+        },
+        "julianDay": 2459220,
+        "dayGanji": {
+          "korean": "계축",
+          "hanja": "癸丑"
+        },
+        "lunarYearGanji": {
+          "korean": "경자",
+          "hanja": "庚子"
+        },
+        "lunarMonthGanji": {
+          "korean": "무자",
+          "hanja": "戊子"
+        },
+        "weekday": "화"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_1970_01_01_epoch",
+      "input": {
+        "calendarType": "solar",
+        "year": 1970,
+        "month": 1,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1970-01-01",
+        "lunarDate": {
+          "year": 1969,
+          "month": 11,
+          "day": 24,
+          "isLeapMonth": false
+        },
+        "julianDay": 2440588,
+        "dayGanji": {
+          "korean": "신사",
+          "hanja": "辛巳"
+        },
+        "lunarYearGanji": {
+          "korean": "기유",
+          "hanja": "己酉"
+        },
+        "lunarMonthGanji": {
+          "korean": "병자",
+          "hanja": "丙子"
+        },
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2007_02_18_lunar_new_year",
+      "input": {
+        "calendarType": "solar",
+        "year": 2007,
+        "month": 2,
+        "day": 18,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2007-02-18",
+        "lunarDate": {
+          "year": 2007,
+          "month": 1,
+          "day": 1,
+          "isLeapMonth": false
+        },
+        "julianDay": 2454150,
+        "dayGanji": {
+          "korean": "계미",
+          "hanja": "癸未"
+        },
+        "lunarYearGanji": {
+          "korean": "정해",
+          "hanja": "丁亥"
+        },
+        "lunarMonthGanji": {
+          "korean": "임인",
+          "hanja": "壬寅"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "solar_2007_02_04_ipchun_before_lunar_new_year",
+      "input": {
+        "calendarType": "solar",
+        "year": 2007,
+        "month": 2,
+        "day": 4,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2007-02-04",
+        "lunarDate": {
+          "year": 2006,
+          "month": 12,
+          "day": 17,
+          "isLeapMonth": false
+        },
+        "julianDay": 2454136,
+        "dayGanji": {
+          "korean": "기사",
+          "hanja": "己巳"
+        },
+        "lunarYearGanji": {
+          "korean": "병술",
+          "hanja": "丙戌"
+        },
+        "lunarMonthGanji": {
+          "korean": "신축",
+          "hanja": "辛丑"
+        },
+        "weekday": "일"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/solc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_1995_08_15_normal_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 1995,
+        "month": 8,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": false
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1995-09-09",
+        "lunarDate": {
+          "year": 1995,
+          "month": 8,
+          "day": 15,
+          "isLeapMonth": false
+        },
+        "julianDay": 2449970,
+        "dayGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "lunarYearGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarMonthGanji": {
+          "korean": "을유",
+          "hanja": "乙酉"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_1995_08_15_leap_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 1995,
+        "month": 8,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": true
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1995-10-09",
+        "lunarDate": {
+          "year": 1995,
+          "month": 8,
+          "day": 15,
+          "isLeapMonth": true
+        },
+        "julianDay": 2450000,
+        "dayGanji": {
+          "korean": "계유",
+          "hanja": "癸酉"
+        },
+        "lunarYearGanji": {
+          "korean": "을해",
+          "hanja": "乙亥"
+        },
+        "lunarMonthGanji": null,
+        "weekday": "월"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_2020_04_15_normal_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 2020,
+        "month": 4,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": false
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2020-05-07",
+        "lunarDate": {
+          "year": 2020,
+          "month": 4,
+          "day": 15,
+          "isLeapMonth": false
+        },
+        "julianDay": 2458977,
+        "dayGanji": {
+          "korean": "경술",
+          "hanja": "庚戌"
+        },
+        "lunarYearGanji": {
+          "korean": "경자",
+          "hanja": "庚子"
+        },
+        "lunarMonthGanji": {
+          "korean": "신사",
+          "hanja": "辛巳"
+        },
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_2020_04_15_leap_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 2020,
+        "month": 4,
+        "day": 15,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": true
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2020-06-06",
+        "lunarDate": {
+          "year": 2020,
+          "month": 4,
+          "day": 15,
+          "isLeapMonth": true
+        },
+        "julianDay": 2459007,
+        "dayGanji": {
+          "korean": "경진",
+          "hanja": "庚辰"
+        },
+        "lunarYearGanji": {
+          "korean": "경자",
+          "hanja": "庚子"
+        },
+        "lunarMonthGanji": null,
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_2023_02_10_normal_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 2023,
+        "month": 2,
+        "day": 10,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": false
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2023-03-01",
+        "lunarDate": {
+          "year": 2023,
+          "month": 2,
+          "day": 10,
+          "isLeapMonth": false
+        },
+        "julianDay": 2460005,
+        "dayGanji": {
+          "korean": "무오",
+          "hanja": "戊午"
+        },
+        "lunarYearGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "lunarMonthGanji": {
+          "korean": "을묘",
+          "hanja": "乙卯"
+        },
+        "weekday": "수"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_2023_02_10_leap_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 2023,
+        "month": 2,
+        "day": 10,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": true
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2023-03-31",
+        "lunarDate": {
+          "year": 2023,
+          "month": 2,
+          "day": 10,
+          "isLeapMonth": true
+        },
+        "julianDay": 2460035,
+        "dayGanji": {
+          "korean": "무자",
+          "hanja": "戊子"
+        },
+        "lunarYearGanji": {
+          "korean": "계묘",
+          "hanja": "癸卯"
+        },
+        "lunarMonthGanji": null,
+        "weekday": "금"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_2017_05_20_normal_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 2017,
+        "month": 5,
+        "day": 20,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": false
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2017-06-14",
+        "lunarDate": {
+          "year": 2017,
+          "month": 5,
+          "day": 20,
+          "isLeapMonth": false
+        },
+        "julianDay": 2457919,
+        "dayGanji": {
+          "korean": "임신",
+          "hanja": "壬申"
+        },
+        "lunarYearGanji": {
+          "korean": "정유",
+          "hanja": "丁酉"
+        },
+        "lunarMonthGanji": {
+          "korean": "병오",
+          "hanja": "丙午"
+        },
+        "weekday": "수"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_2017_05_20_leap_month",
+      "input": {
+        "calendarType": "lunar",
+        "year": 2017,
+        "month": 5,
+        "day": 20,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": true
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "2017-07-13",
+        "lunarDate": {
+          "year": 2017,
+          "month": 5,
+          "day": 20,
+          "isLeapMonth": true
+        },
+        "julianDay": 2457948,
+        "dayGanji": {
+          "korean": "신축",
+          "hanja": "辛丑"
+        },
+        "lunarYearGanji": {
+          "korean": "정유",
+          "hanja": "丁酉"
+        },
+        "lunarMonthGanji": null,
+        "weekday": "목"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "lunar_1990_01_01_new_year",
+      "input": {
+        "calendarType": "lunar",
+        "year": 1990,
+        "month": 1,
+        "day": 1,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": false
+      },
+      "precision": "dateOnly",
+      "expected": {
+        "solarDate": "1990-01-27",
+        "lunarDate": {
+          "year": 1990,
+          "month": 1,
+          "day": 1,
+          "isLeapMonth": false
+        },
+        "julianDay": 2447919,
+        "dayGanji": {
+          "korean": "임진",
+          "hanja": "壬辰"
+        },
+        "lunarYearGanji": {
+          "korean": "경오",
+          "hanja": "庚午"
+        },
+        "lunarMonthGanji": {
+          "korean": "무인",
+          "hanja": "戊寅"
+        },
+        "weekday": "토"
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "endpoint": "/life/lunc",
+        "retrievedAt": "2026-07-22"
+      }
+    },
+    {
+      "id": "unknown_birth_time_case_01",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          }
+        },
+        "hourPillarComputable": false
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_00_00_case_01",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "00:00",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_01_00_zi_chou_boundary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "01:00",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_03_00_chou_yin_boundary",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "03:00",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_12_00_noon",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "12:00",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_22_59_before_zi",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "22:59",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_23_00_zi_start",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "23:00",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "갑오",
+            "hanja": "甲午"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "birth_time_23_59_zi_end",
+      "input": {
+        "calendarType": "solar",
+        "year": 2000,
+        "month": 2,
+        "day": 5,
+        "birthTime": "23:59",
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateAndTime",
+      "conventionSensitive": true,
+      "expected": {
+        "solarDate": "2000-02-05",
+        "lunarDate": {
+          "year": 1999,
+          "month": 12,
+          "day": 30,
+          "isLeapMonth": false
+        },
+        "julianDay": 2451580,
+        "dayGanjiByConvention": {
+          "midnight": {
+            "korean": "계사",
+            "hanja": "癸巳"
+          },
+          "zi23": {
+            "korean": "갑오",
+            "hanja": "甲午"
+          }
+        },
+        "hourPillarComputable": true
+      },
+      "source": {
+        "provider": "KASI",
+        "referenceType": "lunisolar-calendar",
+        "note": "일진은 2000-02-05·2000-02-06 공식 조회값. 시주 경계 자체는 제품 convention 미확정."
+      }
+    },
+    {
+      "id": "invalid_solar_1993_02_29_not_leap_year",
+      "input": {
+        "calendarType": "solar",
+        "year": 1993,
+        "month": 2,
+        "day": 29,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": null,
+      "expectedError": "invalid_solar_date",
+      "source": {
+        "provider": "gregorian-calendar-rule",
+        "referenceType": "calendar-validity"
+      }
+    },
+    {
+      "id": "invalid_solar_2001_04_31_short_month",
+      "input": {
+        "calendarType": "solar",
+        "year": 2001,
+        "month": 4,
+        "day": 31,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": null,
+      "expectedError": "invalid_solar_date",
+      "source": {
+        "provider": "gregorian-calendar-rule",
+        "referenceType": "calendar-validity"
+      }
+    },
+    {
+      "id": "invalid_solar_1900_02_29_century_non_leap",
+      "input": {
+        "calendarType": "solar",
+        "year": 1900,
+        "month": 2,
+        "day": 29,
+        "birthTime": null,
+        "timeZone": "Asia/Seoul",
+        "lunarLeapMonth": null
+      },
+      "precision": "dateOnly",
+      "expected": null,
+      "expectedError": "invalid_solar_date",
+      "source": {
+        "provider": "gregorian-calendar-rule",
+        "referenceType": "calendar-validity"
+      }
+    }
+  ]
+}
