@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../services/storage/profile_photo_processor.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -36,32 +36,29 @@ class PhotosUploadStep extends StatefulWidget {
 }
 
 class _PhotosUploadStepState extends State<PhotosUploadStep> {
-  final ImagePicker _picker = ImagePicker();
+  // 사진 처리 기준은 ProfilePhotoProcessor 한 곳에만 둔다.
+  // 예전에는 여기서 대표 85/서브 80, maxWidth 1080으로 각각 달랐고,
+  // 프로필 편집 화면은 또 다른 값을 썼다.
+  final ProfilePhotoProcessor _processor = ProfilePhotoProcessor();
 
   Future<void> _pickMainImage() async {
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1080,
-    );
-    if (image != null) {
-      widget.onMainImageChanged(File(image.path));
-    }
+    final processed = await _processor.pickFromGallery();
+    if (processed == null) return;
+    processed.logDiagnostics();
+    widget.onMainImageChanged(processed.file);
   }
 
   Future<void> _pickSubImage(int index) async {
     // index: 0~2 (서브 슬롯 번호)
-    final XFile? image = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-      maxWidth: 1080,
-    );
-    if (image == null) return;
+    final processed = await _processor.pickFromGallery();
+    if (processed == null) return;
+    processed.logDiagnostics();
+    final image = processed.file;
     final updated = List<File>.from(widget.subImages);
     if (index < updated.length) {
-      updated[index] = File(image.path);
+      updated[index] = image;
     } else {
-      updated.add(File(image.path));
+      updated.add(image);
     }
     widget.onSubImagesChanged(updated);
   }

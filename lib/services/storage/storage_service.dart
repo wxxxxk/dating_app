@@ -15,10 +15,14 @@ class StorageService {
   ///
   /// 경로 규칙: users/{uid}/profile/{fileName}
   /// uid로 경로를 나누면 Storage 보안 규칙에서 "본인 폴더만 쓰기"를 쉽게 걸 수 있다.
+  /// [contentType]은 ProfilePhotoProcessor가 정한 실제 출력 포맷이다.
+  /// 이 서비스는 파일을 **다시 resize·compress하지 않는다** — 처리는
+  /// ProfilePhotoProcessor에서 이미 한 번 끝났다.
   Future<String> uploadProfilePhoto({
     required String uid,
     required String fileName,
     required File file,
+    String contentType = 'image/jpeg',
   }) async {
     final ref = _storage
         .ref()
@@ -27,7 +31,15 @@ class StorageService {
         .child('profile')
         .child(fileName);
 
-    final task = await ref.putFile(file);
+    // 파일명에 timestamp가 들어가 object가 immutable하므로 길게 캐시해도
+    // 새 사진이 옛 이미지에 가려지지 않는다. 교체 시 URL 자체가 바뀐다.
+    final task = await ref.putFile(
+      file,
+      SettableMetadata(
+        contentType: contentType,
+        cacheControl: 'public, max-age=31536000, immutable',
+      ),
+    );
     return task.ref.getDownloadURL();
   }
 

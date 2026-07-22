@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../core/constants/profile_options.dart';
 import '../../core/constants/profile_story_prompts.dart';
@@ -15,6 +13,7 @@ import '../../models/profile_story.dart';
 import '../../models/user_profile.dart';
 import '../../services/database/firestore_service.dart';
 import '../../services/profile/profile_keyword_summary_service.dart';
+import '../../services/storage/profile_photo_processor.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/premium_components.dart';
@@ -82,7 +81,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   bool _isLoading = false;
   // null이면 사진 작업 중이 아님. 값이 있으면 해당 인덱스 슬롯이 업로드/삭제 중.
   int? _busyPhotoIndex;
-  final _imagePicker = ImagePicker();
+  final _profilePhotoProcessor = ProfilePhotoProcessor();
 
   @override
   void initState() {
@@ -284,11 +283,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _pickAndUploadPhoto(int index) async {
-    final XFile? picked = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
-    if (picked == null || !mounted) return;
+    // 온보딩과 같은 processor를 쓴다. 진입점마다 기준이 달라지면
+    // 같은 사진도 등록 경로에 따라 화질이 달라진다.
+    final processed = await _profilePhotoProcessor.pickFromGallery();
+    if (processed == null || !mounted) return;
+    processed.logDiagnostics();
 
     setState(() => _busyPhotoIndex = index);
     try {
@@ -296,7 +295,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         uid: widget.profile.uid,
         fileName:
             '${index == 0 ? 'main' : 'sub'}_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        file: File(picked.path),
+        file: processed.file,
+        contentType: processed.contentType,
       );
       if (!mounted) return;
       setState(() {
