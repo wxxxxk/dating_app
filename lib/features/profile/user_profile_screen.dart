@@ -14,6 +14,7 @@ import '../../services/database/firestore_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../shared/widgets/premium_components.dart';
+import '../../shared/widgets/profile_photo_view.dart';
 import '../safety/report_sheet.dart';
 import 'widgets/verification_badge.dart';
 
@@ -394,131 +395,109 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: PremiumProfileImageCard(
-        child: SizedBox(
-          height: 420,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (photoUrls.isEmpty)
-                const ColoredBox(
-                  color: AppColors.surfaceElevated,
-                  child: Icon(
-                    Icons.person_rounded,
-                    size: 90,
-                    color: AppColors.textMutedOnDark,
-                  ),
-                )
-              else
-                PageView.builder(
-                  controller: _controller,
-                  itemCount: photoUrls.length,
-                  onPageChanged: (value) => setState(() => _index = value),
-                  itemBuilder: (_, index) => Image.network(
-                    photoUrls[index],
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const ColoredBox(
-                      color: AppColors.surfaceElevated,
-                      child: Icon(
-                        Icons.person_rounded,
-                        color: AppColors.textMutedOnDark,
-                      ),
-                    ),
-                  ),
-                ),
-              const Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.42, 0.72, 1],
-                      colors: [
-                        Colors.transparent,
-                        Color(0x33000000),
-                        Color(0xE6000000),
-                      ],
-                    ),
+        // 예전에는 height 420 고정 + BoxFit.cover라 가로 사진은 좌우가,
+        // 세로 사진은 위아래가 잘려 나갔다. 이제 대표 사진의 실제 비율을
+        // 따르고, 사진은 잘리지 않는다. 아래 오버레이는 그 크기를 채운다.
+        child: Stack(
+          children: [
+            ProfilePhotoDetailView(
+              photoUrls: photoUrls,
+              controller: _controller,
+              onPageChanged: (value) => setState(() => _index = value),
+            ),
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.42, 0.72, 1],
+                    colors: [
+                      Colors.transparent,
+                      Color(0x33000000),
+                      Color(0xE6000000),
+                    ],
                   ),
                 ),
               ),
-              Positioned(
-                left: 20,
-                right: 20,
-                bottom: 20,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${widget.profile.displayName}, ${widget.profile.age}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textOnDark,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                      ),
+            ),
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 20,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${widget.profile.displayName}, ${widget.profile.age}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textOnDark,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
                     ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      PremiumStatusPill(
+                        label: _genderLabel(widget.profile.gender),
+                        compact: true,
+                      ),
+                      if (widget.profile.mbti != null)
                         PremiumStatusPill(
-                          label: _genderLabel(widget.profile.gender),
+                          label: widget.profile.mbti!,
                           compact: true,
                         ),
-                        if (widget.profile.mbti != null)
-                          PremiumStatusPill(
-                            label: widget.profile.mbti!,
-                            compact: true,
-                          ),
-                        if (widget.distanceLabel != null)
-                          PremiumStatusPill(
-                            label: widget.distanceLabel!,
-                            icon: Icons.near_me_rounded,
-                            compact: true,
-                          ),
-                        if (widget.blocked)
-                          const PremiumStatusPill(
-                            label: '차단됨',
-                            icon: Icons.block_rounded,
-                            color: AppColors.danger,
-                            compact: true,
-                          ),
-                      ],
-                    ),
-                    if (widget.profile.verifications.hasAny) ...[
-                      const SizedBox(height: 10),
-                      VerificationBadges(
-                        verifications: widget.profile.verifications,
-                        brightness: Brightness.dark,
-                      ),
+                      if (widget.distanceLabel != null)
+                        PremiumStatusPill(
+                          label: widget.distanceLabel!,
+                          icon: Icons.near_me_rounded,
+                          compact: true,
+                        ),
+                      if (widget.blocked)
+                        const PremiumStatusPill(
+                          label: '차단됨',
+                          icon: Icons.block_rounded,
+                          color: AppColors.danger,
+                          compact: true,
+                        ),
                     ],
-                  ],
-                ),
-              ),
-              if (widget.loading)
-                const Positioned(
-                  top: 18,
-                  right: 18,
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.mint,
+                  ),
+                  if (widget.profile.verifications.hasAny) ...[
+                    const SizedBox(height: 10),
+                    VerificationBadges(
+                      verifications: widget.profile.verifications,
+                      brightness: Brightness.dark,
                     ),
+                  ],
+                ],
+              ),
+            ),
+            if (widget.loading)
+              const Positioned(
+                top: 18,
+                right: 18,
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.mint,
                   ),
                 ),
-              if (photoUrls.length > 1) ...[
-                _PhotoTapZones(onPrevious: _showPrevious, onNext: _showNext),
-                _PhotoSegmentIndicator(
-                  count: photoUrls.length,
-                  activeIndex: _index,
-                ),
-              ],
+              ),
+            if (photoUrls.length > 1) ...[
+              _PhotoTapZones(onPrevious: _showPrevious, onNext: _showNext),
+              _PhotoSegmentIndicator(
+                count: photoUrls.length,
+                activeIndex: _index,
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

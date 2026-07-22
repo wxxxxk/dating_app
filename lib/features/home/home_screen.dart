@@ -29,6 +29,7 @@ import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/profile_photo_view.dart';
 import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
 import 'account_deletion_screen.dart';
@@ -1209,15 +1210,7 @@ class _DailyPickAvatar extends StatelessWidget {
                 color: AppColors.textSecondary,
                 size: 38,
               )
-            : Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const Icon(
-                  Icons.person_rounded,
-                  color: AppColors.textSecondary,
-                  size: 38,
-                ),
-              ),
+            : ProfilePhotoThumbnail(url: imageUrl, boxWidth: 78, boxHeight: 98),
       ),
     );
   }
@@ -1238,53 +1231,18 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
   @override
   Widget build(BuildContext context) {
     final urls = widget.photoUrls;
-    final height = MediaQuery.of(context).size.width - 40; // 카드 좌우 여백 제외
-
-    if (urls.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          height: height,
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.hero),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: const Icon(
-            Icons.person_rounded,
-            size: 80,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.hero),
         child: Stack(
           children: [
-            SizedBox(
-              height: height,
-              child: PageView.builder(
-                itemCount: urls.length,
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                itemBuilder: (ctx, i) => Image.network(
-                  urls[i],
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => Container(
-                    color: AppColors.surface,
-                    child: const Icon(
-                      Icons.broken_image_rounded,
-                      size: 60,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
+            // 예전에는 height를 화면폭과 같게 줘서 모든 사진이 강제로
+            // 정사각 crop됐다. 이제 대표 사진의 실제 비율을 따른다.
+            ProfilePhotoDetailView(
+              photoUrls: urls,
+              onPageChanged: (i) => setState(() => _currentPage = i),
             ),
-            // 도트 인디케이터 — 사진이 2장 이상일 때만 표시
             if (urls.length > 1)
               Positioned(
                 bottom: 12,
@@ -1292,21 +1250,21 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
                 right: 0,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(urls.length, (i) {
-                    final active = i == _currentPage;
-                    return AnimatedContainer(
+                  children: List.generate(
+                    urls.length,
+                    (i) => AnimatedContainer(
                       duration: AppDurations.fast,
                       margin: const EdgeInsets.symmetric(horizontal: 3),
-                      width: active ? 16 : 6,
+                      width: i == _currentPage ? 18 : 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: AppColors.surface.withValues(
-                          alpha: active ? 1 : 0.54,
-                        ),
-                        borderRadius: BorderRadius.circular(AppSpacing.xs),
+                        color: i == _currentPage
+                            ? AppColors.surface
+                            : AppColors.surface.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(3),
                       ),
-                    );
-                  }),
+                    ),
+                  ),
                 ),
               ),
           ],
