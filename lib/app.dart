@@ -1,12 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/constants/app_constants.dart';
 import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/auth_gate_controller.dart';
+import 'features/auth/auth_gate_error_view.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/signup_screen.dart';
+import 'models/user_profile.dart';
 import 'features/main_shell.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth/auth_service.dart';
@@ -266,84 +270,74 @@ class _AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<_AuthGate> {
-  bool _profileChecked = false;
-  bool _hasProfile = false;
+  late final AuthGateController _controller;
+  bool _signingOut = false;
 
   @override
   void initState() {
     super.initState();
-    widget.authState.addListener(_onAuthChanged);
-    // 앱 시작 시 Firebase Auth 스트림이 이미 발화된 상태일 때를 대비한 초기 체크.
-    if (!widget.authState.initializing && widget.authState.isLoggedIn) {
-      _fetchProfile();
-    }
+    _controller = AuthGateController(
+      auth: widget.authState,
+      loadProfile: (uid) => widget.firestoreService.getUserProfile(uid),
+      runSideEffects: _runProfileSideEffects,
+    );
+    _controller.addListener(_onControllerChanged);
+    _controller.start();
   }
 
   @override
   void dispose() {
-    widget.authState.removeListener(_onAuthChanged);
+    _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
     super.dispose();
   }
 
-  void _onAuthChanged() {
-    if (!widget.authState.isLoggedIn) {
-      // 로그아웃: 캐시된 프로필 체크 결과를 초기화해 다음 로그인에 대비한다.
-      setState(() {
-        _profileChecked = false;
-        _hasProfile = false;
-      });
-      return;
+  void _onControllerChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 라우팅이 확정된 **뒤에** 실행되는 부가 작업.
+  ///
+  /// 예전에는 이 세 가지가 프로필 판정과 같은 try 안에 있어서, `reloadUser()`가
+  /// 던지면 프로필이 실제로 존재하는데도 "프로필 없음"으로 접혔다. 각각을
+  /// 독립적으로 감싸 어느 하나가 실패해도 나머지와 라우팅에 영향이 없게 한다.
+  Future<void> _runProfileSideEffects(String uid, UserProfile profile) async {
+    try {
+      await widget.authService.reloadUser();
+    } catch (_) {
+      if (kDebugMode) debugPrint('[AuthGate] reload_user_failed');
     }
-    if (!_profileChecked) {
-      // 로그인됐지만 프로필 확인 전: 로딩 화면을 즉시 그린 뒤 조회를 시작한다.
-      setState(() {});
-      _fetchProfile();
+
+    try {
+      final shouldSyncVerifications =
+          widget.authService.isEmailVerified != profile.verifications.email ||
+          widget.authService.hasPhoneNumber != profile.verifications.phone ||
+          profile.verifications.photo;
+      if (shouldSyncVerifications) {
+        await widget.authService.syncAuthVerificationBadges();
+      }
+    } catch (_) {
+      if (kDebugMode) debugPrint('[AuthGate] verification_badge_sync_failed');
+    }
+
+    try {
+      await widget.notificationService.registerForUser(uid);
+    } catch (_) {
+      if (kDebugMode) debugPrint('[AuthGate] notification_register_failed');
     }
   }
 
-  Future<void> _fetchProfile() async {
-    final uid = widget.authState.currentUser?.uid;
-    if (uid == null) return;
-    debugPrint('[AuthGate] 프로필 조회 시작 — uid: $uid');
+  Future<void> _handleSignOut() async {
+    if (_signingOut) return;
+    setState(() => _signingOut = true);
     try {
-      final profile = await widget.firestoreService.getUserProfile(uid);
-      if (profile != null) {
-        await widget.authService.reloadUser();
-        final shouldSyncVerifications =
-            widget.authService.isEmailVerified != profile.verifications.email ||
-            widget.authService.hasPhoneNumber != profile.verifications.phone ||
-            profile.verifications.photo;
-        if (shouldSyncVerifications) {
-          try {
-            await widget.authService.syncAuthVerificationBadges();
-          } on AuthFailure catch (e) {
-            if (mounted) {
-              debugPrint('[AuthGate] 인증 배지 동기화 실패: ${e.message}');
-            }
-          }
-        }
-        unawaited(widget.notificationService.registerForUser(uid));
-      }
-      debugPrint(
-        '[AuthGate] 조회 결과: ${profile != null ? "있음 (기존 유저)" : "없음 (신규 유저)"}',
-      );
-      if (mounted) {
-        setState(() {
-          _hasProfile = profile != null;
-          _profileChecked = true;
-        });
-      }
-    } catch (e) {
-      // 권한 거부·네트워크 오류 등 모든 실패는 여기서 잡는다.
-      // _profileChecked를 true로 바꿔 무한 로딩을 탈출하고,
-      // _hasProfile을 false로 두어 온보딩 화면으로 안전하게 보낸다.
-      debugPrint('[AuthGate] 조회 에러: $e');
-      if (mounted) {
-        setState(() {
-          _hasProfile = false;
-          _profileChecked = true;
-        });
-      }
+      await widget.authService.signOut();
+      // Navigator로 억지로 이동하지 않는다. authState가 바뀌면 컨트롤러가
+      // unauthenticated로 내려가고 아래 build가 LoginScreen을 그린다.
+    } catch (_) {
+      if (kDebugMode) debugPrint('[AuthGate] sign_out_failed');
+    } finally {
+      if (mounted) setState(() => _signingOut = false);
     }
   }
 
@@ -362,32 +356,48 @@ class _AuthGateState extends State<_AuthGate> {
   }
 
   Widget _buildGate(BuildContext context) {
-    // 인증 초기화 중, 또는 로그인 후 프로필 조회 중에는 로딩.
-    if (widget.authState.initializing ||
-        (widget.authState.isLoggedIn && !_profileChecked)) {
-      return const Scaffold(body: LoadingIndicator());
-    }
+    switch (_controller.status) {
+      case AuthGateStatus.loading:
+        return const Scaffold(
+          key: Key('auth-gate-loading'),
+          body: LoadingIndicator(),
+        );
 
-    if (!widget.authState.isLoggedIn) {
-      return LoginScreen(authService: widget.authService);
-    }
+      case AuthGateStatus.unauthenticated:
+        return LoginScreen(authService: widget.authService);
 
-    if (!_hasProfile) {
-      return OnboardingScreen(
-        uid: widget.authState.currentUser!.uid,
-        authService: widget.authService,
-        firestoreService: widget.firestoreService,
-        storageService: widget.storageService,
-        // 온보딩 완료 후 다시 Firestore를 조회하는 대신 플래그만 뒤집는다.
-        // 방금 저장했으니 존재가 확실하고, 불필요한 네트워크 왕복을 줄인다.
-        onCompleted: () {
-          final uid = widget.authState.currentUser!.uid;
-          setState(() => _hasProfile = true);
-          unawaited(widget.notificationService.registerForUser(uid));
-        },
-      );
-    }
+      case AuthGateStatus.recoverableError:
+        // 조회 실패는 실패로 표시한다. 여기서 온보딩을 보여주면 기존 유저가
+        // 사진 등록 화면에 갇힌다.
+        return AuthGateErrorView(
+          busy: _signingOut,
+          onRetry: () => unawaited(_controller.retry()),
+          onSignOut: () => unawaited(_handleSignOut()),
+        );
 
+      case AuthGateStatus.onboarding:
+        return OnboardingScreen(
+          uid: widget.authState.currentUser!.uid,
+          authService: widget.authService,
+          firestoreService: widget.firestoreService,
+          storageService: widget.storageService,
+          onSignOut: _handleSignOut,
+          currentAuthUid: () => widget.authState.currentUid,
+          // 온보딩 완료 후 다시 Firestore를 조회하는 대신 플래그만 뒤집는다.
+          // 방금 저장했으니 존재가 확실하고, 불필요한 네트워크 왕복을 줄인다.
+          onCompleted: () {
+            final uid = widget.authState.currentUser!.uid;
+            _controller.markProfileCreated(uid);
+            unawaited(widget.notificationService.registerForUser(uid));
+          },
+        );
+
+      case AuthGateStatus.authenticated:
+        return _buildMainShell();
+    }
+  }
+
+  Widget _buildMainShell() {
     return MainShell(
       authService: widget.authService,
       firestoreService: widget.firestoreService,

@@ -31,12 +31,37 @@ import 'tag_selection_step.dart';
 ///
 /// 스텝 간 공유 데이터와 최종 Firestore/Storage 저장 로직을 여기서 관리한다.
 /// 각 스텝 위젯은 UI와 입력 수집에만 집중하고 Firebase 호출은 여기서 한다.
+/// 온보딩 제출을 중단해야 하는지 판정한다.
+///
+/// 로그아웃·계정 전환 뒤에도 제출이 이어지면 사라진 uid나 다른 계정 uid로
+/// 프로필을 쓰게 된다. [readAuthUid]가 null이면(Auth를 붙이지 않은 위젯 테스트)
+/// 검사를 건너뛴다.
+bool shouldAbortSubmitForAuthChange({
+  required String? Function()? readAuthUid,
+  required String onboardingUid,
+}) {
+  if (readAuthUid == null) return false;
+  return readAuthUid() != onboardingUid;
+}
+
 class OnboardingScreen extends StatefulWidget {
   final String uid;
   final AuthService authService;
   final FirestoreService firestoreService;
   final StorageService storageService;
   final VoidCallback onCompleted;
+
+  /// 온보딩 도중 로그인 화면으로 빠져나가기 위한 경로.
+  ///
+  /// 첫 단계(사진 등록)에는 뒤로가기가 없어서, 잘못 들어왔을 때 나갈 방법이
+  /// 전혀 없었다. 로그아웃을 유일한 출구로 항상 열어둔다.
+  final Future<void> Function()? onSignOut;
+
+  /// 제출 직전 현재 Auth uid를 확인하는 훅.
+  ///
+  /// 로그아웃·계정 전환 뒤에도 제출이 이어지면 사라진 uid로 프로필을 쓰게 된다.
+  /// null이면 검사를 건너뛴다(Auth를 붙이지 않는 위젯 테스트용).
+  final String? Function()? currentAuthUid;
   final ProfileKeywordSummaryService? profileKeywordSummaryService;
 
   const OnboardingScreen({
@@ -46,6 +71,8 @@ class OnboardingScreen extends StatefulWidget {
     required this.firestoreService,
     required this.storageService,
     required this.onCompleted,
+    this.onSignOut,
+    this.currentAuthUid,
     this.profileKeywordSummaryService,
   });
 
@@ -100,7 +127,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// 모든 데이터를 모아 Storage + Firestore에 저장한다.
   /// [goalKey]: 스텝 6에서 선택한 찾는 관계 key.
+  /// 로그아웃 진행 중 플래그. 중복 실행과 저장 중 이탈을 막는다.
+  bool _signingOut = false;
+
+  Future<void> _handleSignOut() async {
+    final signOut = widget.onSignOut;
+    if (signOut == null) return;
+    if (_isLoading || _signingOut) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('로그아웃할까요?'),
+        content: const Text('작성 중인 내용은 저장되지 않아요.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('로그아웃'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _signingOut = true);
+    try {
+      // Navigator로 직접 이동하지 않는다. AuthGate가 선언적으로 LoginScreen을
+      // 그리도록 두어야 화면 스택이 어긋나지 않는다.
+      await signOut();
+    } finally {
+      if (mounted) setState(() => _signingOut = false);
+    }
+  }
+
   Future<void> _handleSubmit(String? goalKey) async {
+    // Auth 사용자가 사라진 뒤(로그아웃·계정 삭제) 제출을 이어가지 않는다.
+    // 그대로 진행하면 사라진 uid나 다른 계정 uid로 프로필을 쓰게 된다.
+    if (shouldAbortSubmitForAuthChange(
+      readAuthUid: widget.currentAuthUid,
+      onboardingUid: widget.uid,
+    )) {
+      if (kDebugMode) debugPrint('[Onboarding] submit_aborted_auth_changed');
+      return;
+    }
+    if (_signingOut) return;
     setState(() => _isLoading = true);
     try {
       // 1. 사진 업로드 (진행률 표시는 추후 개선 — 이번엔 단순 await)
@@ -300,7 +374,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       children: [
         Scaffold(
           appBar: AppBar(
-            // 스텝 0에서는 뒤로가기 없음 — 로그인 화면으로 돌아갈 필요가 없다.
+            // 스텝 0에는 돌아갈 이전 스텝이 없다. 대신 로그아웃을 출구로 둔다.
             automaticallyImplyLeading: false,
             leading: _step > 0
                 ? IconButton(
@@ -311,6 +385,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onPressed: _isLoading ? null : _prevStep,
                   )
                 : null,
+            actions: [
+              if (widget.onSignOut != null)
+                TextButton(
+                  key: const Key('onboarding-sign-out-button'),
+                  onPressed: (_isLoading || _signingOut) ? null : _handleSignOut,
+                  child: const Text('로그아웃'),
+                ),
+            ],
             backgroundColor: AppColors.background.withValues(alpha: 0),
             elevation: 0,
           ),
