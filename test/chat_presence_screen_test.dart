@@ -278,7 +278,7 @@ void main() {
     await tester.pump();
     presence.writes.clear();
 
-    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
     await tester.pump();
     await tester.pump();
 
@@ -337,23 +337,17 @@ void main() {
   ) async {
     final presence = await _pumpChat(tester);
 
-    presence.emit(
-      _presence(isOnline: false, ago: const Duration(seconds: 20)),
-    );
+    presence.emit(_presence(isOnline: false, ago: const Duration(seconds: 20)));
     await tester.pump();
     expect(find.text('방금 전 접속'), findsOneWidget);
     expect(find.byKey(const ValueKey('typing-on')), findsNothing);
 
-    presence.emit(
-      _presence(isOnline: false, ago: const Duration(minutes: 12)),
-    );
+    presence.emit(_presence(isOnline: false, ago: const Duration(minutes: 12)));
     await tester.pump();
     expect(find.text('12분 전 접속'), findsOneWidget);
 
     // isOnline true지만 heartbeat 만료(150초) → offline 문구
-    presence.emit(
-      _presence(isTyping: true, ago: const Duration(seconds: 150)),
-    );
+    presence.emit(_presence(isTyping: true, ago: const Duration(seconds: 150)));
     await tester.pump();
     expect(find.text('온라인'), findsNothing);
     expect(find.text('입력 중...'), findsNothing);

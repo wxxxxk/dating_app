@@ -208,7 +208,7 @@ void main() {
     expect(firestore.updateCalls, 1);
     expect(keywordCalls, 1);
     expect(popped, isNotNull);
-    expect(find.textContaining('저장 중 오류'), findsNothing);
+    expect(find.textContaining('프로필 저장에 실패했어요'), findsNothing);
 
     keywordCompleter.completeError(StateError('callable failed'));
     await tester.pump();
@@ -247,7 +247,7 @@ void main() {
       expect(firestore.updateCalls, 1);
       expect(keywordCalls, 0);
       expect(popped, isNull);
-      expect(find.textContaining('저장 중 오류가 발생했습니다'), findsOneWidget);
+      expect(find.textContaining('프로필 저장에 실패했어요'), findsOneWidget);
     },
   );
 }
