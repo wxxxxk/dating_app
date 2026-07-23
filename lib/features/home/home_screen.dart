@@ -27,7 +27,6 @@ import '../../services/ideal_type/ideal_type_service.dart';
 import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
-import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/profile_photo_view.dart';
 import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
@@ -36,7 +35,6 @@ import '../ideal_type/ideal_type_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
 import '../profile/profile_edit_screen.dart';
 import '../profile/user_profile_screen.dart';
-import '../profile/widgets/verification_badge.dart';
 import '../privacy/contact_avoidance_screen.dart';
 import '../privacy/screen_protection_widgets.dart';
 import '../safety/blocked_users_screen.dart';
@@ -634,6 +632,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppColors.warmCanvas,
       appBar: AppBar(
         titleSpacing: 20,
         title: const Text(
@@ -645,7 +644,8 @@ class _HomeScreenState extends State<HomeScreen> {
             letterSpacing: -0.2,
           ),
         ),
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.warmCanvas,
+        surfaceTintColor: AppColors.warmCanvas,
         foregroundColor: AppColors.textStrong,
         elevation: 0,
         actions: [
@@ -787,8 +787,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             profile.relationshipGoal!,
                           ) ??
                           '',
-                      color: AppColors.matchPrimary.withValues(alpha: 0.1),
-                      textColor: AppColors.matchPrimary,
+                      color: AppColors.surfaceMintSoft,
+                      textColor: AppColors.mintDeep,
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -1461,103 +1461,137 @@ class _VerificationSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PremiumSectionCard(
-      title: '인증 현황',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    // Light Premium 문법: 진한 카드/그림자 대신 밝은 연속 surface + divider.
+    // 이메일·전화·사진·직장·학교를 같은 row 문법으로 담고, 상태는 icon tile
+    // tone + 완료 pill로만 구분한다. 상태 판정·stream·콜백·ValueKey는 불변.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 10),
+          child: Text(
+            '인증 현황',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textStrong,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.circular(AppRadius.surface),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              _emailRow(),
+              const _VerificationDivider(),
+              _phoneRow(),
+              const _VerificationDivider(),
+              _PhotoVerificationRow(
+                verified: verifications.photo,
+                requestStream: photoRequestStream,
+                onTap: onVerifyPhoto,
+              ),
+              const _VerificationDivider(),
+              _AffiliationVerificationRow(
+                type: AffiliationVerificationType.work,
+                verified: verifications.work,
+                requestStream: workRequestStream,
+                onTap: () =>
+                    onVerifyAffiliation(AffiliationVerificationType.work),
+              ),
+              const _VerificationDivider(),
+              _AffiliationVerificationRow(
+                type: AffiliationVerificationType.school,
+                verified: verifications.school,
+                requestStream: schoolRequestStream,
+                onTap: () =>
+                    onVerifyAffiliation(AffiliationVerificationType.school),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 이메일 행. 완료 pill(검증됨) 또는 발송·확인 두 action을 유지한다.
+  Widget _emailRow() {
+    if (verifications.email) {
+      return const _VerificationItemRow(
+        icon: Icons.mail_outline_rounded,
+        title: '이메일 인증',
+        tone: _VerifyTone.verified,
+      );
+    }
+    return _VerificationItemRow(
+      icon: Icons.mail_outline_rounded,
+      title: '이메일 인증',
+      tone: _VerifyTone.unverified,
+      statusText: '이메일 인증을 완료하면 프로필에 신뢰 배지가 표시돼요.',
+      actions: Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          VerificationBadges(
-            verifications: verifications,
-            showUnverified: true,
+          FilledButton.icon(
+            onPressed: loading ? null : onSendEmail,
+            icon: const Icon(Icons.mark_email_unread_rounded, size: 17),
+            label: const Text('이메일 인증하기'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.mint,
+              foregroundColor: AppColors.onMint,
+            ),
           ),
-          const SizedBox(height: 12),
-          if (!verifications.email) ...[
-            const Text(
-              '이메일 인증을 완료하면 프로필에 신뢰 배지가 표시돼요.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: loading ? null : onSendEmail,
-                  icon: const Icon(Icons.mark_email_unread_rounded, size: 17),
-                  label: const Text('이메일 인증하기'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.mint,
-                    foregroundColor: AppColors.onMint,
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: loading ? null : onRefreshEmail,
-                  icon: loading
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh_rounded, size: 17),
-                  label: const Text('인증 확인'),
-                ),
-              ],
-            ),
-          ],
-          if (!verifications.phone) ...[
-            if (!verifications.email) const SizedBox(height: 14),
-            const Text(
-              '전화번호 인증을 완료하면 상대에게 더 신뢰감 있게 보여요.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: onVerifyPhone,
-              icon: const Icon(Icons.phone_iphone_rounded, size: 17),
-              label: const Text('전화 인증하기'),
-            ),
-          ],
-          if (!verifications.email || !verifications.phone)
-            const SizedBox(height: 14),
-          _PhotoVerificationRow(
-            verified: verifications.photo,
-            requestStream: photoRequestStream,
-            onTap: onVerifyPhoto,
-          ),
-          const SizedBox(height: 14),
-          _AffiliationVerificationRow(
-            type: AffiliationVerificationType.work,
-            verified: verifications.work,
-            requestStream: workRequestStream,
-            onTap: () => onVerifyAffiliation(AffiliationVerificationType.work),
-          ),
-          const SizedBox(height: 14),
-          _AffiliationVerificationRow(
-            type: AffiliationVerificationType.school,
-            verified: verifications.school,
-            requestStream: schoolRequestStream,
-            onTap: () =>
-                onVerifyAffiliation(AffiliationVerificationType.school),
+          OutlinedButton.icon(
+            onPressed: loading ? null : onRefreshEmail,
+            icon: loading
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded, size: 17),
+            label: const Text('인증 확인'),
           ),
         ],
       ),
     );
   }
+
+  /// 전화 행. 완료 pill 또는 전화 인증 진입 action을 유지한다.
+  Widget _phoneRow() {
+    if (verifications.phone) {
+      return const _VerificationItemRow(
+        icon: Icons.phone_iphone_rounded,
+        title: '전화 인증',
+        tone: _VerifyTone.verified,
+      );
+    }
+    return _VerificationItemRow(
+      icon: Icons.phone_iphone_rounded,
+      title: '전화 인증',
+      tone: _VerifyTone.unverified,
+      statusText: '전화번호 인증을 완료하면 상대에게 더 신뢰감 있게 보여요.',
+      actions: OutlinedButton.icon(
+        onPressed: onVerifyPhone,
+        icon: const Icon(Icons.phone_iphone_rounded, size: 17),
+        label: const Text('전화 인증하기'),
+      ),
+    );
+  }
 }
 
-/// 인증 현황 카드의 사진 인증 행.
+/// 인증 현황 surface의 사진 인증 행.
 ///
 /// 공개 배지(verifications.photo)가 true면 무조건 "인증 완료"로 본다.
 /// 요청 상태(pending/rejected)는 진행 안내 용도로만 쓰고, request status만으로
-/// 인증 완료를 표시하지 않는다.
+/// 인증 완료를 표시하지 않는다. 상태 판정·stream·ValueKey는 기존 그대로이며
+/// presentation만 연속 surface row로 바꾼다.
 class _PhotoVerificationRow extends StatelessWidget {
   final bool verified;
   final Stream<PhotoVerificationRequest?> requestStream;
@@ -1572,20 +1606,11 @@ class _PhotoVerificationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (verified) {
-      return const Row(
-        key: ValueKey('home-photo-verification-done'),
-        children: [
-          Icon(Icons.verified_rounded, size: 17, color: AppColors.mintDeep),
-          SizedBox(width: 6),
-          Text(
-            '사진 인증 완료',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.mintDeep,
-            ),
-          ),
-        ],
+      return const _VerificationItemRow(
+        rowKey: ValueKey('home-photo-verification-done'),
+        icon: Icons.photo_camera_rounded,
+        title: '사진 인증',
+        tone: _VerifyTone.verified,
       );
     }
 
@@ -1595,47 +1620,43 @@ class _PhotoVerificationRow extends StatelessWidget {
         final request = snap.data;
         final pending = request?.isPending ?? false;
         final rejected = request?.isRejected ?? false;
-        return Column(
-          key: const ValueKey('home-photo-verification-row'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+        return _VerificationItemRow(
+          rowKey: const ValueKey('home-photo-verification-row'),
+          icon: Icons.photo_camera_rounded,
+          title: '사진 인증',
+          tone: pending
+              ? _VerifyTone.pending
+              : rejected
+              ? _VerifyTone.rejected
+              : _VerifyTone.unverified,
+          statusText: pending
+              ? '사진 인증을 검토하고 있어요. 결과가 나오면 배지에 반영돼요.'
+              : rejected
+              ? '사진 인증이 반려됐어요. 안내를 확인하고 다시 제출해주세요.'
+              : '사진 인증을 완료하면 프로필에 사진 인증 배지가 표시돼요.',
+          actions: OutlinedButton.icon(
+            key: const ValueKey('home-photo-verification-button'),
+            onPressed: onTap,
+            icon: const Icon(Icons.photo_camera_rounded, size: 17),
+            label: Text(
               pending
-                  ? '사진 인증을 검토하고 있어요. 결과가 나오면 배지에 반영돼요.'
+                  ? '검토 중'
                   : rejected
-                  ? '사진 인증이 반려됐어요. 안내를 확인하고 다시 제출해주세요.'
-                  : '사진 인증을 완료하면 프로필에 사진 인증 배지가 표시돼요.',
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
+                  ? '다시 제출 필요'
+                  : '사진 인증하기',
             ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              key: const ValueKey('home-photo-verification-button'),
-              onPressed: onTap,
-              icon: const Icon(Icons.photo_camera_rounded, size: 17),
-              label: Text(
-                pending
-                    ? '검토 중'
-                    : rejected
-                    ? '다시 제출 필요'
-                    : '사진 인증하기',
-              ),
-            ),
-          ],
+          ),
         );
       },
     );
   }
 }
 
-/// 인증 현황 카드의 직장·학교 인증 행.
+/// 인증 현황 surface의 직장·학교 인증 행.
 ///
 /// 공개 배지(verifications.work/school)가 true면 "인증 완료"로 본다. 요청
 /// 상태(pending/rejected)는 진행 안내 용도로만 쓰고, request status만으로
-/// 인증 완료를 표시하지 않는다.
+/// 인증 완료를 표시하지 않는다. 상태 판정·type 분기·stream·ValueKey는 불변.
 class _AffiliationVerificationRow extends StatelessWidget {
   final AffiliationVerificationType type;
   final bool verified;
@@ -1652,30 +1673,18 @@ class _AffiliationVerificationRow extends StatelessWidget {
   String get _label => affiliationVerificationTypeLabel(type);
   String get _keyPrefix =>
       'home-${affiliationVerificationTypeToString(type)}-verification';
+  IconData get _icon => type == AffiliationVerificationType.work
+      ? Icons.badge_outlined
+      : Icons.school_outlined;
 
   @override
   Widget build(BuildContext context) {
     if (verified) {
-      return Row(
-        key: ValueKey('$_keyPrefix-done'),
-        children: [
-          Icon(
-            type == AffiliationVerificationType.work
-                ? Icons.badge_rounded
-                : Icons.school_rounded,
-            size: 17,
-            color: AppColors.mintDeep,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '$_label 완료',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: AppColors.mintDeep,
-            ),
-          ),
-        ],
+      return _VerificationItemRow(
+        rowKey: ValueKey('$_keyPrefix-done'),
+        icon: _icon,
+        title: _label,
+        tone: _VerifyTone.verified,
       );
     }
 
@@ -1685,44 +1694,187 @@ class _AffiliationVerificationRow extends StatelessWidget {
         final request = snap.data;
         final pending = request?.isPending ?? false;
         final rejected = request?.isRejected ?? false;
-        return Column(
-          key: ValueKey('$_keyPrefix-row'),
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+        return _VerificationItemRow(
+          rowKey: ValueKey('$_keyPrefix-row'),
+          icon: _icon,
+          title: _label,
+          tone: pending
+              ? _VerifyTone.pending
+              : rejected
+              ? _VerifyTone.rejected
+              : _VerifyTone.unverified,
+          statusText: pending
+              ? '$_label 자료를 검토하고 있어요. 결과가 나오면 배지에 반영돼요.'
+              : rejected
+              ? '$_label 자료가 반려됐어요. 안내를 확인하고 다시 제출해주세요.'
+              : '$_label을 완료하면 프로필에 인증 배지가 표시돼요.',
+          actions: OutlinedButton.icon(
+            key: ValueKey('$_keyPrefix-button'),
+            onPressed: onTap,
+            icon: Icon(_icon, size: 17),
+            label: Text(
               pending
-                  ? '$_label 자료를 검토하고 있어요. 결과가 나오면 배지에 반영돼요.'
+                  ? '검토 중'
                   : rejected
-                  ? '$_label 자료가 반려됐어요. 안내를 확인하고 다시 제출해주세요.'
-                  : '$_label을 완료하면 프로필에 인증 배지가 표시돼요.',
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
+                  ? '다시 제출 필요'
+                  : '인증하기',
             ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              key: ValueKey('$_keyPrefix-button'),
-              onPressed: onTap,
-              icon: Icon(
-                type == AffiliationVerificationType.work
-                    ? Icons.badge_outlined
-                    : Icons.school_outlined,
-                size: 17,
-              ),
-              label: Text(
-                pending
-                    ? '검토 중'
-                    : rejected
-                    ? '다시 제출 필요'
-                    : '인증하기',
-              ),
-            ),
-          ],
+          ),
         );
       },
     );
+  }
+}
+
+/// 인증 현황 surface의 상태별 tone. 새 상태를 만들지 않고 기존 판정
+/// (verified/pending/rejected/unverified)에 presentation만 연결한다.
+enum _VerifyTone { verified, pending, rejected, unverified }
+
+/// 인증 현황 surface의 공통 row presentation — 좌측 icon tile + 제목 +
+/// (완료 pill 또는 상태 안내 + action). 상태 계산은 부모가 하고, 이 위젯은
+/// 표현만 담당한다.
+class _VerificationItemRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final _VerifyTone tone;
+  final String? statusText;
+  final Widget? actions;
+  final Key? rowKey;
+
+  const _VerificationItemRow({
+    required this.icon,
+    required this.title,
+    required this.tone,
+    this.statusText,
+    this.actions,
+    this.rowKey,
+  });
+
+  ({Color bg, Color fg}) get _tile => switch (tone) {
+    _VerifyTone.verified => (
+      bg: AppColors.surfaceMintSoft,
+      fg: AppColors.mintDeep,
+    ),
+    _VerifyTone.pending => (
+      bg: AppColors.statusWarningSoft,
+      fg: AppColors.statusWarning,
+    ),
+    _VerifyTone.rejected => (
+      bg: AppColors.statusDangerSoft,
+      fg: AppColors.statusDanger,
+    ),
+    _VerifyTone.unverified => (
+      bg: AppColors.surfaceSecondary,
+      fg: AppColors.textBody,
+    ),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final tile = _tile;
+    return Container(
+      key: rowKey,
+      constraints: const BoxConstraints(minHeight: 60),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: tile.bg,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, size: 21, color: tile.fg),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textStrong,
+                        ),
+                      ),
+                    ),
+                    if (tone == _VerifyTone.verified) ...[
+                      const SizedBox(width: 8),
+                      const _VerifyDonePill(),
+                    ],
+                  ],
+                ),
+                if (statusText != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    statusText!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ],
+                if (actions != null) ...[
+                  const SizedBox(height: 12),
+                  Align(alignment: Alignment.centerLeft, child: actions!),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 완료 상태를 나타내는 작은 pale mint pill(진한 초록 fill 대신).
+class _VerifyDonePill extends StatelessWidget {
+  const _VerifyDonePill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 13, color: AppColors.mintDeep),
+          SizedBox(width: 3),
+          Text(
+            '완료',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.mintDeep,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 인증 행 사이 subtle divider(_DashboardGroup과 같은 문법).
+class _VerificationDivider extends StatelessWidget {
+  const _VerificationDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, indent: 16, color: AppColors.borderSubtle);
   }
 }
 
@@ -2044,8 +2196,8 @@ class _StatCard extends StatelessWidget {
             Container(
               width: 34,
               height: 34,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.1),
+              decoration: const BoxDecoration(
+                color: AppColors.surfaceMintSoft,
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, size: 17, color: accent),
