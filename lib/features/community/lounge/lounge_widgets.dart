@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../models/community/community_author_snapshot.dart';
+import '../../../services/community/community_author_avatar_resolver.dart';
 
 /// 라운지 목록/상세가 공유하는 표시 요소(Phase 4-2).
 ///
-/// 표시하는 값은 콘텐츠에 저장된 공개 snapshot뿐이다 — UID·전화번호·기관명·
-/// 이메일·정확 위치·매칭/관계 정보는 어떤 경로로도 그리지 않는다.
+/// 표시하는 값은 콘텐츠에 저장된 공개 snapshot이 기본이다 — UID·전화번호·
+/// 기관명·이메일·정확 위치·매칭/관계 정보는 어떤 경로로도 그리지 않는다.
+/// 예외적으로 **대표 사진만** authorUid로 현재 공개 프로필(publicProfiles)에서
+/// 최신값을 가져와, 작성자가 사진을 바꿔도 옛 사진이 남지 않게 한다. 조회
+/// 실패 시에는 snapshot 사진 → placeholder로 안전하게 fallback한다.
 
 /// 작성일 표시. 오늘은 시:분, 그 외에는 월.일.
 String formatCommunityTimestamp(DateTime? value) {
@@ -14,7 +18,9 @@ String formatCommunityTimestamp(DateTime? value) {
   final local = value.toLocal();
   final now = DateTime.now();
   final isToday =
-      local.year == now.year && local.month == now.month && local.day == now.day;
+      local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
   if (isToday) {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
@@ -71,19 +77,10 @@ class CommunityAuthorHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
+        _CommunityAuthorAvatar(
+          uid: author.uid,
+          snapshotPhotoUrl: author.photoUrl,
           radius: avatarRadius,
-          backgroundColor: AppColors.border,
-          backgroundImage: author.photoUrl.isNotEmpty
-              ? NetworkImage(author.photoUrl)
-              : null,
-          child: author.photoUrl.isEmpty
-              ? Icon(
-                  Icons.person_rounded,
-                  size: avatarRadius,
-                  color: AppColors.textSecondary,
-                )
-              : null,
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -131,6 +128,50 @@ class CommunityAuthorHeader extends StatelessWidget {
         ),
         ?trailing,
       ],
+    );
+  }
+}
+
+/// 작성자 대표 사진 아바타.
+///
+/// [CommunityAuthorAvatarResolver]로 authorUid의 현재 공개 대표 사진을
+/// 가져와 표시한다. 같은 작성자의 카드들은 하나의 조회를 공유하므로(캐시)
+/// 목록에서 카드마다 조회하지 않는다. 조회 전/실패/사진 없음이면
+/// [snapshotPhotoUrl](작성 시점 사진) → placeholder 순으로 fallback한다.
+class _CommunityAuthorAvatar extends StatelessWidget {
+  final String uid;
+  final String snapshotPhotoUrl;
+  final double radius;
+
+  const _CommunityAuthorAvatar({
+    required this.uid,
+    required this.snapshotPhotoUrl,
+    required this.radius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      // resolver가 uid별 Future를 캐시하므로 rebuild마다 재조회하지 않는다.
+      future: CommunityAuthorAvatarResolver.instance.resolvePhotoUrl(uid),
+      builder: (context, snapshot) {
+        final resolved = snapshot.data;
+        final photoUrl = (resolved != null && resolved.isNotEmpty)
+            ? resolved
+            : snapshotPhotoUrl;
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: AppColors.border,
+          backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+          child: photoUrl.isEmpty
+              ? Icon(
+                  Icons.person_rounded,
+                  size: radius,
+                  color: AppColors.textSecondary,
+                )
+              : null,
+        );
+      },
     );
   }
 }
