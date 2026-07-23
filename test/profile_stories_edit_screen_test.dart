@@ -48,6 +48,10 @@ Future<void> _openPrompt(WidgetTester tester, String key) async {
     find.byType(ListView),
     const Offset(0, -220),
   );
+  // dragUntilVisible는 위젯이 빌드되는 즉시 멈춰 대상이 뷰포트 하단 경계에
+  // 걸칠 수 있다. 탭 전에 완전히 보이도록 스크롤한다(레이아웃 높이에 무관).
+  await tester.ensureVisible(_prompt(key));
+  await tester.pumpAndSettle();
   await tester.tap(_prompt(key));
   await tester.pumpAndSettle();
 }
@@ -67,6 +71,8 @@ Future<void> _enterAnswer(WidgetTester tester, String key, String value) async {
     find.byType(ListView),
     const Offset(0, -220),
   );
+  await tester.ensureVisible(_answer(key));
+  await tester.pumpAndSettle();
   await tester.enterText(_answer(key), value);
   await tester.pumpAndSettle();
 }
@@ -132,6 +138,8 @@ void main() {
       find.byType(ListView),
       const Offset(0, -220),
     );
+    await tester.ensureVisible(_remove('comfort_food'));
+    await tester.pumpAndSettle();
     await tester.tap(_remove('comfort_food'));
     await tester.pumpAndSettle();
 

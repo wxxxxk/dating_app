@@ -91,7 +91,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       setState(() => _blocked = submission.blockUser || _blocked);
       _showSnack(submission.blockUser ? '신고가 접수되고 차단했어요.' : '신고가 접수되었어요.');
     } catch (e) {
-      _debugLog('[Safety] 프로필 신고 실패 uid=${_profile.uid} error=$e');
+      _debugLog('[Safety] 프로필 신고 실패: $e');
       if (mounted) _showSnack('신고에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
@@ -100,20 +100,78 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('차단하기'),
-        content: const Text('차단하면 서로 디스커버리, 매칭, 채팅에서 볼 수 없어요.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('취소'),
+        backgroundColor: AppColors.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        icon: Container(
+          width: 44,
+          height: 44,
+          decoration: const BoxDecoration(
+            color: AppColors.statusDangerSoft,
+            shape: BoxShape.circle,
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: AppColors.surface,
+          child: const ExcludeSemantics(
+            child: Icon(
+              Icons.block_rounded,
+              size: 22,
+              color: AppColors.statusDanger,
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('차단'),
+          ),
+        ),
+        title: const Text(
+          '차단하기',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+          ),
+        ),
+        content: const Text(
+          '차단하면 서로 디스커버리, 매칭, 채팅에서 볼 수 없어요.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: AppColors.textBody,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textBody,
+                    side: const BorderSide(color: AppColors.borderStrong),
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                  ),
+                  child: const Text('취소'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.statusDanger,
+                    foregroundColor: AppColors.surface,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text(
+                    '차단',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -129,7 +187,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       setState(() => _blocked = true);
       _showSnack('차단했어요.');
     } catch (e) {
-      _debugLog('[Safety] 프로필 차단 실패 uid=${_profile.uid} error=$e');
+      _debugLog('[Safety] 프로필 차단 실패: $e');
       if (mounted) _showSnack('차단에 실패했어요. 잠시 후 다시 시도해주세요.');
     }
   }
@@ -169,18 +227,63 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           _profile.displayName,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+          ),
         ),
         backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textStrong,
         elevation: 0,
         actions: [
           PopupMenuButton<String>(
+            tooltip: '안전 메뉴',
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              color: AppColors.textBody,
+            ),
+            color: AppColors.surfacePrimary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: AppColors.borderSubtle),
+            ),
             onSelected: (value) {
               if (value == 'report') _reportUser();
               if (value == 'block') _blockUser();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'report', child: Text('신고하기')),
-              PopupMenuItem(value: 'block', child: Text('차단하기')),
+              PopupMenuItem(
+                value: 'report',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.flag_outlined,
+                      size: 19,
+                      color: AppColors.textBody,
+                    ),
+                    SizedBox(width: 12),
+                    Text('신고하기'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'block',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.block_rounded,
+                      size: 19,
+                      color: AppColors.statusDanger,
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      '차단하기',
+                      style: TextStyle(color: AppColors.statusDanger),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ],
@@ -189,17 +292,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         onRefresh: _refreshProfile,
         child: ListView(
           children: [
-            _PhotoGallery(
-              profile: _profile,
-              distanceLabel: distanceLabel,
-              blocked: _blocked,
-              loading: _loading,
-            ),
+            _PhotoGallery(profile: _profile, loading: _loading),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _IntroHeader(
+                    profile: _profile,
+                    distanceLabel: distanceLabel,
+                    blocked: _blocked,
+                  ),
+                  const SizedBox(height: 20),
                   if (_profile.bio.isNotEmpty) ...[
                     Text(
                       stripEmoji(_profile.bio),
@@ -226,6 +330,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   _DetailGrid(profile: _profile),
                   _TagSection(
                     title: '관심사',
+                    tone: _TagTone.interest,
                     labels: ProfileOptions.keysToLabels(
                       ProfileOptions.interests,
                       _profile.interests,
@@ -233,6 +338,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   _TagSection(
                     title: '성향',
+                    tone: _TagTone.personality,
                     labels: ProfileOptions.keysToLabels(
                       ProfileOptions.personalities,
                       _profile.personalityTags,
@@ -240,6 +346,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                   _TagSection(
                     title: '이상형',
+                    tone: _TagTone.ideal,
                     labels: ProfileOptions.keysToLabels(
                       ProfileOptions.ideals,
                       _profile.idealTags,
@@ -249,29 +356,39 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   if (_profile.relationshipGoal != null)
                     _InfoSection(
                       title: '찾는 관계',
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.favorite_rounded,
-                            size: 15,
-                            color: AppColors.matchPrimary,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceMintSoft,
+                          borderRadius: BorderRadius.circular(
+                            AppRadius.surface,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              ProfileOptions.keyToLabel(
-                                    ProfileOptions.relationshipGoals,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.favorite_rounded,
+                              size: 19,
+                              color: AppColors.matchPrimary,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                ProfileOptions.keyToLabel(
+                                      ProfileOptions.relationshipGoals,
+                                      _profile.relationshipGoal!,
+                                    ) ??
                                     _profile.relationshipGoal!,
-                                  ) ??
-                                  _profile.relationshipGoal!,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                                style: const TextStyle(
+                                  fontSize: 15.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textStrong,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -326,18 +443,134 @@ String _profileStoryDisplayAnswer(String answer) {
   return stripEmoji(withoutControls);
 }
 
-class _PhotoGallery extends StatefulWidget {
+/// 사진 아래 밝은 first-impression 영역 — 이름·나이 + 인증 + 기본 정보 chip.
+/// 소개글은 이 다음에 본문 흐름으로 이어진다(별도 카드에 넣지 않는다).
+class _IntroHeader extends StatelessWidget {
   final PublicProfile profile;
   final String? distanceLabel;
   final bool blocked;
-  final bool loading;
 
-  const _PhotoGallery({
+  const _IntroHeader({
     required this.profile,
     required this.distanceLabel,
     required this.blocked,
-    required this.loading,
   });
+
+  @override
+  Widget build(BuildContext context) {
+    // 기본 정보 chip: 거리 > MBTI > 성별 > 차단 상태 순. 기존에 보이던 값은
+    // 모두 유지하되 한 줄에 억지로 넣지 않고 Wrap한다.
+    final chips = <Widget>[
+      if (distanceLabel != null)
+        _IntroChip(
+          icon: Icons.place_rounded,
+          label: distanceLabel!,
+          iconColor: AppColors.mintDeep,
+        ),
+      if (profile.mbti != null) _IntroChip(label: profile.mbti!),
+      _IntroChip(label: _genderLabel(profile.gender)),
+      if (blocked)
+        const _IntroChip(icon: Icons.block_rounded, label: '차단됨', danger: true),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                '${profile.displayName}, ${profile.age}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 27,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.3,
+                  height: 1.1,
+                  color: AppColors.textStrong,
+                ),
+              ),
+            ),
+            if (profile.verifications.hasAny) ...[
+              const SizedBox(width: 10),
+              VerificationBadges(
+                verifications: profile.verifications,
+                brightness: Brightness.light,
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(spacing: 6, runSpacing: 6, children: chips),
+      ],
+    );
+  }
+}
+
+/// introduction shelf의 기본 정보 chip(밝은 톤). 차단 상태만 pale danger.
+class _IntroChip extends StatelessWidget {
+  final IconData? icon;
+  final String label;
+  final Color? iconColor;
+  final bool danger;
+
+  const _IntroChip({
+    this.icon,
+    required this.label,
+    this.iconColor,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = danger ? AppColors.statusDangerSoft : AppColors.surfaceSecondary;
+    final fg = danger ? AppColors.statusDanger : AppColors.textBody;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            ExcludeSemantics(
+              child: Icon(
+                icon,
+                size: 14,
+                color: danger ? fg : (iconColor ?? fg),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                height: 1,
+                color: fg,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhotoGallery extends StatefulWidget {
+  final PublicProfile profile;
+  final bool loading;
+
+  const _PhotoGallery({required this.profile, required this.loading});
 
   @override
   State<_PhotoGallery> createState() => _PhotoGalleryState();
@@ -395,9 +628,10 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: PremiumProfileImageCard(
-        // 예전에는 height 420 고정 + BoxFit.cover라 가로 사진은 좌우가,
-        // 세로 사진은 위아래가 잘려 나갔다. 이제 대표 사진의 실제 비율을
-        // 따르고, 사진은 잘리지 않는다. 아래 오버레이는 그 크기를 채운다.
+        // 사진 자체가 중심인 밝은 stage — 정보 오버레이/강한 검정 gradient 없이
+        // 대표 사진의 실제 비율을 그대로 따른다(잘리지 않음). softFrame으로 mint
+        // glow 대신 얇은 중립 보더 + 부드러운 단일 섀도우만 쓴다.
+        softFrame: true,
         child: Stack(
           children: [
             ProfilePhotoDetailView(
@@ -405,88 +639,39 @@ class _PhotoGalleryState extends State<_PhotoGallery> {
               controller: _controller,
               onPageChanged: (value) => setState(() => _index = value),
             ),
-            const Positioned.fill(
+            // 사진↔shelf 경계를 위한 아주 옅은 하단 fade(36px, 최대 10% ink).
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 36,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: [0.42, 0.72, 1],
-                    colors: [
-                      Colors.transparent,
-                      Color(0x33000000),
-                      Color(0xE6000000),
-                    ],
+                    colors: [Color(0x00000000), Color(0x1A000000)],
                   ),
                 ),
               ),
             ),
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${widget.profile.displayName}, ${widget.profile.age}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textOnDark,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      PremiumStatusPill(
-                        label: _genderLabel(widget.profile.gender),
-                        compact: true,
-                      ),
-                      if (widget.profile.mbti != null)
-                        PremiumStatusPill(
-                          label: widget.profile.mbti!,
-                          compact: true,
-                        ),
-                      if (widget.distanceLabel != null)
-                        PremiumStatusPill(
-                          label: widget.distanceLabel!,
-                          icon: Icons.near_me_rounded,
-                          compact: true,
-                        ),
-                      if (widget.blocked)
-                        const PremiumStatusPill(
-                          label: '차단됨',
-                          icon: Icons.block_rounded,
-                          color: AppColors.danger,
-                          compact: true,
-                        ),
-                    ],
-                  ),
-                  if (widget.profile.verifications.hasAny) ...[
-                    const SizedBox(height: 10),
-                    VerificationBadges(
-                      verifications: widget.profile.verifications,
-                      brightness: Brightness.dark,
-                    ),
-                  ],
-                ],
-              ),
-            ),
             if (widget.loading)
-              const Positioned(
-                top: 18,
-                right: 18,
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.mint,
+              Positioned(
+                top: 14,
+                right: 14,
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfacePrimary.withValues(alpha: 0.92),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.mintDeep,
+                    ),
                   ),
                 ),
               ),
@@ -553,18 +738,16 @@ class _PhotoSegmentIndicator extends StatelessWidget {
           final active = index == activeIndex;
           return Expanded(
             child: Container(
-              height: 3,
+              height: 2.5,
               margin: EdgeInsets.only(right: index == count - 1 ? 0 : 4),
               decoration: BoxDecoration(
-                color: AppColors.surface.withValues(
-                  alpha: active ? 0.95 : 0.34,
-                ),
+                color: AppColors.surface.withValues(alpha: active ? 0.95 : 0.3),
                 borderRadius: BorderRadius.circular(AppRadius.chip),
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color: AppColors.ink.withValues(alpha: 0.2),
-                          blurRadius: 3,
+                          color: AppColors.ink.withValues(alpha: 0.16),
+                          blurRadius: 2,
                         ),
                       ]
                     : null,
@@ -631,14 +814,27 @@ class _DetailGrid extends StatelessWidget {
     ];
     if (items.isEmpty) return const SizedBox.shrink();
 
+    // pill 반복 대신 하나의 밝은 Facts Surface에 label/value row를 divider로
+    // 이어 붙인다. 실제 값이 있는 항목만, 기존 순서 그대로 표시한다.
     return _InfoSection(
       title: '상세 정보',
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: items
-            .map((item) => _InfoPill(label: item.label, value: item.value))
-            .toList(),
+      bottomSpacing: 26,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.circular(AppRadius.surface),
+          border: Border.all(color: AppColors.borderSubtle),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0)
+                const Divider(height: 1, color: AppColors.borderSubtle),
+              _FactRow(label: items[i].label, value: items[i].value),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -654,21 +850,34 @@ class _DetailGrid extends StatelessWidget {
   }
 }
 
+/// 취향 chip section의 톤. 관심사(친근한 mint) / 성향(중립 outline) /
+/// 이상형(옅은 coral)을 서로 다른 성격으로 구분한다. 데이터·순서·표시 조건은
+/// 톤과 무관하게 동일하다(색상 presentation만 다르다).
+enum _TagTone { interest, personality, ideal }
+
 class _TagSection extends StatelessWidget {
   final String title;
   final List<String> labels;
+  final _TagTone tone;
 
-  const _TagSection({required this.title, required this.labels});
+  const _TagSection({
+    required this.title,
+    required this.labels,
+    required this.tone,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (labels.isEmpty) return const SizedBox.shrink();
     return _InfoSection(
       title: title,
+      bottomSpacing: 26,
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: labels.map((label) => _TagChip(label: label)).toList(),
+        children: labels
+            .map((label) => _TagChip(label: label, tone: tone))
+            .toList(),
       ),
     );
   }
@@ -686,7 +895,7 @@ class _ProfileKeywordSummarySection extends StatelessWidget {
 
     return Padding(
       key: const ValueKey('profile-keyword-summary-section'),
-      padding: const EdgeInsets.only(bottom: 22),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -764,17 +973,29 @@ class _ProfileStoriesSection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (entries.isEmpty) return const SizedBox.shrink();
 
+    // 어두운 독립 카드 반복 대신, 하나의 밝은 interview surface에 story를
+    // divider로 이어 붙인다(본인이 직접 들려주는 문장이 주인공이 되도록).
     return _InfoSection(
       key: const ValueKey('profile-stories-section'),
       title: '이 사람의 이야기',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < entries.length; i++) ...[
-            if (i > 0) const SizedBox(height: 12),
-            _ProfileStoryDisplayCard(entry: entries[i]),
+      bottomSpacing: 28,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.circular(AppRadius.surface),
+          border: Border.all(color: AppColors.borderSubtle),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < entries.length; i++) ...[
+              if (i > 0)
+                const Divider(height: 1, color: AppColors.borderSubtle),
+              _ProfileStoryDisplayCard(entry: entries[i]),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -787,37 +1008,51 @@ class _ProfileStoryDisplayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 밝은 interview surface 내부의 한 항목 — 별도 그림자 카드가 아니다.
     return Container(
       key: ValueKey('profile-story-display-${entry.promptKey}'),
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.nightBorder),
-      ),
+      decoration: const BoxDecoration(color: AppColors.surfacePrimary),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            entry.promptLabel,
-            key: ValueKey('profile-story-prompt-label-${entry.promptKey}'),
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.35,
-              fontWeight: FontWeight.w800,
-              color: AppColors.mint,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const ExcludeSemantics(
+                child: Icon(
+                  Icons.format_quote_rounded,
+                  size: 15,
+                  color: AppColors.expressiveAccent,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  entry.promptLabel,
+                  key: ValueKey(
+                    'profile-story-prompt-label-${entry.promptKey}',
+                  ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.expressiveAccent,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             entry.answer,
             key: ValueKey('profile-story-answer-label-${entry.promptKey}'),
             style: const TextStyle(
-              fontSize: 16,
-              height: 1.5,
+              fontSize: 16.5,
+              height: 1.55,
               fontWeight: FontWeight.w700,
-              color: AppColors.textOnDark,
+              color: AppColors.textStrong,
             ),
           ),
         ],
@@ -856,21 +1091,32 @@ class _ValueAnswersSection extends StatelessWidget {
     }
     if (entries.isEmpty) return const SizedBox.shrink();
 
+    // 질문/답변을 하나의 차분한 surface에 divider로 정리한다(Values Portrait).
     return _InfoSection(
       key: const ValueKey('profile-value-answers-section'),
       title: '가치관',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < entries.length; i++) ...[
-            if (i > 0) const SizedBox(height: 14),
-            _ValueAnswerItem(
-              questionKey: entries[i].questionKey,
-              questionLabel: entries[i].questionLabel,
-              answerLabel: entries[i].answerLabel,
-            ),
+      bottomSpacing: 24,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceSecondary,
+          borderRadius: BorderRadius.circular(AppRadius.surface),
+          border: Border.all(color: AppColors.borderSubtle),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < entries.length; i++) ...[
+              if (i > 0)
+                const Divider(height: 1, color: AppColors.borderSubtle),
+              _ValueAnswerItem(
+                questionKey: entries[i].questionKey,
+                questionLabel: entries[i].questionLabel,
+                answerLabel: entries[i].answerLabel,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -889,31 +1135,35 @@ class _ValueAnswerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Container(
       key: ValueKey('profile-value-answer-$questionKey'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          questionLabel,
-          key: ValueKey('profile-value-question-$questionKey'),
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            questionLabel,
+            key: ValueKey('profile-value-question-$questionKey'),
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMuted,
+            ),
           ),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          answerLabel,
-          key: ValueKey('profile-value-label-$questionKey'),
-          style: const TextStyle(
-            fontSize: 15,
-            height: 1.4,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+          const SizedBox(height: 4),
+          Text(
+            answerLabel,
+            key: ValueKey('profile-value-label-$questionKey'),
+            style: const TextStyle(
+              fontSize: 15.5,
+              height: 1.45,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textStrong,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -922,12 +1172,21 @@ class _InfoSection extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const _InfoSection({super.key, required this.title, required this.child});
+  /// 서사 영역(이야기/가치관)에서만 section 간 여백을 명시 조정한다.
+  /// 기본값 22는 기존 상세 정보·태그·찾는 관계 렌더를 그대로 유지한다.
+  final double bottomSpacing;
+
+  const _InfoSection({
+    super.key,
+    required this.title,
+    required this.child,
+    this.bottomSpacing = 22,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
+      padding: EdgeInsets.only(bottom: bottomSpacing),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -947,24 +1206,48 @@ class _InfoSection extends StatelessWidget {
   }
 }
 
-class _InfoPill extends StatelessWidget {
+/// Facts Surface의 label/value row 한 줄.
+class _FactRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _InfoPill({required this.label, required this.value});
+  const _FactRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        '$label · $value',
-        style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 46),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 64,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  height: 1.4,
+                  color: AppColors.textStrong,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -972,25 +1255,37 @@ class _InfoPill extends StatelessWidget {
 
 class _TagChip extends StatelessWidget {
   final String label;
+  final _TagTone tone;
 
-  const _TagChip({required this.label});
+  const _TagChip({required this.label, required this.tone});
 
   @override
   Widget build(BuildContext context) {
+    late final Color bg;
+    late final Color fg;
+    Border? border;
+    switch (tone) {
+      case _TagTone.interest:
+        bg = AppColors.surfaceMintSoft;
+        fg = AppColors.mintDeep;
+      case _TagTone.personality:
+        bg = AppColors.surfaceSecondary;
+        fg = AppColors.textStrong;
+        border = Border.all(color: AppColors.borderSubtle);
+      case _TagTone.ideal:
+        bg = AppColors.expressiveAccentSoft;
+        fg = AppColors.textStrong;
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.ink.withValues(alpha: 0.05),
+        color: bg,
         borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(color: AppColors.border),
+        border: border,
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textPrimary,
-        ),
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg),
       ),
     );
   }

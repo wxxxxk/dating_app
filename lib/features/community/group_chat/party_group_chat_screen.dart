@@ -10,7 +10,8 @@ import '../../../services/privacy/contact_avoidance_service.dart';
 import '../../../services/safety/safety_service.dart';
 import '../community_audience_filter.dart';
 import '../community_report_sheet.dart';
-import '../party/party_widgets.dart';
+import '../party/party_widgets.dart'
+    show formatPartyStartAt, formatPartyParticipants;
 
 /// 파티 그룹 채팅(Phase 4-5, UX 정리 Phase 4-7).
 ///
@@ -311,7 +312,7 @@ class _PartyGroupChatScreenState extends State<PartyGroupChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: const ValueKey('party-group-chat-screen'),
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.warmCanvas,
       body: SafeArea(
         child: StreamBuilder<CommunityParty?>(
           stream: _partyStream,
@@ -321,44 +322,56 @@ class _PartyGroupChatScreenState extends State<PartyGroupChatScreen> {
                 partySnap.connectionState == ConnectionState.waiting &&
                 !partySnap.hasData;
 
-            return Column(
-              children: [
-                _ChatAppBar(
-                  title: party?.title ?? '파티 대화',
-                  subtitle: _subtitleOf(party),
+            return DecoratedBox(
+              // 평평한 단색 대신 상단에만 아주 옅은 민트 wash를 깐다.
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.surfaceMintSoft,
+                    AppColors.warmCanvas,
+                    AppColors.warmCanvas,
+                  ],
+                  stops: [0, 0.28, 1],
                 ),
-                if (loading)
-                  const Expanded(
-                    child: Center(
-                      key: ValueKey('party-chat-loading'),
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
-                else if (party == null)
-                  // 파티가 취소·삭제되면 대화도 즉시 닫힌다.
-                  const Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: PartyNotice(
-                        key: ValueKey('party-chat-unavailable'),
+              ),
+              child: Column(
+                children: [
+                  _ChatAppBar(
+                    title: party?.title ?? '파티 대화',
+                    subtitle: _subtitleOf(party),
+                  ),
+                  if (loading)
+                    const Expanded(
+                      child: _ChatMessagesSkeleton(
+                        key: ValueKey('party-chat-loading'),
+                      ),
+                    )
+                  else if (party == null)
+                    // 파티가 취소·삭제되면 대화도 즉시 닫힌다.
+                    const Expanded(
+                      child: _ChatNotice(
+                        noticeKey: ValueKey('party-chat-unavailable'),
                         message: '이 파티 대화는 더 이상 볼 수 없어요.',
                       ),
+                    )
+                  else ...[
+                    _PartyContextRibbon(party: party),
+                    if (_safetyNoticeVisible)
+                      _SafetyBanner(
+                        onDismiss: () =>
+                            setState(() => _safetyNoticeVisible = false),
+                      ),
+                    Expanded(child: _buildMessages()),
+                    _MessageInput(
+                      controller: _messageController,
+                      sending: _sending,
+                      onSubmit: _send,
                     ),
-                  )
-                else ...[
-                  if (_safetyNoticeVisible)
-                    _SafetyBanner(
-                      onDismiss: () =>
-                          setState(() => _safetyNoticeVisible = false),
-                    ),
-                  Expanded(child: _buildMessages()),
-                  _MessageInput(
-                    controller: _messageController,
-                    sending: _sending,
-                    onSubmit: _send,
-                  ),
+                  ],
                 ],
-              ],
+              ),
             );
           },
         ),
@@ -379,18 +392,15 @@ class _PartyGroupChatScreenState extends State<PartyGroupChatScreen> {
       builder: (context, snap) {
         if (snap.hasError) {
           // 멤버가 아니거나 파티가 닫히면 Rules가 스트림을 끊는다.
-          return const Padding(
-            padding: EdgeInsets.all(20),
-            child: PartyNotice(
-              key: ValueKey('party-chat-error'),
-              message: '대화를 불러오지 못했어요.',
-            ),
+          return const _ChatNotice(
+            noticeKey: ValueKey('party-chat-error'),
+            message: '대화를 불러오지 못했어요.',
+            danger: true,
           );
         }
         if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
-          return const Center(
+          return const _ChatMessagesSkeleton(
             key: ValueKey('party-chat-messages-loading'),
-            child: CircularProgressIndicator(),
           );
         }
 
@@ -411,7 +421,7 @@ class _PartyGroupChatScreenState extends State<PartyGroupChatScreen> {
         return ListView.builder(
           key: const ValueKey('party-chat-message-list'),
           controller: _scrollController,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final message = messages[index];
@@ -497,18 +507,25 @@ class _ChatAppBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(4, 4, 16, 4),
+      padding: const EdgeInsets.fromLTRB(4, 6, AppSpacing.lg, 10),
       decoration: const BoxDecoration(
-        color: AppColors.background,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.surfaceMintSoft, AppColors.surfacePrimary],
+        ),
+        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
       ),
       child: Row(
         children: [
           IconButton(
             key: const ValueKey('party-chat-back'),
             onPressed: () => Navigator.of(context).maybePop(),
+            color: AppColors.textStrong,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
+          const ExcludeSemantics(child: _GroupVisual()),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,23 +536,139 @@ class _ChatAppBar extends StatelessWidget {
                   key: const ValueKey('party-chat-title'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: AppTextStyles.cardTitle.copyWith(fontSize: 17),
                 ),
+                const SizedBox(height: 1),
                 Text(
                   subtitle,
                   key: const ValueKey('party-chat-subtitle'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
+                  style: AppTextStyles.caption,
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 헤더 좌측 그룹 정체성 표식. 실제 참여자 사진을 특정해 노출하지 않고,
+/// "여러 사람이 모인 대화"라는 의미만 겹친 원으로 암시한다.
+class _GroupVisual extends StatelessWidget {
+  const _GroupVisual();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 46,
+      height: 34,
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 3,
+            child: _ring(AppColors.expressiveAccentSoft),
+          ),
+          Positioned(left: 14, top: 3, child: _ring(AppColors.surfaceMintSoft)),
+          Positioned(
+            left: 7,
+            top: 0,
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimaryStrong,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.surfacePrimary, width: 2),
+              ),
+              child: const Icon(
+                Icons.groups_rounded,
+                size: 18,
+                color: AppColors.onBrandPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _ring(Color color) {
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.surfacePrimary, width: 2),
+      ),
+    );
+  }
+}
+
+// ── 파티 컨텍스트 리본 ────────────────────────────────────────────────────
+
+/// AppBar 아래 한 번 표시하는 작은 파티 맥락 띠. 실제 일정·참여 인원만 쓰고,
+/// 새 navigation이나 정확 주소는 만들지 않는다.
+class _PartyContextRibbon extends StatelessWidget {
+  final CommunityParty party;
+
+  const _PartyContextRibbon({required this.party});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xs,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.event_rounded,
+            size: 15,
+            color: AppColors.brandPrimaryStrong,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              formatPartyStartAt(party.startAt),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.brandPrimaryStrong,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          const Icon(
+            Icons.group_rounded,
+            size: 15,
+            color: AppColors.brandPrimaryStrong,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            formatPartyParticipants(party),
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.brandPrimaryStrong,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -560,18 +693,20 @@ class _SafetyBanner extends StatelessWidget {
     return Container(
       key: const ValueKey('party-chat-safety-banner'),
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-      color: AppColors.mintSoft,
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 8, 8, 8),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceSecondary,
+        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.shield_outlined, size: 15, color: AppColors.mintDeep),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              message,
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-            ),
+          const Icon(
+            Icons.shield_outlined,
+            size: 15,
+            color: AppColors.textMuted,
           ),
+          const SizedBox(width: 8),
+          const Expanded(child: Text(message, style: AppTextStyles.caption)),
           SizedBox(
             width: 32,
             height: 32,
@@ -580,10 +715,7 @@ class _SafetyBanner extends StatelessWidget {
               padding: EdgeInsets.zero,
               iconSize: 16,
               onPressed: onDismiss,
-              icon: const Icon(
-                Icons.close_rounded,
-                color: AppColors.textSecondary,
-              ),
+              icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
             ),
           ),
         ],
@@ -599,25 +731,181 @@ class _EmptyConversation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      key: ValueKey('party-chat-empty'),
+    return Center(
+      key: const ValueKey('party-chat-empty'),
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.forum_outlined,
-              size: 34,
-              color: AppColors.textSecondary,
+            const ExcludeSemantics(
+              child: SizedBox(
+                width: 84,
+                height: 48,
+                child: _ChatBubblesMotif(),
+              ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               '아직 대화가 없어요. 첫 인사를 건네보세요.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: AppTextStyles.bodySecondary,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 겹쳐 놓인 두 말풍선. 가짜 예시 메시지·사용자를 만들지 않는다.
+class _ChatBubblesMotif extends StatelessWidget {
+  const _ChatBubblesMotif();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          left: 0,
+          bottom: 0,
+          child: _bubble(
+            AppColors.surfaceMintSoft,
+            AppColors.brandPrimary.withValues(alpha: 0.3),
+          ),
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          child: _bubble(
+            AppColors.expressiveAccentSoft,
+            AppColors.expressiveAccent.withValues(alpha: 0.3),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _bubble(Color fill, Color border) {
+    return Container(
+      width: 48,
+      height: 30,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(AppRadius.small),
+        border: Border.all(color: border),
+      ),
+    );
+  }
+}
+
+/// 대화 로딩 skeleton. 좌우 말풍선 자리를 몇 개 두고 작은 스피너 하나만 둔다.
+class _ChatMessagesSkeleton extends StatelessWidget {
+  const _ChatMessagesSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 좌(수신)·우(발신) 폭을 번갈아 배치해 실제 대화 흐름을 암시한다.
+    const rows = <(bool, double)>[
+      (false, 180),
+      (false, 120),
+      (true, 150),
+      (false, 200),
+      (true, 96),
+    ];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        for (final (mine, width) in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Align(
+              alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+              child: Container(
+                width: width,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.canvasSubtle,
+                  borderRadius: BorderRadius.circular(AppRadius.card),
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: AppSpacing.md),
+        Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brandPrimary.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 대화 오류/불가 안내. raw 오류는 노출하지 않고 고정 문구만 보여준다.
+/// [danger]일 때만 작은 danger 아이콘을 붙인다(불가 상태는 뉴트럴).
+class _ChatNotice extends StatelessWidget {
+  final Key? noticeKey;
+  final String message;
+  final bool danger;
+
+  const _ChatNotice({
+    this.noticeKey,
+    required this.message,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: noticeKey,
+      padding: const EdgeInsets.all(AppSpacing.screenH),
+      child: Center(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.lg20),
+          decoration: BoxDecoration(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.circular(AppRadius.surface),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (danger) ...[
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.statusDangerSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline_rounded,
+                    size: 22,
+                    color: AppColors.statusDanger,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySecondary,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -636,28 +924,22 @@ class _DateDivider extends StatelessWidget {
     return Padding(
       key: ValueKey('party-chat-date-${_dateKey(date)}'),
       padding: const EdgeInsets.symmetric(vertical: 14),
-      child: Row(
-        children: [
-          const Expanded(child: Divider(color: AppColors.border, height: 1)),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.chip),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Text(
-              _formatDate(date),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary,
-              ),
+      child: Center(
+        // 얇은 선 대신 떠 있는 작은 캡슐로 날짜를 표시한다.
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSecondary,
+            borderRadius: BorderRadius.circular(AppRadius.chip),
+          ),
+          child: Text(
+            _formatDate(date),
+            style: AppTextStyles.caption.copyWith(
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
             ),
           ),
-          const Expanded(child: Divider(color: AppColors.border, height: 1)),
-        ],
+        ),
       ),
     );
   }
@@ -722,7 +1004,9 @@ class _MessageRow extends StatelessWidget {
         onLongPress: onLongPress,
         child: Padding(
           padding: EdgeInsets.only(
-            top: _isGroupHead ? 8 : 2,
+            // cluster 시작은 넉넉히 띄우고, 같은 사람이 이어 보낸 메시지는
+            // 3~4px로 촘촘히 묶어 하나의 덩어리처럼 보이게 한다.
+            top: _isGroupHead ? 14 : 3,
             bottom: showTime ? 4 : 1,
           ),
           child: Column(
@@ -779,11 +1063,20 @@ class _SenderAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
+    return Container(
+      // ring(1.5*2) + 지름(28) + 오른쪽 여백(5) = 36 = _avatarLane.
+      // 이어지는 메시지의 들여쓰기(_avatarLane)와 정확히 맞춘다.
+      margin: const EdgeInsets.only(right: 5),
+      padding: const EdgeInsets.all(1.5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.3),
+        ),
+      ),
       child: CircleAvatar(
         radius: _avatarRadius,
-        backgroundColor: AppColors.border,
+        backgroundColor: AppColors.surfaceSecondary,
         backgroundImage: author.photoUrl.isNotEmpty
             ? NetworkImage(author.photoUrl)
             : null,
@@ -791,7 +1084,7 @@ class _SenderAvatar extends StatelessWidget {
             ? const Icon(
                 Icons.person_rounded,
                 size: _avatarRadius,
-                color: AppColors.textSecondary,
+                color: AppColors.textMuted,
               )
             : null,
       ),
@@ -813,9 +1106,10 @@ class _SenderName extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
+          fontFamily: AppFonts.body,
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: AppColors.textSecondary,
+          color: AppColors.brandPrimaryStrong,
         ),
       ),
     );
@@ -836,19 +1130,37 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        // 내 버블은 매칭 채팅과 같은 시그니처 민트 fill + 다크 잉크 텍스트.
-        color: isMine ? AppColors.mint : AppColors.surface,
+        // 내 버블은 브랜드 민트 2-stop 그라데이션 + 흰 텍스트로 확실히 뜨게,
+        // 상대 버블은 웜 캔버스 위의 흰 서피스 + 옅은 보더로 구분한다.
+        gradient: isMine
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.brandPrimary, AppColors.brandPrimaryStrong],
+              )
+            : null,
+        color: isMine ? null : AppColors.surfacePrimary,
         borderRadius: _radius,
-        border: isMine ? null : Border.all(color: AppColors.border),
+        border: isMine ? null : Border.all(color: AppColors.borderSubtle),
+        boxShadow: [
+          BoxShadow(
+            color: isMine
+                ? AppColors.brandPrimaryStrong.withValues(alpha: 0.18)
+                : AppColors.textStrong.withValues(alpha: 0.05),
+            blurRadius: isMine ? 12 : 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Text(
         text,
         style: TextStyle(
+          fontFamily: AppFonts.body,
           fontSize: 15,
-          height: 1.4,
-          color: isMine ? AppColors.onMint : AppColors.textPrimary,
+          height: 1.45,
+          color: isMine ? AppColors.onBrandPrimary : AppColors.textStrong,
         ),
       ),
     );
@@ -924,7 +1236,11 @@ class _MessageTime extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 2),
       child: Text(
         _formatTime(dateTime),
-        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+        style: const TextStyle(
+          fontFamily: AppFonts.body,
+          fontSize: 11,
+          color: AppColors.textMuted,
+        ),
       ),
     );
   }
@@ -962,89 +1278,111 @@ class _MessageInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canSubmit = controller.text.trim().isNotEmpty && !sending;
-    return Container(
+    // 화면 하단에 붙은 평평한 바 대신, 좌우 여백을 두고 떠 있는 dock으로 만든다.
+    return Padding(
       padding: EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 8,
-        bottom: 8 + MediaQuery.of(context).viewInsets.bottom,
+        left: AppSpacing.md,
+        right: AppSpacing.md,
+        top: AppSpacing.sm,
+        bottom: AppSpacing.sm + MediaQuery.of(context).viewInsets.bottom,
       ),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: TextField(
-              key: const ValueKey('party-chat-input'),
-              controller: controller,
-              maxLength: PartyGroupMessage.textMaxLength,
-              minLines: 1,
-              maxLines: 4,
-              enabled: !sending,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) {
-                if (canSubmit) onSubmit();
-              },
-              decoration: InputDecoration(
-                hintText: '메시지를 입력하세요',
-                counterText: '',
-                filled: true,
-                fillColor: AppColors.surface,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                  borderSide: BorderSide.none,
-                ),
-                disabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                  borderSide: BorderSide.none,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 6, 6, 6),
+        decoration: BoxDecoration(
+          color: AppColors.surfacePrimary,
+          borderRadius: BorderRadius.circular(AppRadius.hero),
+          border: Border.all(color: AppColors.borderSubtle),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.textStrong.withValues(alpha: 0.07),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                key: const ValueKey('party-chat-input'),
+                controller: controller,
+                maxLength: PartyGroupMessage.textMaxLength,
+                minLines: 1,
+                maxLines: 4,
+                enabled: !sending,
+                textInputAction: TextInputAction.send,
+                style: AppTextStyles.body.copyWith(fontSize: 15),
+                onSubmitted: (_) {
+                  if (canSubmit) onSubmit();
+                },
+                decoration: InputDecoration(
+                  hintText: '메시지를 입력하세요',
+                  counterText: '',
+                  filled: true,
+                  fillColor: AppColors.surfaceSecondary,
+                  hintStyle: AppTextStyles.bodySecondary.copyWith(
+                    fontSize: 15,
+                    color: AppColors.textMuted,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.heroSoft),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.heroSoft),
+                    borderSide: BorderSide.none,
+                  ),
+                  // focus 때만 얇은 민트 보더를 준다(공통 composer 문법).
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.heroSoft),
+                    borderSide: const BorderSide(
+                      color: AppColors.brandPrimaryStrong,
+                      width: 1.5,
+                    ),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.heroSoft),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: _sendButtonSize,
-            height: _sendButtonSize,
-            child: IconButton.filled(
-              key: const ValueKey('party-chat-send'),
-              onPressed: canSubmit ? onSubmit : null,
-              padding: EdgeInsets.zero,
-              iconSize: 20,
-              style: IconButton.styleFrom(
-                minimumSize: const Size(_sendButtonSize, _sendButtonSize),
-                maximumSize: const Size(_sendButtonSize, _sendButtonSize),
-                backgroundColor: AppColors.mintStrong,
-                foregroundColor: AppColors.onMint,
-                disabledBackgroundColor: AppColors.divider,
+            const SizedBox(width: 6),
+            SizedBox(
+              width: _sendButtonSize,
+              height: _sendButtonSize,
+              child: IconButton.filled(
+                key: const ValueKey('party-chat-send'),
+                onPressed: canSubmit ? onSubmit : null,
+                padding: EdgeInsets.zero,
+                iconSize: 20,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(_sendButtonSize, _sendButtonSize),
+                  maximumSize: const Size(_sendButtonSize, _sendButtonSize),
+                  backgroundColor: AppColors.mintStrong,
+                  foregroundColor: AppColors.onMint,
+                  disabledBackgroundColor: AppColors.canvasSubtle,
+                  disabledForegroundColor: AppColors.textMuted,
+                ),
+                icon: sending
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.textMuted,
+                        ),
+                      )
+                    : const Icon(Icons.send_rounded),
               ),
-              icon: sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.textSecondary,
-                      ),
-                    )
-                  : const Icon(Icons.send_rounded),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

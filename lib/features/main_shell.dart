@@ -203,15 +203,15 @@ class _MainShellState extends State<MainShell> {
         // 발표용 긴급 안정화: 탭바를 전면 다크로 고정하지 않고 앱 전체와
         // 같은 라이트/크림 언어로 복구한다. 선택 상태만 mintDeep으로 강조한다.
         decoration: const BoxDecoration(
-          color: AppColors.background,
-          border: Border(top: BorderSide(color: AppColors.divider)),
+          color: AppColors.warmCanvas,
+          border: Border(top: BorderSide(color: AppColors.borderSubtle)),
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: (index) => setState(() => _selectedIndex = index),
-          selectedItemColor: AppColors.matchPrimary,
-          unselectedItemColor: AppColors.inkSecondary,
-          backgroundColor: AppColors.background,
+          selectedItemColor: AppColors.brandPrimaryStrong,
+          unselectedItemColor: AppColors.textBody,
+          backgroundColor: AppColors.warmCanvas,
           elevation: 0,
           type: BottomNavigationBarType.fixed,
           selectedLabelStyle: const TextStyle(
@@ -302,7 +302,7 @@ class _NavIconPill extends StatelessWidget {
       duration: AppDurations.fast,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: selected ? AppColors.mintSoft : null,
+        color: selected ? AppColors.brandPrimarySoft : null,
         borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child:
@@ -310,7 +310,7 @@ class _NavIconPill extends StatelessWidget {
           Icon(
             icon,
             size: 22,
-            color: selected ? AppColors.matchPrimary : AppColors.inkSecondary,
+            color: selected ? AppColors.brandPrimaryStrong : AppColors.textBody,
           ),
     );
   }

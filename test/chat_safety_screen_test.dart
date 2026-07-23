@@ -208,7 +208,8 @@ Future<_FakeChatService> _pumpChat(
 Future<void> _typeAndSend(WidgetTester tester, String text) async {
   await tester.enterText(find.byType(TextField), text);
   await tester.pump();
-  await tester.tap(find.byIcon(Icons.send_rounded));
+  // 전송 버튼 아이콘이 send_rounded → arrow_upward_rounded(composer dock)로 바뀜.
+  await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
   await tester.pump();
 }
 
@@ -257,6 +258,10 @@ void main() {
       findsOneWidget,
     );
 
+    // 가이드 시트는 SingleChildScrollView라 작은 뷰포트에서 버튼이 접힘 —
+    // 스크롤로 노출한 뒤 누른다.
+    await tester.ensureVisible(find.text('확인했어요'));
+    await _settleSheet(tester);
     await tester.tap(find.text('확인했어요'));
     await _settleSheet(tester);
     expect(find.byKey(kGuideSheet), findsNothing);
@@ -289,7 +294,10 @@ void main() {
 
     expect(find.byKey(kWarningSheet), findsNothing);
     expect(chat.sent, ['주말에 시간 괜찮으세요?']);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
 
     await tester.pumpWidget(const SizedBox());
   });
@@ -340,7 +348,10 @@ void main() {
     expect(chat.sent, ['카톡 아이디 알려줘']);
     // 확인 후 detector가 다시 돌아 경고가 재등장하지 않는다.
     expect(find.byKey(kWarningSheet), findsNothing);
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '');
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '',
+    );
 
     // 추가 프레임을 돌려도 중복 전송이 없다.
     await _settleSheet(tester);
@@ -399,7 +410,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('message-row-m1')), findsOneWidget);
     expect(find.text('성수역 3번 출구'), findsOneWidget);
-    expect(find.byKey(const ValueKey('chat-appointment-button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('chat-appointment-button')),
+      findsOneWidget,
+    );
     expect(find.text('입력 중...'), findsOneWidget);
     expect(find.byKey(kBanner), findsOneWidget);
     expect(tester.takeException(), isNull);

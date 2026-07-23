@@ -110,26 +110,62 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.hero),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          _buildPhoto(),
-          _buildGradientOverlay(),
-          if (profile.photoUrls.length > 1) ...[
-            _PhotoTapZones(
-              onPrevious: _showPreviousPhoto,
-              onNext: _showNextPhoto,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.of(context);
+        // 카드가 낮거나(작은 기기·큰 글씨로 밀린 경우) 폭이 좁으면 compact.
+        final compact =
+            constraints.maxHeight < 480 ||
+            media.size.width < 340 ||
+            media.textScaler.scale(1) >= 1.25;
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.hero),
+          child: Column(
+            children: [
+              // Photo Stage — 사진만의 독립 영역(정보 오버레이 없음).
+              Expanded(child: _buildPhotoStage()),
+              // Editorial Profile Shelf — 사진 밖 밝은 정보 영역.
+              _buildShelf(compact),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPhotoStage() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _buildPhoto(),
+        // 사진과 shelf 경계를 아주 옅게 이어주는 하단 fade(카드가 어둡게 보이지
+        // 않도록 40px, 최대 15% ink만). 정보 가독성용 검정 overlay는 없다.
+        const Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 40,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x00000000), Color(0x261C1B19)],
+              ),
             ),
-            _PhotoSegmentIndicator(
-              count: profile.photoUrls.length,
-              activeIndex: _photoIndex,
-            ),
-          ],
-          _buildInfoPanel(),
+          ),
+        ),
+        if (profile.photoUrls.length > 1) ...[
+          _PhotoTapZones(
+            onPrevious: _showPreviousPhoto,
+            onNext: _showNextPhoto,
+          ),
+          _PhotoSegmentIndicator(
+            count: profile.photoUrls.length,
+            activeIndex: _photoIndex,
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -154,34 +190,18 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
     );
   }
 
-  Widget _buildGradientOverlay() {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 340,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: const [0.0, 0.4, 1.0],
-            colors: [
-              AppColors.ink.withValues(alpha: 0),
-              AppColors.ink.withValues(alpha: 0.2),
-              AppColors.ink.withValues(alpha: 0.84),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // ── Editorial Profile Shelf ────────────────────────────────────────────────
 
-  Widget _buildInfoPanel() {
-    final interestLabels = ProfileOptions.keysToLabels(
-      ProfileOptions.interests,
-      profile.interests,
-    ).take(4).toList();
+  /// 사진 아래 밝은 정보 영역. 프로필 카드에 통합된 editorial page처럼 보이도록
+  /// 별도 카드가 아니라 상단 얇은 border로만 사진과 구분한다. shelf 전체가
+  /// onProfileTap 대상이라 어디를 눌러도 프로필 상세로 진입한다.
+  Widget _buildShelf(bool compact) {
+    final relationshipLabel = profile.relationshipGoal == null
+        ? null
+        : ProfileOptions.keyToLabel(
+            ProfileOptions.relationshipGoals,
+            profile.relationshipGoal!,
+          );
     final distanceKm = LocationService.distanceToCoarse(
       currentUserLocation,
       profile.coarseLocation,
@@ -190,105 +210,166 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
         ? null
         : LocationService.formatDistance(distanceKm);
 
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onProfileTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 이름 + 나이 + MBTI
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      '${profile.displayName}, ${profile.age}',
-                      style: const TextStyle(
-                        color: AppColors.textOnDark,
-                        fontSize: 27,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.2,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (profile.mbti != null) ...[
-                    const SizedBox(width: 8),
-                    _MbtiChip(mbti: profile.mbti!),
-                  ],
-                  if (distanceLabel != null) ...[
-                    const SizedBox(width: 8),
-                    _DistanceChip(label: distanceLabel),
-                  ],
-                ],
+    // 핵심 정보 chip: 관계 목표 > 거리 > MBTI, 최대 3개. 인증은 이름 row에서
+    // 다루므로 여기서 반복하지 않는다.
+    final infoChips = <Widget>[
+      if (relationshipLabel != null)
+        _ShelfChip(
+          icon: Icons.favorite_rounded,
+          label: relationshipLabel,
+          tone: _ShelfChipTone.mint,
+        ),
+      if (distanceLabel != null)
+        _ShelfChip(
+          icon: Icons.place_rounded,
+          label: distanceLabel,
+          tone: _ShelfChipTone.neutral,
+        ),
+      if (profile.mbti != null)
+        _ShelfChip(label: profile.mbti!, tone: _ShelfChipTone.neutral),
+    ].take(3).toList();
+
+    final interestLabels = ProfileOptions.keysToLabels(
+      ProfileOptions.interests,
+      profile.interests,
+    ).take(compact ? 2 : 3).toList();
+
+    final bio = stripEmoji(profile.bio).trim();
+    final hasBio = bio.isNotEmpty;
+    final jobLabel = _jobLabel();
+    final hasJob = jobLabel != null;
+    // 직업은 bio가 없거나(빈 자리 대체) 여유가 있을 때(non-compact)만 노출한다.
+    final showJob = hasJob && (!hasBio || !compact);
+    final bioMaxLines = (!compact && !hasJob) ? 2 : 1;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onProfileTap,
+      child: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          color: AppColors.surfacePrimary,
+          border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          19,
+          compact ? 12 : 15,
+          19,
+          compact ? 13 : 16,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildNameRow(compact),
+            if (infoChips.isNotEmpty) ...[
+              SizedBox(height: compact ? 8 : 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: infoChips,
               ),
-
-              if (profile.relationshipGoal != null) ...[
-                const SizedBox(height: 7),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    if (profile.relationshipGoal != null)
-                      _RelationshipGoalChip(goalKey: profile.relationshipGoal!),
-                  ],
-                ),
-              ],
-              if (profile.verifications.hasAny) ...[
-                const SizedBox(height: 7),
-                VerificationBadges(
-                  verifications: profile.verifications,
-                  brightness: Brightness.dark,
-                ),
-              ],
-
-              // 직업
-              if (profile.jobTitle != null || profile.jobCategory != null) ...[
-                const SizedBox(height: 4),
-                _jobLine(),
-              ],
-
-              // 소개글
-              if (profile.bio.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  stripEmoji(profile.bio),
-                  style: TextStyle(
-                    color: AppColors.textOnDark.withValues(alpha: 0.76),
-                    fontSize: 13,
-                    height: 1.45,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-
-              // 관심사 칩
-              if (interestLabels.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: interestLabels
-                      .map((label) => _TagChip(label: label))
-                      .toList(),
-                ),
-              ],
             ],
-          ),
+            if (showJob) ...[
+              SizedBox(height: compact ? 7 : 9),
+              _buildJobLine(jobLabel),
+            ],
+            if (hasBio) ...[
+              SizedBox(height: showJob ? 3 : (compact ? 7 : 9)),
+              Text(
+                bio,
+                style: const TextStyle(
+                  color: AppColors.textBody,
+                  fontSize: 13.5,
+                  height: 1.45,
+                ),
+                maxLines: bioMaxLines,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (interestLabels.isNotEmpty) ...[
+              SizedBox(height: compact ? 8 : 11),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: interestLabels
+                    .map((label) => _ShelfTagChip(label: label))
+                    .toList(),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  Widget _jobLine() {
+  Widget _buildNameRow(bool compact) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Text(
+            '${profile.displayName}, ${profile.age}',
+            style: TextStyle(
+              color: AppColors.textStrong,
+              fontSize: compact ? 22 : 25,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.2,
+              height: 1.1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (profile.verifications.hasAny) ...[
+          const SizedBox(width: 8),
+          VerificationBadges(
+            verifications: profile.verifications,
+            brightness: Brightness.light,
+          ),
+        ],
+        const SizedBox(width: 4),
+        // 프로필 상세 진입을 암시하는 chevron. 실제 tap은 shelf 전체가 처리한다.
+        Semantics(
+          button: true,
+          label: '프로필 자세히 보기',
+          child: const Icon(
+            Icons.chevron_right_rounded,
+            size: 22,
+            color: AppColors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJobLine(String label) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.work_outline_rounded,
+          size: 14,
+          color: AppColors.textMuted,
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String? _jobLabel() {
     final catLabel = profile.jobCategory != null
         ? ProfileOptions.keyToLabel(
             ProfileOptions.jobCategoryOptions,
@@ -301,28 +382,8 @@ class _ProfileCardContentState extends State<ProfileCardContent> {
         : catLabel;
 
     final parts = [?catName, ?profile.jobTitle];
-    if (parts.isEmpty) return const SizedBox.shrink();
-
-    return Row(
-      children: [
-        Icon(
-          Icons.work_rounded,
-          size: 13,
-          color: AppColors.surface.withValues(alpha: 0.6),
-        ),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            parts.join(' · '),
-            style: TextStyle(
-              color: AppColors.surface.withValues(alpha: 0.7),
-              fontSize: 13,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
+    if (parts.isEmpty) return null;
+    return parts.join(' · ');
   }
 }
 
@@ -481,18 +542,18 @@ class _PhotoSegmentIndicator extends StatelessWidget {
               child: AnimatedContainer(
                 duration: AppDurations.fast,
                 curve: AppCurves.standard,
-                height: 3,
+                height: 2.5,
                 margin: EdgeInsets.only(right: index == count - 1 ? 0 : 4),
                 decoration: BoxDecoration(
                   color: AppColors.surface.withValues(
-                    alpha: active ? 0.95 : 0.36,
+                    alpha: active ? 0.95 : 0.3,
                   ),
                   borderRadius: BorderRadius.circular(AppRadius.chip),
                   boxShadow: active
                       ? [
                           BoxShadow(
-                            color: AppColors.ink.withValues(alpha: 0.22),
-                            blurRadius: 3,
+                            color: AppColors.ink.withValues(alpha: 0.18),
+                            blurRadius: 2,
                           ),
                         ]
                       : null,
@@ -506,121 +567,72 @@ class _PhotoSegmentIndicator extends StatelessWidget {
   }
 }
 
-class _DistanceChip extends StatelessWidget {
+enum _ShelfChipTone { mint, neutral }
+
+/// 밝은 shelf 위의 핵심 정보 chip(관계 목표·거리·MBTI). 관계 목표만 mint soft,
+/// 나머지는 중립 톤으로 두어 관계 목표가 가장 먼저 읽히게 한다.
+class _ShelfChip extends StatelessWidget {
+  final IconData? icon;
   final String label;
-  const _DistanceChip({required this.label});
+  final _ShelfChipTone tone;
+
+  const _ShelfChip({this.icon, required this.label, required this.tone});
 
   @override
   Widget build(BuildContext context) {
+    final mint = tone == _ShelfChipTone.mint;
+    final bg = mint ? AppColors.surfaceMintSoft : AppColors.surfaceSecondary;
+    final fg = mint ? AppColors.mintDeep : AppColors.textBody;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      constraints: const BoxConstraints(maxWidth: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.78),
+        color: bg,
         borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(
-          color: AppColors.mint.withValues(alpha: 0.28),
-          width: 0.5,
-        ),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.textOnDark,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          height: 1,
-        ),
-      ),
-    );
-  }
-}
-
-/// 상대가 찾는 관계(예: "진지한 연애를 시작하고 싶어요")를 사진 위에 작게
-/// 보여준다. 사람 사진을 압도하지 않도록 다른 보조 칩과 같은 크기/톤을 쓴다.
-class _RelationshipGoalChip extends StatelessWidget {
-  final String goalKey;
-  const _RelationshipGoalChip({required this.goalKey});
-
-  @override
-  Widget build(BuildContext context) {
-    final label = ProfileOptions.keyToLabel(
-      ProfileOptions.relationshipGoals,
-      goalKey,
-    );
-    if (label == null) return const SizedBox.shrink();
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-        border: Border.all(
-          color: AppColors.mint.withValues(alpha: 0.28),
-          width: 0.6,
-        ),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: AppColors.textOnDark,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          height: 1,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 4),
+          ],
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: fg,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                height: 1,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _MbtiChip extends StatelessWidget {
-  final String mbti;
-  const _MbtiChip({required this.mbti});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        border: Border.all(
-          color: AppColors.mint.withValues(alpha: 0.32),
-          width: 0.5,
-        ),
-      ),
-      child: Text(
-        mbti,
-        style: const TextStyle(
-          color: AppColors.mint,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
+/// shelf 하단 관심사 chip. 정보 chip보다 한 단계 약한 중립 톤.
+class _ShelfTagChip extends StatelessWidget {
   final String label;
-  const _TagChip({required this.label});
+  const _ShelfTagChip({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        border: Border.all(
-          color: AppColors.mint.withValues(alpha: 0.28),
-          width: 0.5,
-        ),
+        color: AppColors.surfaceSecondary,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Text(
         label,
         style: const TextStyle(
-          color: AppColors.textOnDark,
+          color: AppColors.textBody,
           fontSize: 12,
           fontWeight: FontWeight.w600,
           height: 1,

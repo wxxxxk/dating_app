@@ -260,11 +260,13 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
     final uid = _currentUid;
     return Scaffold(
       key: const ValueKey('lounge-post-detail-screen'),
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.warmCanvas,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.warmCanvas,
+        surfaceTintColor: AppColors.warmCanvas,
         elevation: 0,
-        title: const Text('라운지 게시물'),
+        scrolledUnderElevation: 0,
+        title: const Text('라운지 게시물', style: AppTextStyles.cardTitle),
       ),
       body: SafeArea(
         child: StreamBuilder<CommunityPost?>(
@@ -272,17 +274,15 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {
-              return const Center(
+              return const _DetailLoading(
                 key: ValueKey('lounge-detail-loading'),
-                child: CircularProgressIndicator(),
               );
             }
 
             // stream 오류와 "삭제/숨김"은 사용자에게 다른 상황이다.
             // 전자는 다시 시도할 수 있고, 후자는 되돌릴 수 없다.
             if (snap.hasError) {
-              return Padding(
-                padding: const EdgeInsets.all(20),
+              return _DetailNoticeFrame(
                 child: CommunityUnavailableNotice(
                   message: '게시물을 불러오지 못했어요.',
                   retryKey: const ValueKey('lounge-detail-retry'),
@@ -297,8 +297,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                 _audience.isExcluded(authorUid: post.authorUid, selfUid: uid);
 
             if (post == null || hidden) {
-              return const Padding(
-                padding: EdgeInsets.all(20),
+              return const _DetailNoticeFrame(
                 child: CommunityUnavailableNotice(
                   message: '이 게시물은 더 이상 볼 수 없어요.',
                 ),
@@ -310,7 +309,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
               children: [
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                     children: [
                       _PostBody(
                         post: post,
@@ -321,27 +320,41 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                           reportedUid: post.authorUid,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      CommunityReactionBar(
-                        keyPrefix: 'lounge',
-                        reactionStream: _myReactionStream,
-                        overrideReacted: _overrideReacted,
-                        reactionCount:
-                            _overrideReactionCount ?? post.reactionCount,
-                        commentCount: post.commentCount,
-                        onToggle: _toggleReaction,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.screenH,
+                          0,
+                          AppSpacing.screenH,
+                          AppSpacing.lg20,
+                        ),
+                        child: CommunityReactionBar(
+                          keyPrefix: 'lounge',
+                          variant: CommunityInteractionVariant.loungeEditorial,
+                          reactionStream: _myReactionStream,
+                          overrideReacted: _overrideReacted,
+                          reactionCount:
+                              _overrideReactionCount ?? post.reactionCount,
+                          commentCount: post.commentCount,
+                          onToggle: _toggleReaction,
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      CommunityCommentList(
-                        keyPrefix: 'lounge',
-                        stream: _commentsStream,
-                        selfUid: uid,
-                        audience: _audience,
-                        onDelete: _deleteComment,
-                        onReport: (comment) => _report(
-                          targetType: 'comment',
-                          reportedUid: comment.authorUid,
-                          commentId: comment.id,
+                      _CommentSectionHeader(count: post.commentCount),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.screenH,
+                        ),
+                        child: CommunityCommentList(
+                          keyPrefix: 'lounge',
+                          variant: CommunityInteractionVariant.loungeEditorial,
+                          stream: _commentsStream,
+                          selfUid: uid,
+                          audience: _audience,
+                          onDelete: _deleteComment,
+                          onReport: (comment) => _report(
+                            targetType: 'comment',
+                            reportedUid: comment.authorUid,
+                            commentId: comment.id,
+                          ),
                         ),
                       ),
                     ],
@@ -349,6 +362,7 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
                 ),
                 CommunityCommentInput(
                   keyPrefix: 'lounge',
+                  variant: CommunityInteractionVariant.loungeEditorial,
                   controller: _commentController,
                   submitting: _submittingComment,
                   onSubmit: _submitComment,
@@ -362,6 +376,158 @@ class _LoungePostDetailScreenState extends State<LoungePostDetailScreen> {
   }
 }
 
+/// unavailable/error 안내를 화면 여백 안에 놓는 래퍼.
+/// 공용 [CommunityUnavailableNotice]는 이번 Phase에서 수정하지 않는다.
+class _DetailNoticeFrame extends StatelessWidget {
+  final Widget child;
+
+  const _DetailNoticeFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg,
+        AppSpacing.screenH,
+        AppSpacing.xxl,
+      ),
+      children: [child],
+    );
+  }
+}
+
+/// 댓글 영역의 시작. 실제 `post.commentCount`만 쓴다.
+class _CommentSectionHeader extends StatelessWidget {
+  final int count;
+
+  const _CommentSectionHeader({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg,
+        AppSpacing.screenH,
+        AppSpacing.sm,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+      ),
+      child: Row(
+        children: [
+          const ExcludeSemantics(
+            child: Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 16,
+              color: AppColors.brandPrimaryStrong,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text('댓글 $count', style: AppTextStyles.sectionTitle),
+        ],
+      ),
+    );
+  }
+}
+
+/// 상세 진입 skeleton. 이전 게시물을 다시 보여주지 않는다.
+class _DetailLoading extends StatelessWidget {
+  const _DetailLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg20,
+        AppSpacing.screenH,
+        AppSpacing.xxl,
+      ),
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        const Row(
+          children: [
+            _SkeletonBox(width: 40, height: 40, radius: 999),
+            SizedBox(width: AppSpacing.md),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SkeletonBox(width: 104, height: 14),
+                SizedBox(height: 6),
+                _SkeletonBox(width: 64, height: 11),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg20),
+        const _SkeletonBox(height: 14),
+        const SizedBox(height: AppSpacing.sm),
+        const _SkeletonBox(height: 14),
+        const SizedBox(height: AppSpacing.sm),
+        const _SkeletonBox(height: 14),
+        const SizedBox(height: AppSpacing.sm),
+        const _SkeletonBox(width: 200, height: 14),
+        const SizedBox(height: AppSpacing.xl),
+        const Row(
+          children: [
+            _SkeletonBox(width: 108, height: 44, radius: 999),
+            SizedBox(width: AppSpacing.md),
+            _SkeletonBox(width: 56, height: 13),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        const _SkeletonBox(width: 84, height: 18),
+        const SizedBox(height: AppSpacing.lg20),
+        for (var i = 0; i < 2; i++) ...[
+          const Row(
+            children: [
+              _SkeletonBox(width: 26, height: 26, radius: 999),
+              SizedBox(width: AppSpacing.md),
+              _SkeletonBox(width: 84, height: 12),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const _SkeletonBox(height: 13),
+          const SizedBox(height: AppSpacing.xl),
+        ],
+        Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brandPrimary.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  final double? width;
+  final double height;
+  final double radius;
+
+  const _SkeletonBox({this.width, required this.height, this.radius = 999});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.canvasSubtle,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+/// 원문 게시물. 카드에 가두지 않고 캔버스 위 에디토리얼 본문으로 읽게 한다.
 class _PostBody extends StatelessWidget {
   final CommunityPost post;
   final bool isMine;
@@ -380,11 +546,11 @@ class _PostBody extends StatelessWidget {
     return Container(
       key: const ValueKey('lounge-detail-post'),
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg20,
+        AppSpacing.screenH,
+        AppSpacing.lg20,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,16 +558,19 @@ class _PostBody extends StatelessWidget {
           CommunityAuthorHeader(
             author: post.author,
             createdAt: post.createdAt,
+            // 목록보다 작성자 존재감을 조금 키운다(공용 위젯의 기존 파라미터).
+            avatarRadius: 19,
             trailing: SizedBox(
-              width: 32,
-              height: 32,
+              width: 40,
+              height: 40,
               child: PopupMenuButton<String>(
                 key: const ValueKey('lounge-detail-post-menu'),
                 padding: EdgeInsets.zero,
+                tooltip: '게시물 메뉴',
                 icon: const Icon(
                   Icons.more_horiz_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary,
+                  size: 20,
+                  color: AppColors.textMuted,
                 ),
                 onSelected: (value) {
                   if (value == 'delete') {
@@ -419,15 +588,9 @@ class _PostBody extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            post.text,
-            style: const TextStyle(
-              fontSize: 14.5,
-              height: 1.6,
-              color: AppColors.textPrimary,
-            ),
-          ),
+          const SizedBox(height: AppSpacing.lg),
+          // 본문은 잘리지 않고 전부 보여준다(maxLines 없음).
+          Text(post.text, style: AppTextStyles.body.copyWith(fontSize: 15.5)),
         ],
       ),
     );

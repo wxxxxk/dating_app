@@ -28,7 +28,6 @@ import '../../services/safety/safety_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/premium_components.dart';
-import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/profile_photo_view.dart';
 import '../auth/phone_login_screen.dart';
 import '../charm/charm_report_screen.dart';
@@ -636,9 +635,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('내 프로필'),
+        titleSpacing: 20,
+        title: const Text(
+          '내 프로필',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            letterSpacing: -0.2,
+          ),
+        ),
         backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
+        foregroundColor: AppColors.textStrong,
+        elevation: 0,
         actions: [
           JellyBalanceButton(
             currentUid: profile.uid,
@@ -862,63 +871,72 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  PrimaryButton(
-                    label: '프로필 편집',
-                    outlined: true,
-                    onPressed: _openEditScreen,
-                  ),
-                  const SizedBox(height: 12),
-                  PrimaryButton(
-                    key: const Key('open-contact-avoidance'),
-                    label: '지인 피하기',
-                    outlined: true,
-                    onPressed: _openContactAvoidance,
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    '연락처에 있는 사람을 서로 추천에서 숨겨요',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  ScreenProtectionInfoRow(
-                    onTap: () => showScreenProtectionInfoSheet(context),
-                  ),
-                  const SizedBox(height: 6),
-                  PrimaryButton(
-                    label: '차단 목록 관리',
-                    outlined: true,
-                    onPressed: _openBlockedUsers,
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      key: const Key('open-account-deletion'),
-                      onPressed: _openAccountDeletion,
-                      icon: const Icon(Icons.delete_forever_rounded, size: 20),
-                      label: const Text('회원 탈퇴'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.error,
-                        side: BorderSide(
-                          color: AppColors.error.withValues(alpha: 0.45),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  const SizedBox(height: 24),
+
+                  // ── 프로필 관리 ──────────────────────────────────────
+                  _DashboardGroup(
+                    title: '프로필 관리',
+                    children: [
+                      _DashboardMenuRow(
+                        icon: Icons.edit_outlined,
+                        iconColor: AppColors.mintDeep,
+                        label: '프로필 편집',
+                        onTap: _openEditScreen,
                       ),
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── 안전 및 개인정보 ─────────────────────────────────
+                  _DashboardGroup(
+                    title: '안전 및 개인정보',
+                    children: [
+                      _DashboardMenuRow(
+                        rowKey: const Key('open-contact-avoidance'),
+                        icon: Icons.person_off_outlined,
+                        label: '지인 피하기',
+                        subtitle: '연락처에 있는 사람을 서로 추천에서 숨겨요',
+                        onTap: _openContactAvoidance,
+                      ),
+                      _DashboardMenuRow(
+                        icon: Icons.block_outlined,
+                        label: '차단 목록 관리',
+                        onTap: _openBlockedUsers,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  PrimaryButton(
-                    label: '로그아웃',
-                    outlined: true,
-                    onPressed: _handleSignOut,
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surfacePrimary,
+                      borderRadius: BorderRadius.circular(AppRadius.surface),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ScreenProtectionInfoRow(
+                      onTap: () => showScreenProtectionInfoSheet(context),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── 계정 (회원 탈퇴는 실제 destructive라 가장 아래 분리) ──
+                  _DashboardGroup(
+                    title: '계정',
+                    children: [
+                      _DashboardMenuRow(
+                        icon: Icons.logout_rounded,
+                        label: '로그아웃',
+                        chevron: false,
+                        onTap: _handleSignOut,
+                      ),
+                      _DashboardMenuRow(
+                        rowKey: const Key('open-account-deletion'),
+                        icon: Icons.delete_forever_rounded,
+                        label: '회원 탈퇴',
+                        danger: true,
+                        onTap: _openAccountDeletion,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 40),
                 ],
@@ -952,6 +970,142 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ── 내부 위젯 ──────────────────────────────────────────────────────────────────
+
+/// 관리/계정 메뉴를 역할별로 묶는 continuous surface. 예전의 full-width 버튼
+/// 무더기 대신, 제목 + 하나의 밝은 surface + divider row 구조로 정리한다.
+class _DashboardGroup extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _DashboardGroup({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 10),
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textMuted,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surfacePrimary,
+            borderRadius: BorderRadius.circular(AppRadius.surface),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0)
+                  const Divider(
+                    height: 1,
+                    indent: 16,
+                    color: AppColors.borderSubtle,
+                  ),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 대시보드 메뉴 행 — 아이콘 + 라벨(+선택 subtitle) + (navigation일 때) chevron.
+/// route·callback은 호출부가 그대로 넘긴다. 위험 action(회원 탈퇴)만 danger.
+class _DashboardMenuRow extends StatelessWidget {
+  final Key? rowKey;
+  final IconData icon;
+  final Color? iconColor;
+  final String label;
+  final String? subtitle;
+  final bool danger;
+  final bool chevron;
+  final VoidCallback onTap;
+
+  const _DashboardMenuRow({
+    this.rowKey,
+    required this.icon,
+    this.iconColor,
+    required this.label,
+    this.subtitle,
+    this.danger = false,
+    this.chevron = true,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = danger ? AppColors.error : AppColors.textStrong;
+    final resolvedIcon = danger
+        ? AppColors.error
+        : (iconColor ?? AppColors.textBody);
+    return InkWell(
+      key: rowKey,
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 58),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 21, color: resolvedIcon),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: fg,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle!,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          height: 1.35,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (chevron) ...[
+                const SizedBox(width: 10),
+                const ExcludeSemantics(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _DailyPickHeroCard extends StatelessWidget {
   final TodayMatchState state;

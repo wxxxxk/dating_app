@@ -202,15 +202,38 @@ class PremiumProfileImageCard extends StatelessWidget {
   final double radius;
   final bool glow;
 
+  /// Discovery editorial 액자 톤. 사진이 흰 카드 안에 담긴 느낌 대신 사진
+  /// 자체가 액자처럼 보이도록, mint 틴트 대신 아주 얇은 중립 보더 + 부드러운
+  /// 단일 섀도우만 쓴다. 기본값(false)은 기존 렌더를 그대로 유지하므로 다른
+  /// 화면(user_profile_screen 등)에는 영향이 없다.
+  final bool softFrame;
+
   const PremiumProfileImageCard({
     super.key,
     required this.child,
     this.radius = AppRadius.hero,
     this.glow = false,
+    this.softFrame = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (softFrame) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: AppShadows.card,
+        ),
+        foregroundDecoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: AppColors.borderSubtle),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: child,
+        ),
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),

@@ -21,6 +21,7 @@ import '../../services/likes/likes_service.dart';
 import '../../services/location/location_service.dart';
 import '../../services/matches/matches_service.dart';
 import '../../services/safety/safety_service.dart';
+import '../../shared/widgets/app_components.dart';
 import '../../shared/widgets/premium_components.dart';
 import '../chat/chat_screen.dart';
 import '../jelly/jelly_shop_screen.dart';
@@ -31,6 +32,10 @@ import '../profile/widgets/verification_badge.dart';
 /// 나를 좋아요한 사람 목록 화면.
 ///
 /// 내가 아직 like/pass로 응답하지 않은 받은 좋아요만 보여준다.
+///
+/// Warm Interest Gallery — 사진 중심의 큰 세로 카드로, 나에게 관심을 표현한
+/// 사람을 검토하고 바로 응답하도록 정리한다. 무료 미리보기(2명) 이후 카드는
+/// 기존 젤리 게이트/블러 계약 그대로 잠긴다.
 class ReceivedLikesScreen extends StatefulWidget {
   final String currentUid;
   final UserProfile? currentProfile;
@@ -92,7 +97,10 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('응답 처리 실패: $e')));
+        ..showSnackBar(
+          const SnackBar(content: Text('응답 처리에 실패했어요. 잠시 후 다시 시도해주세요.')),
+        );
+      if (kDebugMode) debugPrint('[ReceivedLikes] 응답 처리 실패: $e');
     } finally {
       if (mounted) setState(() => _processingUids.remove(like.uid));
     }
@@ -177,15 +185,16 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.warmCanvas,
       appBar: AppBar(
         title: const Text(
           '받은 좋아요',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: AppColors.warmCanvas,
+        foregroundColor: AppColors.textStrong,
         elevation: 0,
+        scrolledUnderElevation: 0,
         actions: [
           JellyBalanceButton(
             currentUid: widget.currentUid,
@@ -207,49 +216,50 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
             ),
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
+                return const _LikesLoading();
               }
               if (snap.hasError) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      '받은 좋아요를 불러오지 못했어요\n${snap.error}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ),
-                );
+                if (kDebugMode) {
+                  debugPrint('[ReceivedLikes] 받은 좋아요 로드 실패: ${snap.error}');
+                }
+                return const _LikesError();
               }
               final likes = snap.data ?? [];
               if (likes.isEmpty) return const _EmptyLikes();
 
               final shouldGate = !unlocked && likes.length > _freePreviewCount;
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                itemCount: likes.length + (shouldGate ? 1 : 0),
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (_, index) {
-                  if (shouldGate && index == 0) {
-                    return _UnlockLikesCard(
+
+              return ListView(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  AppSpacing.xl + MediaQuery.of(context).padding.bottom,
+                ),
+                children: [
+                  AppFadeSlideIn(child: _LikesHeader(count: likes.length)),
+                  const SizedBox(height: AppSpacing.lg),
+                  if (shouldGate) ...[
+                    _UnlockLikesCard(
                       hiddenCount: likes.length - _freePreviewCount,
                       unlocking: _unlocking,
                       onUnlock: _unlockReceivedLikes,
-                    );
-                  }
-                  final likeIndex = shouldGate ? index - 1 : index;
-                  final like = likes[likeIndex];
-                  final locked = shouldGate && likeIndex >= _freePreviewCount;
-                  return _ReceivedLikeTile(
-                    like: like,
-                    currentLocation: widget.currentProfile?.location,
-                    processing: _processingUids.contains(like.uid),
-                    locked: locked,
-                    onProfileTap: () => _openProfile(like.profile),
-                    onLike: () => _respond(like, 'like'),
-                    onPass: () => _respond(like, 'pass'),
-                  );
-                },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  for (var i = 0; i < likes.length; i++) ...[
+                    _ReceivedLikeCard(
+                      like: likes[i],
+                      currentLocation: widget.currentProfile?.location,
+                      processing: _processingUids.contains(likes[i].uid),
+                      locked: shouldGate && i >= _freePreviewCount,
+                      onProfileTap: () => _openProfile(likes[i].profile),
+                      onLike: () => _respond(likes[i], 'like'),
+                      onPass: () => _respond(likes[i], 'pass'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                ],
               );
             },
           );
@@ -309,7 +319,95 @@ class _ReceivedLikesScreenState extends State<ReceivedLikesScreen> {
   }
 }
 
-class _ReceivedLikeTile extends StatelessWidget {
+// ═══ 감정 헤더 ════════════════════════════════════════════════════════════════
+
+class _LikesHeader extends StatelessWidget {
+  final int count;
+  const _LikesHeader({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColors.surfacePrimary,
+            AppColors.expressiveAccentSoft,
+            AppColors.surfaceMintSoft,
+          ],
+          stops: [0.1, 0.6, 1],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.heroSoft),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Stack(
+        children: [
+          const Positioned(
+            top: -8,
+            right: -8,
+            width: 92,
+            height: 54,
+            child: ExcludeSemantics(
+              child: IgnorePointer(
+                child: ConnectionMotif(
+                  strokeWidth: 1.6,
+                  opacity: 0.7,
+                  primaryColor: AppColors.expressiveAccent,
+                  accentColor: AppColors.brandPrimary,
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '나에게 온 마음',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.expressiveAccent,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 240),
+                child: Text(
+                  '누가 나에게 관심을 보냈을까요?',
+                  style: AppTextStyles.screenTitle,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text.rich(
+                TextSpan(
+                  style: AppTextStyles.bodySecondary,
+                  children: [
+                    TextSpan(
+                      text: '$count명',
+                      style: const TextStyle(
+                        color: AppColors.expressiveAccent,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const TextSpan(text: '이 나에게 마음을 보냈어요.'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══ 좋아요 카드 (사진 중심) ═══════════════════════════════════════════════════
+
+class _ReceivedLikeCard extends StatelessWidget {
   final ReceivedLike like;
   final UserLocation? currentLocation;
   final bool processing;
@@ -318,7 +416,7 @@ class _ReceivedLikeTile extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onPass;
 
-  const _ReceivedLikeTile({
+  const _ReceivedLikeCard({
     required this.like,
     required this.currentLocation,
     required this.processing,
@@ -330,10 +428,170 @@ class _ReceivedLikeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final content = _cardBody(context);
+
+    if (!locked) {
+      return AppPressable(
+        onTap: onProfileTap,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+        child: content,
+      );
+    }
+
+    // 잠긴 카드: 블러 + 반투명 오버레이. 개인정보는 새로 드러나지 않고,
+    // 잠금 이유와 이용 방법(멤버십)만 표시한다. 액션은 IgnorePointer로 막는다.
+    return Semantics(
+      label: '멤버십으로 확인할 수 있는 잠긴 좋아요',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+        child: Stack(
+          children: [
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: IgnorePointer(child: content),
+            ),
+            Positioned.fill(
+              child: Container(
+                alignment: Alignment.center,
+                color: AppColors.surfacePrimary.withValues(alpha: 0.82),
+                child: const PremiumStatusPill(
+                  label: '멤버십으로 확인',
+                  icon: Icons.lock_rounded,
+                  color: AppColors.mintDeep,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardBody(BuildContext context) {
     final profile = like.profile;
-    final photoUrl = profile.photoUrls.isNotEmpty
-        ? profile.photoUrls.first
-        : null;
+    final superlike = like.isSuperlike;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+        border: Border.all(
+          color: superlike
+              ? AppColors.water.withValues(alpha: 0.5)
+              : AppColors.borderSubtle,
+        ),
+        boxShadow: AppShadows.card,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _CardPhoto(
+            photoUrl: profile.photoUrls.isNotEmpty
+                ? profile.photoUrls.first
+                : null,
+            superlike: superlike,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: _CardInfo(
+              like: like,
+              currentLocation: currentLocation,
+              processing: processing,
+              locked: locked,
+              onLike: onLike,
+              onPass: onPass,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 카드 상단 대표 사진. 실패/누락 시 안전한 placeholder로 대체하고
+/// 네트워크 실패 이유는 노출하지 않는다. 사진 위에는 텍스트/CTA를 겹치지 않고
+/// 슈퍼라이크 표시만 작은 배지로 얹는다.
+class _CardPhoto extends StatelessWidget {
+  final String? photoUrl;
+  final bool superlike;
+  const _CardPhoto({required this.photoUrl, required this.superlike});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = photoUrl;
+    return Semantics(
+      image: true,
+      label: '프로필 사진',
+      child: AspectRatio(
+        aspectRatio: 5 / 4,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(
+              color: AppColors.canvasSubtle,
+              child: url == null
+                  ? const Center(
+                      child: Icon(
+                        Icons.person_rounded,
+                        size: 44,
+                        color: AppColors.textMuted,
+                      ),
+                    )
+                  : Image.network(
+                      url,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const ColoredBox(color: AppColors.canvasSubtle);
+                      },
+                      errorBuilder: (_, _, _) => const Center(
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 44,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+            ),
+            if (superlike)
+              const Positioned(
+                top: 12,
+                left: 12,
+                child: PremiumStatusPill(
+                  label: '슈퍼라이크',
+                  icon: Icons.star_rounded,
+                  color: AppColors.water,
+                  compact: true,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CardInfo extends StatelessWidget {
+  final ReceivedLike like;
+  final UserLocation? currentLocation;
+  final bool processing;
+  final bool locked;
+  final VoidCallback onLike;
+  final VoidCallback onPass;
+
+  const _CardInfo({
+    required this.like,
+    required this.currentLocation,
+    required this.processing,
+    required this.locked,
+    required this.onLike,
+    required this.onPass,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = like.profile;
     final distanceKm = LocationService.distanceToCoarse(
       currentLocation,
       profile.coarseLocation,
@@ -341,182 +599,65 @@ class _ReceivedLikeTile extends StatelessWidget {
     final distanceLabel = distanceKm == null
         ? null
         : LocationService.formatDistance(distanceKm);
+    final metaText = distanceLabel == null
+        ? _likeMessage(like)
+        : '$distanceLabel · ${_likeMessage(like)}';
     final interestLabels = ProfileOptions.keysToLabels(
       ProfileOptions.interests,
       profile.interests,
     ).take(2).toList();
 
-    final content = Card(
-      elevation: 0,
-      color: like.isSuperlike
-          ? AppColors.water.withValues(alpha: 0.16)
-          : AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        side: BorderSide(
-          color: like.isSuperlike
-              ? AppColors.water.withValues(alpha: 0.7)
-              : AppColors.border,
-          width: 1,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${profile.displayName}, ${profile.age}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.cardTitle,
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+        if (profile.verifications.hasAny) ...[
+          const SizedBox(height: 7),
+          VerificationBadges(verifications: profile.verifications),
+        ],
+        const SizedBox(height: 6),
+        Text(
+          metaText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.caption,
+        ),
+        if (profile.bio.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            stripEmoji(profile.bio),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.bodySecondary,
+          ),
+        ],
+        if (interestLabels.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: interestLabels
+                .map((label) => _InterestChip(label: label))
+                .toList(),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.button),
-              child: SizedBox(
-                width: 88,
-                height: 116,
-                child: photoUrl == null
-                    ? const ColoredBox(
-                        color: AppColors.surface,
-                        child: Icon(
-                          Icons.person_rounded,
-                          color: AppColors.textSecondary,
-                        ),
-                      )
-                    : Image.network(photoUrl, fit: BoxFit.cover),
-              ),
-            ),
-            const SizedBox(width: 12),
+            _PassButton(onPressed: processing || locked ? null : onPass),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${profile.displayName}, ${profile.age}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  if (like.isSuperlike) ...[
-                    const SizedBox(height: 6),
-                    const PremiumStatusPill(
-                      label: '슈퍼라이크',
-                      icon: Icons.star_rounded,
-                      color: AppColors.water,
-                      compact: true,
-                    ),
-                  ],
-                  if (profile.verifications.hasAny) ...[
-                    const SizedBox(height: 6),
-                    VerificationBadges(verifications: profile.verifications),
-                  ],
-                  const SizedBox(height: 4),
-                  Text(
-                    distanceLabel == null
-                        ? _likeMessage(like)
-                        : '$distanceLabel · ${_likeMessage(like)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  if (profile.bio.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      stripEmoji(profile.bio),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                  if (interestLabels.isNotEmpty) ...[
-                    const SizedBox(height: 7),
-                    Wrap(
-                      spacing: 5,
-                      runSpacing: 5,
-                      children: interestLabels
-                          .map(
-                            (label) => PremiumStatusPill(
-                              label: label,
-                              color: AppColors.mint,
-                              compact: true,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: processing || locked ? null : onPass,
-                          icon: const Icon(Icons.close_rounded, size: 16),
-                          label: const Text('패스'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.textSecondary,
-                            side: const BorderSide(color: AppColors.border),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: processing || locked ? null : onLike,
-                          icon: processing
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.favorite_rounded, size: 16),
-                          label: const Text('좋아요'),
-                          style: FilledButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              child: _LikeButton(
+                processing: processing,
+                onPressed: processing || locked ? null : onLike,
               ),
             ),
           ],
-        ),
-      ),
-    );
-    if (!locked) {
-      return InkWell(
-        onTap: onProfileTap,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: content,
-      );
-    }
-    return Stack(
-      children: [
-        ImageFiltered(
-          imageFilter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-          child: IgnorePointer(child: content),
-        ),
-        Positioned.fill(
-          child: Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(AppRadius.card),
-            ),
-            child: const PremiumStatusPill(
-              label: '멤버십으로 확인',
-              icon: Icons.lock_rounded,
-              color: AppColors.mintDeep,
-            ),
-          ),
         ),
       ],
     );
@@ -524,6 +665,88 @@ class _ReceivedLikeTile extends StatelessWidget {
 
   static String _likeMessage(ReceivedLike like) {
     return like.isSuperlike ? '나에게 슈퍼라이크를 보냈어요' : '나를 좋아요했어요';
+  }
+}
+
+class _InterestChip extends StatelessWidget {
+  final String label;
+  const _InterestChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSecondary,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(color: AppColors.textBody),
+      ),
+    );
+  }
+}
+
+/// 보조 액션(패스): neutral outline 아이콘 버튼. danger red를 쓰지 않는다.
+class _PassButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  const _PassButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      height: 48,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textBody,
+          side: const BorderSide(color: AppColors.borderStrong),
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+        ),
+        child: const Icon(Icons.close_rounded, size: 20),
+      ),
+    );
+  }
+}
+
+/// 주요 액션(좋아요): 민트 fill. loading 중에도 높이·라벨을 유지한다.
+class _LikeButton extends StatelessWidget {
+  final bool processing;
+  final VoidCallback? onPressed;
+  const _LikeButton({required this.processing, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: FilledButton.icon(
+        onPressed: onPressed,
+        icon: processing
+            ? const SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.onBrandPrimary,
+                ),
+              )
+            : const Icon(Icons.favorite_rounded, size: 17),
+        label: const Text('좋아요'),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.brandPrimaryStrong,
+          foregroundColor: AppColors.onBrandPrimary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -550,6 +773,8 @@ class _UnlockLikesCard extends StatelessWidget {
   }
 }
 
+// ═══ Empty / Loading / Error ══════════════════════════════════════════════════
+
 class _EmptyLikes extends StatelessWidget {
   const _EmptyLikes();
 
@@ -557,44 +782,112 @@ class _EmptyLikes extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 96,
+              height: 56,
+              child: ExcludeSemantics(
+                child: IgnorePointer(
+                  child: ConnectionMotif(
+                    opacity: 0.85,
+                    primaryColor: AppColors.expressiveAccent,
+                    accentColor: AppColors.brandPrimary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            const Text(
+              '아직 받은 좋아요가 없어요',
+              style: AppTextStyles.sectionTitle,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            const Text(
+              '누군가 나를 좋아요하면 여기에서 바로 응답할 수 있어요.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LikesLoading extends StatelessWidget {
+  const _LikesLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xl + MediaQuery.of(context).padding.bottom,
+      ),
+      children: [
+        Container(
+          height: 124,
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.hero),
-            border: Border.all(color: AppColors.border),
+            color: AppColors.surfaceSecondary,
+            borderRadius: BorderRadius.circular(AppRadius.heroSoft),
           ),
-          child: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.favorite_border_rounded,
-                size: 72,
-                color: AppColors.mintDeep,
-              ),
-              SizedBox(height: 20),
-              Text(
-                '아직 받은 좋아요가 없어요',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                '누군가 나를 좋아요하면 여기에서 바로 응답할 수 있어요.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.textSecondary,
-                  height: 1.5,
-                ),
-              ),
-            ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        for (var i = 0; i < 4; i++) ...[
+          Container(
+            height: 300,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSecondary,
+              borderRadius: BorderRadius.circular(AppRadius.surface),
+            ),
           ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        const SizedBox(height: AppSpacing.sm),
+        const Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: AppColors.brandPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LikesError extends StatelessWidget {
+  const _LikesError();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 34,
+              color: AppColors.statusDanger,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const Text(
+              '받은 좋아요를 불러오지 못했어요.\n잠시 후 다시 시도해주세요.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySecondary,
+            ),
+          ],
         ),
       ),
     );

@@ -43,27 +43,36 @@ class ChatSafetyBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Calm Trust trust ribbon — 경고가 아니라 동반 안내. 옅은 민트 서피스 +
+    // borderSubtle, 전체가 tap target(가이드 열기)이고 닫기만 분리한다.
     return Padding(
       key: const ValueKey('chat-safety-guide-banner'),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: Material(
-        color: AppColors.mintSoft,
-        borderRadius: BorderRadius.circular(AppRadius.button),
+        color: AppColors.surfaceMintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
         child: InkWell(
           key: const ValueKey('chat-safety-guide-open-button'),
           onTap: onOpenGuide,
-          borderRadius: BorderRadius.circular(AppRadius.button),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          borderRadius: BorderRadius.circular(AppRadius.surface),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.surface),
+              border: Border.all(
+                color: AppColors.brandPrimary.withValues(alpha: 0.22),
+              ),
+            ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const Icon(
                   Icons.shield_outlined,
-                  size: 18,
-                  color: AppColors.mintDeep,
+                  size: 20,
+                  color: AppColors.brandPrimaryStrong,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 11),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,9 +80,9 @@ class ChatSafetyBanner extends StatelessWidget {
                       const Text(
                         '안전하게 대화해요',
                         style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textStrong,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -82,19 +91,27 @@ class ChatSafetyBanner extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11.5,
                           height: 1.35,
-                          color: AppColors.textSecondary,
+                          color: AppColors.textMuted,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '자세히',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.mintDeep,
-                          decoration: TextDecoration.underline,
-                          decorationColor: AppColors.mintDeep,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '자세히',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.brandPrimaryStrong,
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 15,
+                            color: AppColors.brandPrimaryStrong,
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -105,7 +122,7 @@ class ChatSafetyBanner extends StatelessWidget {
                   onPressed: onDismiss,
                   visualDensity: VisualDensity.compact,
                   iconSize: 18,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textMuted,
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
@@ -123,9 +140,11 @@ Future<void> showChatSafetyGuideSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.background,
+    backgroundColor: AppColors.surfacePrimary,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppRadius.sheet),
+      ),
     ),
     builder: (_) => const _ChatSafetyGuideSheet(),
   );
@@ -136,10 +155,15 @@ class _SafetyGuideItem {
   final String title;
   final String body;
 
+  /// presentation 전용 강조색. 위험도 판정을 새로 만들지 않고, 기존 문구 의미에
+  /// 따라 아이콘 톤만 구분한다(예: 송금 관련은 '주의' 앰버).
+  final Color accent;
+
   const _SafetyGuideItem({
     required this.icon,
     required this.title,
     required this.body,
+    this.accent = AppColors.brandPrimaryStrong,
   });
 }
 
@@ -158,6 +182,7 @@ const List<_SafetyGuideItem> _guideItems = [
     icon: Icons.account_balance_wallet_outlined,
     title: '송금 요청 주의',
     body: '선입금, 대리 결제, 급한 송금을 요구받으면 대화를 멈추고 확인하세요.',
+    accent: AppColors.statusWarning,
   ),
   _SafetyGuideItem(
     icon: Icons.place_outlined,
@@ -192,106 +217,168 @@ class _ChatSafetyGuideSheet extends StatelessWidget {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.borderStrong,
                     borderRadius: BorderRadius.circular(AppRadius.chip),
                   ),
                 ),
               ),
               const SizedBox(height: 18),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.verified_user_outlined,
-                    size: 20,
-                    color: AppColors.mintDeep,
+              // 상단에 옅은 mint tonal wash를 깐 header — 경고창이 아니라
+              // 신뢰 안내로 읽히게 한다.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceMintSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.surface),
+                  border: Border.all(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.18),
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      '안전하게 대화하는 방법',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfacePrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.verified_user_outlined,
+                        size: 22,
+                        color: AppColors.brandPrimaryStrong,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ..._guideItems.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: AppColors.mintSoft,
-                          borderRadius: BorderRadius.circular(
-                            AppRadius.button,
-                          ),
-                        ),
-                        child: Icon(
-                          item.icon,
-                          size: 18,
-                          color: AppColors.mintDeep,
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        '안전하게 대화하는 방법',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          height: 1.25,
+                          color: AppColors.textStrong,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // 항목을 큰 카드 반복이 아니라 하나의 surface 안에서 divider로 구분.
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfacePrimary,
+                  borderRadius: BorderRadius.circular(AppRadius.surface),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < _guideItems.length; i++) ...[
+                      if (i > 0)
+                        const Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: AppColors.borderSubtle,
+                          indent: 58,
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              item.title,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textPrimary,
+                            Container(
+                              width: 30,
+                              height: 30,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: _guideItems[i].accent.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.control,
+                                ),
+                              ),
+                              child: Icon(
+                                _guideItems[i].icon,
+                                size: 17,
+                                color: _guideItems[i].accent,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              item.body,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                height: 1.45,
-                                color: AppColors.textSecondary,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _guideItems[i].title,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textStrong,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _guideItems[i].body,
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      height: 1.5,
+                                      color: AppColors.textBody,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 12),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                  border: Border.all(color: AppColors.border),
+                  color: AppColors.surfaceSecondary,
+                  borderRadius: BorderRadius.circular(AppRadius.surface),
                 ),
-                child: const Text(
-                  '불편하거나 수상한 상황에서는 우측 상단 메뉴에서 신고하거나 차단할 수 있어요.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: AppColors.textSecondary,
-                  ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.flag_outlined,
+                      size: 18,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        '불편하거나 수상한 상황에서는 우측 상단 메뉴에서 신고하거나 차단할 수 있어요.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.45,
+                          color: AppColors.textBody,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
+                height: 52,
                 child: FilledButton(
                   key: const ValueKey('chat-safety-guide-confirm-button'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brandPrimaryStrong,
+                    foregroundColor: AppColors.onBrandPrimary,
+                  ),
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('확인했어요'),
                 ),
@@ -317,7 +404,9 @@ Future<bool?> showChatSafetyWarningSheet({
     isScrollControlled: true,
     backgroundColor: AppColors.background,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(AppRadius.sheet),
+      ),
     ),
     builder: (_) => _ChatSafetyWarningSheet(risks: risks),
   );

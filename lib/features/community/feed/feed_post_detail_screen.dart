@@ -266,11 +266,13 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
     final uid = _currentUid;
     return Scaffold(
       key: const ValueKey('feed-post-detail-screen'),
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.warmCanvas,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.warmCanvas,
+        surfaceTintColor: AppColors.warmCanvas,
         elevation: 0,
-        title: const Text('피드 게시물'),
+        scrolledUnderElevation: 0,
+        title: const Text('피드 게시물', style: AppTextStyles.cardTitle),
       ),
       body: SafeArea(
         child: StreamBuilder<CommunityPost?>(
@@ -278,17 +280,15 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {
-              return const Center(
+              return const _FeedDetailLoading(
                 key: ValueKey('feed-detail-loading'),
-                child: CircularProgressIndicator(),
               );
             }
 
             // stream 오류와 "삭제/숨김"은 사용자에게 다른 상황이다.
             // 전자는 다시 시도할 수 있고, 후자는 되돌릴 수 없다.
             if (snap.hasError) {
-              return Padding(
-                padding: const EdgeInsets.all(20),
+              return _DetailNoticeFrame(
                 child: CommunityUnavailableNotice(
                   message: '게시물을 불러오지 못했어요.',
                   retryKey: const ValueKey('feed-detail-retry'),
@@ -303,8 +303,7 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
                 _audience.isExcluded(authorUid: post.authorUid, selfUid: uid);
 
             if (post == null || hidden) {
-              return const Padding(
-                padding: EdgeInsets.all(20),
+              return const _DetailNoticeFrame(
                 child: CommunityUnavailableNotice(
                   message: '이 게시물은 더 이상 볼 수 없어요.',
                 ),
@@ -316,7 +315,7 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
               children: [
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                     children: [
                       _FeedPostBody(
                         post: post,
@@ -328,27 +327,41 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
                           reportedUid: post.authorUid,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      CommunityReactionBar(
-                        keyPrefix: 'feed',
-                        reactionStream: _myReactionStream,
-                        overrideReacted: _overrideReacted,
-                        reactionCount:
-                            _overrideReactionCount ?? post.reactionCount,
-                        commentCount: post.commentCount,
-                        onToggle: _toggleReaction,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.screenH,
+                          0,
+                          AppSpacing.screenH,
+                          AppSpacing.lg20,
+                        ),
+                        child: CommunityReactionBar(
+                          keyPrefix: 'feed',
+                          variant: CommunityInteractionVariant.feedEditorial,
+                          reactionStream: _myReactionStream,
+                          overrideReacted: _overrideReacted,
+                          reactionCount:
+                              _overrideReactionCount ?? post.reactionCount,
+                          commentCount: post.commentCount,
+                          onToggle: _toggleReaction,
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      CommunityCommentList(
-                        keyPrefix: 'feed',
-                        stream: _commentsStream,
-                        selfUid: uid,
-                        audience: _audience,
-                        onDelete: _deleteComment,
-                        onReport: (comment) => _report(
-                          targetType: 'comment',
-                          reportedUid: comment.authorUid,
-                          commentId: comment.id,
+                      _CommentSectionHeader(count: post.commentCount),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.screenH,
+                        ),
+                        child: CommunityCommentList(
+                          keyPrefix: 'feed',
+                          variant: CommunityInteractionVariant.feedEditorial,
+                          stream: _commentsStream,
+                          selfUid: uid,
+                          audience: _audience,
+                          onDelete: _deleteComment,
+                          onReport: (comment) => _report(
+                            targetType: 'comment',
+                            reportedUid: comment.authorUid,
+                            commentId: comment.id,
+                          ),
                         ),
                       ),
                     ],
@@ -356,6 +369,7 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
                 ),
                 CommunityCommentInput(
                   keyPrefix: 'feed',
+                  variant: CommunityInteractionVariant.feedEditorial,
                   controller: _commentController,
                   submitting: _submittingComment,
                   onSubmit: _submitComment,
@@ -369,6 +383,158 @@ class _FeedPostDetailScreenState extends State<FeedPostDetailScreen> {
   }
 }
 
+/// unavailable/error 안내를 화면 여백 안에 놓는 래퍼.
+/// 공용 [CommunityUnavailableNotice]는 이번 Phase에서 수정하지 않는다.
+class _DetailNoticeFrame extends StatelessWidget {
+  final Widget child;
+
+  const _DetailNoticeFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg,
+        AppSpacing.screenH,
+        AppSpacing.xxl,
+      ),
+      children: [child],
+    );
+  }
+}
+
+/// 댓글 영역의 시작. 실제 `post.commentCount`만 쓴다.
+class _CommentSectionHeader extends StatelessWidget {
+  final int count;
+
+  const _CommentSectionHeader({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg,
+        AppSpacing.screenH,
+        AppSpacing.sm,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+      ),
+      child: Row(
+        children: [
+          const ExcludeSemantics(
+            child: Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 16,
+              color: AppColors.brandPrimaryStrong,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text('댓글 $count', style: AppTextStyles.sectionTitle),
+        ],
+      ),
+    );
+  }
+}
+
+/// 상세 진입 skeleton. 이전 게시물을 다시 보여주지 않는다.
+class _FeedDetailLoading extends StatelessWidget {
+  const _FeedDetailLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg20,
+        AppSpacing.screenH,
+        AppSpacing.xxl,
+      ),
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        const Row(
+          children: [
+            _SkeletonBox(width: 42, height: 42, radius: 999),
+            SizedBox(width: AppSpacing.md),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SkeletonBox(width: 104, height: 14),
+                SizedBox(height: 6),
+                _SkeletonBox(width: 64, height: 11),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        // 사진이 주인공인 화면이라 media stage 자리를 크게 잡는다.
+        const _SkeletonBox(height: 280, radius: AppRadius.heroSoft),
+        const SizedBox(height: AppSpacing.lg20),
+        const _SkeletonBox(height: 14),
+        const SizedBox(height: AppSpacing.sm),
+        const _SkeletonBox(width: 220, height: 14),
+        const SizedBox(height: AppSpacing.xl),
+        const Row(
+          children: [
+            _SkeletonBox(width: 108, height: 44, radius: 999),
+            SizedBox(width: AppSpacing.md),
+            _SkeletonBox(width: 56, height: 13),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        const _SkeletonBox(width: 84, height: 18),
+        const SizedBox(height: AppSpacing.lg20),
+        for (var i = 0; i < 2; i++) ...[
+          const Row(
+            children: [
+              _SkeletonBox(width: 26, height: 26, radius: 999),
+              SizedBox(width: AppSpacing.md),
+              _SkeletonBox(width: 84, height: 12),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const _SkeletonBox(height: 13),
+          const SizedBox(height: AppSpacing.xl),
+        ],
+        Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brandPrimary.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  final double? width;
+  final double height;
+  final double radius;
+
+  const _SkeletonBox({this.width, required this.height, this.radius = 999});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.canvasSubtle,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+/// 원문 게시물. 카드에 가두지 않고, 사진이 가장 먼저 읽히도록 작성자 →
+/// 갤러리 → 본문 순으로 캔버스 위에 배치한다.
 class _FeedPostBody extends StatelessWidget {
   final CommunityPost post;
   final CommunityMediaService mediaService;
@@ -389,69 +555,67 @@ class _FeedPostBody extends StatelessWidget {
     return Container(
       key: const ValueKey('feed-detail-post'),
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg20,
+        AppSpacing.screenH,
+        AppSpacing.lg20,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-            child: CommunityAuthorHeader(
-              author: post.author,
-              createdAt: post.createdAt,
-              trailing: SizedBox(
-                width: 32,
-                height: 32,
-                child: PopupMenuButton<String>(
-                  key: const ValueKey('feed-detail-post-menu'),
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    Icons.more_horiz_rounded,
-                    size: 18,
-                    color: AppColors.textSecondary,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      onDelete();
-                    } else if (value == 'report') {
-                      onReport();
-                    }
-                  },
-                  itemBuilder: (_) => [
-                    if (isMine)
-                      const PopupMenuItem(value: 'delete', child: Text('삭제하기'))
-                    else
-                      const PopupMenuItem(value: 'report', child: Text('신고하기')),
-                  ],
+          CommunityAuthorHeader(
+            author: post.author,
+            createdAt: post.createdAt,
+            avatarRadius: 19,
+            trailing: SizedBox(
+              width: 40,
+              height: 40,
+              child: PopupMenuButton<String>(
+                key: const ValueKey('feed-detail-post-menu'),
+                padding: EdgeInsets.zero,
+                tooltip: '게시물 메뉴',
+                icon: const Icon(
+                  Icons.more_horiz_rounded,
+                  size: 20,
+                  color: AppColors.textMuted,
                 ),
+                onSelected: (value) {
+                  if (value == 'delete') {
+                    onDelete();
+                  } else if (value == 'report') {
+                    onReport();
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (isMine)
+                    const PopupMenuItem(value: 'delete', child: Text('삭제하기'))
+                  else
+                    const PopupMenuItem(value: 'report', child: Text('신고하기')),
+                ],
               ),
             ),
           ),
-          if (post.hasImages)
+          if (post.hasImages) ...[
+            const SizedBox(height: AppSpacing.lg),
             _FeedImageGallery(post: post, mediaService: mediaService),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Text(
-              post.text,
-              style: const TextStyle(
-                fontSize: 14.5,
-                height: 1.6,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          // 본문은 잘리지 않고 전부 보여준다(maxLines 없음).
+          Text(post.text, style: AppTextStyles.body.copyWith(fontSize: 15.5)),
         ],
       ),
     );
   }
 }
 
-/// 이미지 1~4장을 좌우로 넘겨 본다. 현재 위치를 인디케이터로 표시한다.
+/// 이미지 1~4장을 좌우로 넘겨 본다. 사진을 밝은 뉴트럴 라운드 프레임에 담고,
+/// 현재 위치를 dot + `현재/전체` 텍스트로 표시한다.
 class _FeedImageGallery extends StatefulWidget {
-  static const double height = 320;
+  /// media stage 높이 범위. page가 바뀌어도, 이미지가 바뀌어도 같은 높이를
+  /// 써서 layout shift가 없게 한다(폭 기반으로 한 번만 계산).
+  static const double minHeight = 260;
+  static const double maxHeight = 360;
 
   final CommunityPost post;
   final CommunityMediaService mediaService;
@@ -475,26 +639,41 @@ class _FeedImageGalleryState extends State<_FeedImageGallery> {
   @override
   Widget build(BuildContext context) {
     final paths = widget.post.imagePaths;
+    final radius = BorderRadius.circular(AppRadius.heroSoft);
     return Column(
       children: [
-        SizedBox(
-          height: _FeedImageGallery.height,
-          child: PageView.builder(
-            key: const ValueKey('feed-detail-gallery'),
-            controller: _controller,
-            itemCount: paths.length,
-            onPageChanged: (index) => setState(() => _index = index),
-            itemBuilder: (context, index) => FeedStorageImage(
-              key: ValueKey('feed-detail-image-$index'),
-              mediaService: widget.mediaService,
-              storagePath: paths[index],
-              height: _FeedImageGallery.height,
-              fit: BoxFit.contain,
-            ),
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final height = constraints.maxWidth.clamp(
+              _FeedImageGallery.minHeight,
+              _FeedImageGallery.maxHeight,
+            );
+            return ClipRRect(
+              borderRadius: radius,
+              child: Container(
+                height: height,
+                width: double.infinity,
+                color: AppColors.surfaceSecondary,
+                child: PageView.builder(
+                  key: const ValueKey('feed-detail-gallery'),
+                  controller: _controller,
+                  itemCount: paths.length,
+                  onPageChanged: (index) => setState(() => _index = index),
+                  itemBuilder: (context, index) => FeedStorageImage(
+                    key: ValueKey('feed-detail-image-$index'),
+                    mediaService: widget.mediaService,
+                    storagePath: paths[index],
+                    height: height,
+                    fit: BoxFit.contain,
+                    semanticLabel: '${widget.post.author.displayName}님의 피드 사진',
+                  ),
+                ),
+              ),
+            );
+          },
         ),
         if (paths.length > 1) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.md),
           Row(
             key: const ValueKey('feed-detail-indicator'),
             mainAxisAlignment: MainAxisAlignment.center,
@@ -506,12 +685,19 @@ class _FeedImageGalleryState extends State<_FeedImageGallery> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: i == _index
-                        ? AppColors.matchPrimary
-                        : AppColors.border,
+                        ? AppColors.brandPrimaryStrong
+                        : AppColors.borderSubtle,
                   ),
                 ),
                 if (i != paths.length - 1) const SizedBox(width: 5),
               ],
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                '${_index + 1} / ${paths.length}',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textBody,
+                ),
+              ),
             ],
           ),
         ],

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/value_questions.dart';
 import '../../core/theme/app_colors.dart';
-import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 
 /// 가치관 질문 전용 편집 화면.
@@ -78,13 +77,23 @@ class _ValueAnswersEditScreenState extends State<ValueAnswersEditScreen> {
   Widget build(BuildContext context) {
     final total = ValueQuestions.all.length;
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('나의 가치관'),
+        title: const Text(
+          '나의 가치관',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            letterSpacing: -0.2,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: AppColors.background.withValues(alpha: 0),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textStrong,
         elevation: 0,
       ),
       body: SafeArea(
@@ -113,14 +122,19 @@ class _ValueAnswersEditScreenState extends State<ValueAnswersEditScreen> {
                       color: AppColors.mintDeep,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  for (final question in ValueQuestions.all) ...[
-                    _ValueQuestionCard(
-                      question: question,
-                      selectedKey: _valueAnswers[question.key],
-                      onSelected: (option) => _onOptionTap(question, option),
+                  const SizedBox(height: 20),
+                  for (var i = 0; i < ValueQuestions.all.length; i++) ...[
+                    if (i > 0) ...[
+                      const SizedBox(height: 22),
+                      const Divider(height: 1, color: AppColors.borderSubtle),
+                      const SizedBox(height: 22),
+                    ],
+                    _ValueQuestionSection(
+                      question: ValueQuestions.all[i],
+                      selectedKey: _valueAnswers[ValueQuestions.all[i].key],
+                      onSelected: (option) =>
+                          _onOptionTap(ValueQuestions.all[i], option),
                     ),
-                    const SizedBox(height: 16),
                   ],
                 ],
               ),
@@ -145,13 +159,14 @@ class _ValueAnswersEditScreenState extends State<ValueAnswersEditScreen> {
   }
 }
 
-/// 질문 1개 + 선택지 chip 묶음을 표준 섹션 카드로 감싼다.
-class _ValueQuestionCard extends StatelessWidget {
+/// 질문 1개 + 선택지 chip 묶음. 두꺼운 카드 대신 여백과 divider로 구분되는
+/// 밝은 editorial 섹션으로 표현한다.
+class _ValueQuestionSection extends StatelessWidget {
   final ValueQuestion question;
   final String? selectedKey;
   final ValueChanged<ValueOption> onSelected;
 
-  const _ValueQuestionCard({
+  const _ValueQuestionSection({
     required this.question,
     required this.selectedKey,
     required this.onSelected,
@@ -159,22 +174,42 @@ class _ValueQuestionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PremiumSectionCard(
+    return Column(
       key: ValueKey('value-question-${question.key}'),
-      title: question.profileLabel,
-      subtitle: question.prompt,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: question.options.map((option) {
-          return _ValueOptionChip(
-            key: ValueKey('value-option-${question.key}-${option.key}'),
-            label: option.label,
-            selected: option.key == selectedKey,
-            onTap: () => onSelected(option),
-          );
-        }).toList(),
-      ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          question.profileLabel,
+          style: const TextStyle(
+            fontSize: 16.5,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          question.prompt,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textMuted,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: question.options.map((option) {
+            return _ValueOptionChip(
+              key: ValueKey('value-option-${question.key}-${option.key}'),
+              label: option.label,
+              selected: option.key == selectedKey,
+              onTap: () => onSelected(option),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }

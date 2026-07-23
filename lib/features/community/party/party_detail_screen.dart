@@ -84,7 +84,10 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
   }
 
   /// 파티 액션 공통 처리. 실패해도 raw 오류는 노출하지 않는다.
-  Future<void> _run(Future<void> Function() action, String successMessage) async {
+  Future<void> _run(
+    Future<void> Function() action,
+    String successMessage,
+  ) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -238,11 +241,13 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
     final uid = _currentUid;
     return Scaffold(
       key: const ValueKey('party-detail-screen'),
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.warmCanvas,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.warmCanvas,
+        surfaceTintColor: AppColors.warmCanvas,
         elevation: 0,
-        title: const Text('파티'),
+        scrolledUnderElevation: 0,
+        title: const Text('파티', style: AppTextStyles.cardTitle),
       ),
       body: SafeArea(
         child: StreamBuilder<CommunityParty?>(
@@ -250,14 +255,13 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting &&
                 !snap.hasData) {
-              return const Center(
+              return const _PartyDetailLoading(
                 key: ValueKey('party-detail-loading'),
-                child: CircularProgressIndicator(),
               );
             }
             if (snap.hasError) {
               return Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.screenH),
                 child: PartyNotice(
                   message: '파티를 불러오지 못했어요.',
                   retryKey: const ValueKey('party-detail-retry'),
@@ -269,7 +273,7 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
             final party = snap.data;
             if (party == null) {
               return const Padding(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(AppSpacing.screenH),
                 child: PartyNotice(
                   key: ValueKey('party-detail-unavailable'),
                   message: '이 파티는 더 이상 볼 수 없어요.',
@@ -279,12 +283,21 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
 
             final isHost = uid != null && party.hostUid == uid;
             return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.screenH,
+                AppSpacing.sm,
+                AppSpacing.screenH,
+                AppSpacing.xxl,
+              ),
               children: [
-                _PartyHeader(party: party),
-                const SizedBox(height: 14),
+                _PartyHero(party: party),
+                const SizedBox(height: AppSpacing.xl),
+                _PartyAbout(party: party),
+                const SizedBox(height: AppSpacing.xl),
+                _PartyHostSection(party: party),
+                const SizedBox(height: AppSpacing.lg20),
                 const PartySafetyNotice(),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg20),
                 if (isHost)
                   _HostActions(
                     party: party,
@@ -316,55 +329,53 @@ class _PartyDetailScreenState extends State<PartyDetailScreen> {
   }
 }
 
-class _PartyHeader extends StatelessWidget {
+/// 파티 hero — 상태·제목·일정·장소·인원을 옅은 mint/coral tonal 위에서
+/// 한눈에 읽힌다. 강한 이미지나 가짜 사진은 넣지 않는다.
+class _PartyHero extends StatelessWidget {
   final CommunityParty party;
 
-  const _PartyHeader({required this.party});
+  const _PartyHero({required this.party});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       key: const ValueKey('party-detail-body'),
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.heroPadding),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.surfaceMintSoft, AppColors.surfacePrimary],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.hero),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CommunityAuthorHeader(
-            author: party.host,
-            createdAt: party.createdAt,
-            trailing: PartyStatusBadge(party: party),
+          // 상태를 정보 위계의 맨 앞에 둔다(색만이 아니라 텍스트로 표시).
+          Align(
+            alignment: Alignment.centerLeft,
+            child: PartyStatusBadge(party: party),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Text(
             party.title,
             key: const ValueKey('party-detail-title'),
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              height: 1.35,
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.screenTitle.copyWith(fontSize: 21),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.lg),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
               PartyMetaChip(
                 icon: Icons.schedule_rounded,
                 label: formatPartyStartAt(party.startAt),
                 emphasized: true,
               ),
-              PartyMetaChip(
-                icon: Icons.place_outlined,
-                label: party.areaLabel,
-              ),
+              PartyMetaChip(icon: Icons.place_outlined, label: party.areaLabel),
               PartyMetaChip(
                 icon: Icons.local_activity_outlined,
                 label: party.categoryLabel,
@@ -375,17 +386,162 @@ class _PartyHeader extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            party.description,
-            key: const ValueKey('party-detail-description'),
-            style: const TextStyle(
-              fontSize: 14.5,
-              height: 1.6,
-              color: AppColors.textPrimary,
+        ],
+      ),
+    );
+  }
+}
+
+/// 모임 설명. 카드에 가두지 않고 캔버스 위 에디토리얼 본문으로 읽게 한다.
+class _PartyAbout extends StatelessWidget {
+  final CommunityParty party;
+
+  const _PartyAbout({required this.party});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PartySectionLabel(icon: Icons.notes_rounded, label: '모임 소개'),
+        const SizedBox(height: AppSpacing.md),
+        // 설명은 잘리지 않고 전부 보여준다(maxLines 없음).
+        Text(
+          party.description,
+          key: const ValueKey('party-detail-description'),
+          style: AppTextStyles.body.copyWith(fontSize: 15.5),
+        ),
+      ],
+    );
+  }
+}
+
+/// 호스트 정보. 공개 snapshot(이름·인증 배지)만 표시하고 새 조회는 하지 않는다.
+class _PartyHostSection extends StatelessWidget {
+  final CommunityParty party;
+
+  const _PartyHostSection({required this.party});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _PartySectionLabel(
+          icon: Icons.person_outline_rounded,
+          label: '호스트',
+        ),
+        const SizedBox(height: AppSpacing.md),
+        CommunityAuthorHeader(
+          author: party.host,
+          createdAt: party.createdAt,
+          avatarRadius: 18,
+        ),
+      ],
+    );
+  }
+}
+
+/// 섹션 시작을 알리는 작은 라벨(아이콘 + 제목).
+class _PartySectionLabel extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _PartySectionLabel({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        ExcludeSemantics(
+          child: Icon(icon, size: 16, color: AppColors.brandPrimaryStrong),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Text(label, style: AppTextStyles.label),
+      ],
+    );
+  }
+}
+
+/// 상세 진입 skeleton. 이전 파티를 다시 보여주지 않는다.
+class _PartyDetailLoading extends StatelessWidget {
+  const _PartyDetailLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenH,
+        AppSpacing.lg20,
+        AppSpacing.screenH,
+        AppSpacing.xxl,
+      ),
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        // hero 자리.
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.heroPadding),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceMintSoft,
+            borderRadius: BorderRadius.circular(AppRadius.hero),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SkeletonBox(width: 52, height: 20, radius: 999),
+              SizedBox(height: AppSpacing.md),
+              _SkeletonBox(height: 20),
+              SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  _SkeletonBox(width: 96, height: 26, radius: 999),
+                  SizedBox(width: AppSpacing.sm),
+                  _SkeletonBox(width: 60, height: 26, radius: 999),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        const _SkeletonBox(width: 84, height: 14),
+        const SizedBox(height: AppSpacing.md),
+        const _SkeletonBox(height: 14),
+        const SizedBox(height: AppSpacing.sm),
+        const _SkeletonBox(width: 220, height: 14),
+        const SizedBox(height: AppSpacing.xl),
+        const _SkeletonBox(height: 52, radius: AppRadius.control),
+        const SizedBox(height: AppSpacing.xl),
+        Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.brandPrimary.withValues(alpha: 0.6),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  final double? width;
+  final double height;
+  final double radius;
+
+  const _SkeletonBox({this.width, required this.height, this.radius = 999});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.canvasSubtle,
+        borderRadius: BorderRadius.circular(radius),
       ),
     );
   }
@@ -441,8 +597,7 @@ class _HostActions extends StatelessWidget {
                 message: '참여 요청을 불러오지 못했어요.',
               );
             }
-            final requests =
-                snap.data ?? const <CommunityPartyJoinRequest>[];
+            final requests = snap.data ?? const <CommunityPartyJoinRequest>[];
             if (requests.isEmpty) {
               return const PartyNotice(
                 key: ValueKey('party-requests-empty'),

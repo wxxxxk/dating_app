@@ -9,6 +9,11 @@ import '../../../shared/widgets/premium_components.dart';
 /// 디스커버리 필터 설정 바텀시트.
 ///
 /// 저장은 호출 화면에서 처리하고, 이 위젯은 사용자가 선택한 필터만 반환한다.
+///
+/// 디자인(Phase 3-B, Editorial Match Preferences): 흰 카드가 반복되는 설정
+/// 화면 대신, 실제 적용되는 조건(나이·거리·관심 대상·관계 목표)을 하나의
+/// primary surface에 모으고, 참고용(선호 스타일)·예고(프리미엄 필터)는 divider
+/// 아래 약한 톤으로 분리한다. 값·반환·callback·문구 계약은 그대로 유지한다.
 class DiscoveryFilterSheet extends StatefulWidget {
   final DiscoveryFilter initialFilter;
   final bool hasLocation;
@@ -71,6 +76,11 @@ class _DiscoveryFilterSheetState extends State<DiscoveryFilterSheet> {
     });
   }
 
+  void _toggleUnlimited() {
+    if (!_hasLocation) return;
+    setState(() => _distanceUnlimited = !_distanceUnlimited);
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -82,175 +92,236 @@ class _DiscoveryFilterSheetState extends State<DiscoveryFilterSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(AppRadius.chip),
-                ),
-              ),
-            ),
+            const Center(child: _SheetHandle()),
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '어떤 인연을 찾고 있나요?',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      '조건은 추천 후보를 더 정교하게 만드는 데 사용돼요.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── Section 1. 기본 조건 ─────────────────────────
-                    _FilterSectionCard(
-                      title: '기본 조건',
-                      children: [
-                        _FieldLabel(
-                          title: '나이',
-                          value:
-                              '${_ageRange.start.round()}~${_ageRange.end.round()}세',
-                        ),
-                        RangeSlider(
-                          min: DiscoveryFilter.defaultAgeMin.toDouble(),
-                          max: DiscoveryFilter.defaultAgeMax.toDouble(),
-                          divisions:
-                              DiscoveryFilter.defaultAgeMax -
-                              DiscoveryFilter.defaultAgeMin,
-                          values: _ageRange,
-                          labels: RangeLabels(
-                            '${_ageRange.start.round()}세',
-                            '${_ageRange.end.round()}세',
-                          ),
-                          onChanged: (values) =>
-                              setState(() => _ageRange = values),
-                        ),
-                        const SizedBox(height: 8),
-                        _FieldLabel(
-                          title: '거리',
-                          value: _distanceUnlimited
-                              ? '무제한'
-                              : '${_maxDistanceKm.round()}km 이내',
-                        ),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: _distanceUnlimited,
-                              onChanged: _hasLocation
-                                  ? (value) {
-                                      setState(
-                                        () =>
-                                            _distanceUnlimited = value ?? true,
-                                      );
-                                    }
-                                  : null,
-                            ),
-                            const Text(
-                              '거리 제한 없음',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                          ],
-                        ),
-                        Slider(
-                          min: 1,
-                          max: 50,
-                          divisions: 49,
-                          value: _maxDistanceKm,
-                          label: '${_maxDistanceKm.round()}km',
-                          onChanged: _hasLocation && !_distanceUnlimited
-                              ? (value) =>
-                                    setState(() => _maxDistanceKm = value)
-                              : null,
-                        ),
-                        if (!_hasLocation)
-                          _LocationWarningBanner(
-                            checking: _checkingLocation,
-                            onRetry: widget.onRetryLocation == null
-                                ? null
-                                : _retryLocation,
-                            onOpenSettings: () => Geolocator.openAppSettings(),
-                          ),
-                        const SizedBox(height: 8),
-                        const _FieldLabel(title: '관심 대상'),
-                        const SizedBox(height: 10),
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(value: 'all', label: Text('전체')),
-                            ButtonSegment(value: 'female', label: Text('여성')),
-                            ButtonSegment(value: 'male', label: Text('남성')),
-                          ],
-                          selected: {_gender},
-                          onSelectionChanged: (value) {
-                            setState(() => _gender = value.first);
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        const _FieldLabel(title: '관계 목표'),
-                        const SizedBox(height: 10),
-                        _RelationshipGoalPicker(
-                          selected: _relationshipGoal,
-                          onChanged: (value) =>
-                              setState(() => _relationshipGoal = value),
-                        ),
-                      ],
-                    ),
+                    const _FilterHeader(),
+                    const SizedBox(height: 18),
+                    _buildPrimarySurface(),
+                    const SizedBox(height: 22),
+                    _buildReferenceSection(),
                     const SizedBox(height: 14),
-
-                    // ── Section 2. 선호 스타일 (참고용, 필터 아님) ─────
-                    _FilterSectionCard(
-                      title: '선호 스타일',
-                      children: [
-                        _StylePreferencePreview(profile: widget.myProfile),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // ── Section 3. 프리미엄 필터 예고 ──────────────────
                     const _PremiumFilterTeaser(),
-                    const SizedBox(height: 8),
                   ],
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context, const DiscoveryFilter());
-                      },
-                      child: const Text('초기화'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _apply,
-                      child: const Text('적용'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildActionBar(),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── 실제 적용 조건(primary surface) ──────────────────────────────────────────
+
+  Widget _buildPrimarySurface() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionEyebrow(label: '적용되는 조건'),
+          const SizedBox(height: 16),
+          _buildAgeField(),
+          const _FieldDivider(),
+          _buildDistanceField(),
+          const _FieldDivider(),
+          _buildGenderField(),
+          const _FieldDivider(),
+          _buildGoalField(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FieldLabel(
+          title: '나이',
+          value: '${_ageRange.start.round()}~${_ageRange.end.round()}세',
+        ),
+        const SizedBox(height: 2),
+        _sliderTheme(
+          child: RangeSlider(
+            min: DiscoveryFilter.defaultAgeMin.toDouble(),
+            max: DiscoveryFilter.defaultAgeMax.toDouble(),
+            divisions:
+                DiscoveryFilter.defaultAgeMax - DiscoveryFilter.defaultAgeMin,
+            values: _ageRange,
+            labels: RangeLabels(
+              '${_ageRange.start.round()}세',
+              '${_ageRange.end.round()}세',
+            ),
+            onChanged: (values) => setState(() => _ageRange = values),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDistanceField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FieldLabel(
+          title: '거리',
+          value: _distanceUnlimited ? '무제한' : '${_maxDistanceKm.round()}km 이내',
+        ),
+        const SizedBox(height: 2),
+        // 무제한이거나 위치가 없으면 slider의 시각 강도를 낮춰, 값이 활성처럼
+        // 보이지 않게 한다(상태는 onChanged=null로 이미 잠겨 있음).
+        Opacity(
+          opacity: (_distanceUnlimited || !_hasLocation) ? 0.4 : 1,
+          child: _sliderTheme(
+            child: Slider(
+              min: 1,
+              max: 50,
+              divisions: 49,
+              value: _maxDistanceKm,
+              label: '${_maxDistanceKm.round()}km',
+              onChanged: _hasLocation && !_distanceUnlimited
+                  ? (value) => setState(() => _maxDistanceKm = value)
+                  : null,
+            ),
+          ),
+        ),
+        _UnlimitedToggle(
+          value: _distanceUnlimited,
+          enabled: _hasLocation,
+          onTap: _toggleUnlimited,
+        ),
+        if (!_hasLocation) ...[
+          const SizedBox(height: 8),
+          _LocationWarningBanner(
+            checking: _checkingLocation,
+            onRetry: widget.onRetryLocation == null ? null : _retryLocation,
+            onOpenSettings: () => Geolocator.openAppSettings(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildGenderField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _FieldLabel(title: '관심 대상'),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<String>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: 'all', label: Text('전체')),
+              ButtonSegment(value: 'female', label: Text('여성')),
+              ButtonSegment(value: 'male', label: Text('남성')),
+            ],
+            selected: {_gender},
+            onSelectionChanged: (value) {
+              setState(() => _gender = value.first);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGoalField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _FieldLabel(title: '관계 목표'),
+        const SizedBox(height: 12),
+        _RelationshipGoalPicker(
+          selected: _relationshipGoal,
+          onChanged: (value) => setState(() => _relationshipGoal = value),
+        ),
+      ],
+    );
+  }
+
+  // ── 참고 정보(선호 스타일) — divider 아래 약한 톤 ────────────────────────────
+
+  Widget _buildReferenceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 1, color: AppColors.borderSubtle),
+        const SizedBox(height: 18),
+        const _SectionEyebrow(label: '내 프로필 참고'),
+        const SizedBox(height: 6),
+        const Text(
+          '선호 스타일',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _StylePreferencePreview(profile: widget.myProfile),
+      ],
+    );
+  }
+
+  // ── 하단 고정 action bar ─────────────────────────────────────────────────────
+
+  Widget _buildActionBar() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surfacePrimary,
+        border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () {
+                Navigator.pop(context, const DiscoveryFilter());
+              },
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                foregroundColor: AppColors.textBody,
+                side: const BorderSide(color: AppColors.borderStrong),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
+              child: const Text('초기화'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              onPressed: _apply,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                ),
+              ),
+              child: const Text(
+                '적용',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -269,16 +340,46 @@ class _DiscoveryFilterSheetState extends State<DiscoveryFilterSheet> {
       ),
     );
   }
+
+  /// 나이·거리 slider 공통 톤 — active는 brandPrimaryStrong, inactive는 옅은
+  /// canvasSubtle, thumb는 과한 glow 없이 명확하게. semantics는 기본 유지.
+  Widget _sliderTheme({required Widget child}) {
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        trackHeight: 4,
+        activeTrackColor: AppColors.brandPrimaryStrong,
+        inactiveTrackColor: AppColors.canvasSubtle,
+        thumbColor: AppColors.brandPrimaryStrong,
+        overlayColor: AppColors.brandPrimaryStrong.withValues(alpha: 0.12),
+        rangeThumbShape: const RoundRangeSliderThumbShape(
+          enabledThumbRadius: 9,
+        ),
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
+      ),
+      child: child,
+    );
+  }
 }
 
-/// 섹션 하나를 감싸는 카드 — surface 배경 + 얇은 테두리로 "정교한 조건 설정
-/// 화면" 느낌을 준다. 기존 앱 카드 토큰(AppRadius.card, AppColors.border)만
-/// 재사용한다.
-class _FilterSectionCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
 
-  const _FilterSectionCard({required this.title, required this.children});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 4,
+      decoration: BoxDecoration(
+        color: AppColors.borderStrong,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+    );
+  }
+}
+
+/// 시트 상단 header — 매우 옅은 mint wash + tune 아이콘 + 제목/설명.
+class _FilterHeader extends StatelessWidget {
+  const _FilterHeader();
 
   @override
   Widget build(BuildContext context) {
@@ -286,25 +387,132 @@ class _FilterSectionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: AppColors.border),
+        color: AppColors.surfaceMintSoft,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textSecondary,
-              letterSpacing: 0.3,
+          Container(
+            width: 38,
+            height: 38,
+            decoration: const BoxDecoration(
+              color: AppColors.surfacePrimary,
+              shape: BoxShape.circle,
+            ),
+            child: const ExcludeSemantics(
+              child: Icon(
+                Icons.tune_rounded,
+                size: 20,
+                color: AppColors.mintDeep,
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          ...children,
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '어떤 인연을 찾고 있나요?',
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textStrong,
+                    height: 1.2,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '조건은 추천 후보를 더 정교하게 만드는 데 사용돼요.',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: AppColors.textBody,
+                    height: 1.45,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// 섹션 구분용 작은 대문자 eyebrow(강한 카드 대신 톤/여백으로 구분).
+class _SectionEyebrow extends StatelessWidget {
+  final String label;
+  const _SectionEyebrow({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        color: AppColors.textMuted,
+        letterSpacing: 0.4,
+      ),
+    );
+  }
+}
+
+/// primary surface 내부 field 사이 subtle divider(중첩 카드 대신 여백+선으로 구분).
+class _FieldDivider extends StatelessWidget {
+  const _FieldDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 18),
+      child: Divider(height: 1, color: AppColors.borderSubtle),
+    );
+  }
+}
+
+/// 거리 제한 없음 토글 — Checkbox + Text를 하나의 tap 영역으로 정리한다.
+/// onChanged 의미(무제한 on/off)와 위치 없음 시 비활성은 그대로 유지한다.
+class _UnlimitedToggle extends StatelessWidget {
+  final bool value;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _UnlimitedToggle({
+    required this.value,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            IgnorePointer(
+              child: Checkbox(
+                value: value,
+                onChanged: enabled ? (_) {} : null,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '거리 제한 없음',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: value ? FontWeight.w700 : FontWeight.w500,
+                color: enabled ? AppColors.textStrong : AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -358,26 +566,44 @@ class _GoalChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.chip),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-        decoration: BoxDecoration(
-          color: active
-              ? AppColors.primary.withValues(alpha: 0.12)
-              : AppColors.background,
-          borderRadius: BorderRadius.circular(AppRadius.chip),
-          border: Border.all(
-            color: active ? AppColors.primary : AppColors.border,
+    return Semantics(
+      selected: active,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: active
+                ? AppColors.surfaceMintSoft
+                : AppColors.surfaceSecondary,
+            borderRadius: BorderRadius.circular(AppRadius.chip),
+            border: Border.all(
+              color: active ? AppColors.mintDeep : AppColors.borderSubtle,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: active ? FontWeight.w800 : FontWeight.w500,
-            color: active ? AppColors.primary : AppColors.textPrimary,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (active) ...[
+                const Icon(
+                  Icons.check_rounded,
+                  size: 15,
+                  color: AppColors.mintDeep,
+                ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                  color: active ? AppColors.mintDeep : AppColors.textBody,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -399,7 +625,7 @@ class _StylePreferencePreview extends StatelessWidget {
     if (p == null) {
       return const Text(
         '프로필을 불러오는 중이에요',
-        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        style: TextStyle(fontSize: 13, color: AppColors.textMuted),
       );
     }
 
@@ -420,7 +646,7 @@ class _StylePreferencePreview extends StatelessWidget {
           ' 추천 후보를 정교하게 만드는 데 참고로 쓰여요.',
           style: TextStyle(
             fontSize: 12,
-            color: AppColors.textSecondary,
+            color: AppColors.textMuted,
             height: 1.45,
           ),
         ),
@@ -428,7 +654,7 @@ class _StylePreferencePreview extends StatelessWidget {
         if (labels.isEmpty)
           const Text(
             '프로필 편집에서 태그를 추가해보세요',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
           )
         else
           Wrap(
@@ -443,15 +669,14 @@ class _StylePreferencePreview extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: AppColors.canvasSubtle,
                       borderRadius: BorderRadius.circular(AppRadius.chip),
-                      border: Border.all(color: AppColors.border),
                     ),
                     child: Text(
                       label,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: AppColors.textMuted,
                       ),
                     ),
                   ),
@@ -480,10 +705,10 @@ class _PremiumFilterTeaser extends StatelessWidget {
   }
 }
 
-/// 위치가 없어 거리 필터가 무시되고 있음을 눈에 띄게 알리는 배너.
+/// 위치가 없어 거리 필터가 무시되고 있음을 알리는 배너.
 ///
 /// 조용히 "무제한"으로 동작하는 대신, 원인(위치 없음)과 해결 방법(설정 열기 /
-/// 다시 확인)을 바로 옆에서 보여준다.
+/// 다시 확인)을 바로 옆에서 보여준다. 위험(danger red)이 아니라 안내(amber)다.
 class _LocationWarningBanner extends StatelessWidget {
   final bool checking;
   final VoidCallback? onRetry;
@@ -498,12 +723,13 @@ class _LocationWarningBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.error.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.button),
-        border: Border.all(color: AppColors.error.withValues(alpha: 0.24)),
+        color: AppColors.statusWarningSoft,
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        border: Border.all(
+          color: AppColors.statusWarning.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -514,23 +740,23 @@ class _LocationWarningBanner extends StatelessWidget {
               const Icon(
                 Icons.location_off_rounded,
                 size: 18,
-                color: AppColors.error,
+                color: AppColors.statusWarning,
               ),
               const SizedBox(width: 8),
-              Expanded(
+              const Expanded(
                 child: Text(
                   '위치 권한을 허용해야 거리 필터를 사용할 수 있어요. 지금은 거리와 '
                   '무관하게 모든 사람이 보여요.',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.5,
-                    color: AppColors.textPrimary.withValues(alpha: 0.85),
+                    color: AppColors.textBody,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Row(
             children: [
               if (onRetry != null) ...[
@@ -538,7 +764,7 @@ class _LocationWarningBanner extends StatelessWidget {
                   onPressed: checking ? null : onRetry,
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
+                    minimumSize: const Size(0, 44),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   child: checking
@@ -555,7 +781,7 @@ class _LocationWarningBanner extends StatelessWidget {
                 onPressed: onOpenSettings,
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero,
+                  minimumSize: const Size(0, 44),
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: const Text('앱 설정 열기'),
@@ -568,6 +794,8 @@ class _LocationWarningBanner extends StatelessWidget {
   }
 }
 
+/// field header — 왼쪽 label + 오른쪽 현재 값(mint). 값을 큰 badge로 과장하지
+/// 않고 compact tonal text로만 보여준다.
 class _FieldLabel extends StatelessWidget {
   final String title;
   final String? value;
@@ -583,8 +811,8 @@ class _FieldLabel extends StatelessWidget {
             title,
             style: const TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textStrong,
             ),
           ),
         ),
@@ -592,9 +820,9 @@ class _FieldLabel extends StatelessWidget {
           Text(
             value!,
             style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w600,
+              fontSize: 13.5,
+              color: AppColors.mintDeep,
+              fontWeight: FontWeight.w800,
             ),
           ),
       ],

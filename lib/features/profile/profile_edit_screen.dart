@@ -16,7 +16,6 @@ import '../../services/profile/profile_keyword_summary_service.dart';
 import '../../services/storage/profile_photo_processor.dart';
 import '../../services/storage/storage_service.dart';
 import '../../shared/widgets/loading_indicator.dart';
-import '../../shared/widgets/premium_components.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../onboarding/tag_selection_step.dart';
 import 'profile_stories_edit_screen.dart';
@@ -176,10 +175,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         Navigator.pop(context, updatedProfile);
       }
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[ProfileEdit] 프로필 저장 실패: ${e.runtimeType}');
+      }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('저장 중 오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('프로필 저장에 실패했어요. 잠시 후 다시 시도해주세요.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -224,46 +226,45 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           top: Radius.circular(AppRadius.sheet),
         ),
       ),
+      backgroundColor: AppColors.surfacePrimary,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(AppSpacing.xs),
-              ),
-            ),
-            if (index != 0)
-              ListTile(
-                leading: const Icon(
-                  Icons.star_rounded,
-                  color: AppColors.primary,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.borderStrong,
+                  borderRadius: BorderRadius.circular(AppRadius.chip),
                 ),
-                title: const Text('대표 사진으로 설정'),
-                onTap: () => Navigator.pop(ctx, 'main'),
               ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('다른 사진으로 변경'),
-              onTap: () => Navigator.pop(ctx, 'replace'),
-            ),
-            if (_photoUrls.length > 1)
-              ListTile(
-                leading: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: AppColors.error,
+              const SizedBox(height: 12),
+              if (index != 0)
+                _PhotoOptionRow(
+                  icon: Icons.star_rounded,
+                  iconColor: AppColors.mintDeep,
+                  label: '대표 사진으로 설정',
+                  onTap: () => Navigator.pop(ctx, 'main'),
                 ),
-                title: const Text(
-                  '삭제',
-                  style: TextStyle(color: AppColors.error),
-                ),
-                onTap: () => Navigator.pop(ctx, 'delete'),
+              _PhotoOptionRow(
+                icon: Icons.photo_library_outlined,
+                iconColor: AppColors.textBody,
+                label: '다른 사진으로 변경',
+                onTap: () => Navigator.pop(ctx, 'replace'),
               ),
-          ],
+              if (_photoUrls.length > 1)
+                _PhotoOptionRow(
+                  icon: Icons.delete_outline_rounded,
+                  iconColor: AppColors.error,
+                  label: '삭제',
+                  danger: true,
+                  onTap: () => Navigator.pop(ctx, 'delete'),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -314,11 +315,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           _photoUrls.add(url);
         }
       });
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('사진 업로드에 실패했어요: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('사진 업로드에 실패했어요. 잠시 후 다시 시도해주세요.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _busyPhotoIndex = null);
@@ -330,20 +331,78 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('사진 삭제'),
-        content: const Text('이 사진을 삭제할까요?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('취소'),
+        backgroundColor: AppColors.surfacePrimary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        icon: Container(
+          width: 44,
+          height: 44,
+          decoration: const BoxDecoration(
+            color: AppColors.statusDangerSoft,
+            shape: BoxShape.circle,
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: AppColors.surface,
+          child: const ExcludeSemantics(
+            child: Icon(
+              Icons.delete_outline_rounded,
+              size: 22,
+              color: AppColors.statusDanger,
             ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('삭제'),
+          ),
+        ),
+        title: const Text(
+          '사진 삭제',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+          ),
+        ),
+        content: const Text(
+          '이 사진을 삭제할까요?',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: AppColors.textBody,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textBody,
+                    side: const BorderSide(color: AppColors.borderStrong),
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                  ),
+                  child: const Text('취소'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.statusDanger,
+                    foregroundColor: AppColors.surface,
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text(
+                    '삭제',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -382,6 +441,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: AppColors.surfacePrimary,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppRadius.sheet),
@@ -395,61 +455,46 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           child: SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 8),
+                const Center(child: _SheetHandle()),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.border,
-                          borderRadius: BorderRadius.circular(AppSpacing.xs),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textStrong,
+                    ),
                   ),
                 ),
                 Flexible(
-                  child: ListView(
+                  child: ListView.separated(
                     shrinkWrap: true,
-                    children: options.map((opt) {
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: options.length,
+                    separatorBuilder: (_, _) => const Divider(
+                      height: 1,
+                      indent: 12,
+                      color: AppColors.borderSubtle,
+                    ),
+                    itemBuilder: (ctx2, i) {
+                      final opt = options[i];
                       final isSelected = opt.key == currentKey;
-                      return ListTile(
-                        title: Text(
-                          opt.label,
-                          style: TextStyle(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.textPrimary,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                        ),
-                        trailing: isSelected
-                            ? const Icon(
-                                Icons.check_rounded,
-                                color: AppColors.primary,
-                              )
-                            : null,
+                      return _ChoiceRow(
+                        label: opt.label,
+                        selected: isSelected,
                         onTap: () {
                           Navigator.pop(ctx);
                           onSelected(opt.key);
                         },
                       );
-                    }).toList(),
+                    },
                   ),
                 ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -510,13 +555,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       context,
       MaterialPageRoute(
         builder: (ctx) => Scaffold(
+          backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: Text(title),
+            title: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 21,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textStrong,
+                letterSpacing: -0.2,
+              ),
+            ),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
               onPressed: () => Navigator.pop(ctx),
             ),
-            backgroundColor: AppColors.background.withValues(alpha: 0),
+            backgroundColor: AppColors.background,
+            foregroundColor: AppColors.textStrong,
             elevation: 0,
           ),
           body: SafeArea(
@@ -526,6 +581,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               options: options,
               initialSelected: current,
               buttonLabel: '저장',
+              presentation: TagSelectionPresentation.profileEdit,
               onNext: (keys) {
                 onSaved(keys);
                 Navigator.pop(ctx);
@@ -583,12 +639,21 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     // 높이 제약이 정상적으로 동작한다. 로딩 오버레이는 body 안 Stack에서 처리한다.
     return Scaffold(
       appBar: AppBar(
-        title: const Text('프로필 편집'),
+        title: const Text(
+          '프로필 편집',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            letterSpacing: -0.2,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: _isLoading ? null : () => Navigator.pop(context),
         ),
-        backgroundColor: AppColors.background.withValues(alpha: 0),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textStrong,
         elevation: 0,
       ),
       body: Stack(
@@ -605,34 +670,47 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── 사진 ─────────────────────────────────────────────────
-                PremiumSectionCard(
+                // ── 사진 (Photo Workshop) ────────────────────────────────
+                const _StudioSectionHeader(
                   title: '사진',
                   subtitle: '첫 번째 사진이 대표 사진으로 노출돼요',
-                  child: _PhotoManagementGrid(
-                    photoUrls: _photoUrls,
-                    busyIndex: _busyPhotoIndex,
-                    onSlotTap: _handlePhotoSlotTap,
-                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                _PhotoManagementGrid(
+                  photoUrls: _photoUrls,
+                  busyIndex: _busyPhotoIndex,
+                  onSlotTap: _handlePhotoSlotTap,
+                ),
+                const SizedBox(height: 26),
 
-                // ── 기본 정보 ────────────────────────────────────────────
-                PremiumSectionCard(
-                  title: '기본 정보',
+                // ── 기본 정보 (Identity Basics Surface) ──────────────────
+                const _StudioSectionHeader(title: '기본 정보'),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfacePrimary,
+                    borderRadius: BorderRadius.circular(AppRadius.surface),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       TextField(
                         controller: _nameController,
-                        decoration: const InputDecoration(labelText: '이름'),
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          color: AppColors.textStrong,
+                        ),
+                        decoration: _studioInput('이름'),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
                       const Text(
                         '성별',
                         style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMuted,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -640,55 +718,56 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         selected: _gender,
                         onChanged: (g) => setState(() => _gender = g),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
                       TextField(
                         controller: _bioController,
-                        decoration: const InputDecoration(
-                          labelText: '한줄 소개',
-                          counterText: '',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          height: 1.5,
+                          color: AppColors.textStrong,
                         ),
+                        decoration: _studioInput('한줄 소개', counterText: ''),
                         maxLength: 100,
                         maxLines: 2,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 26),
 
-                // ── 이야기 카드 ──────────────────────────────────────────
-                PremiumSectionCard(
+                // ── 이야기 (Story Preview Entry) ─────────────────────────
+                const _StudioSectionHeader(
                   title: '나의 이야기',
                   subtitle: '상대가 대화를 시작할 수 있도록 나만의 이야기를 들려주세요',
-                  child: _ProfileStoriesSummary(
-                    stories: _profileStories,
-                    onTap: _openProfileStoriesPage,
-                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                _ProfileStoriesSummary(
+                  stories: _profileStories,
+                  onTap: _openProfileStoriesPage,
+                ),
+                const SizedBox(height: 26),
 
-                // ── 상세 정보 ────────────────────────────────────────────
-                PremiumSectionCard(
-                  title: '상세 정보',
+                // ── 상세 정보 (Facts Editor Surface) ─────────────────────
+                const _StudioSectionHeader(title: '상세 정보'),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfacePrimary,
+                    borderRadius: BorderRadius.circular(AppRadius.surface),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(
-                        controller: _heightController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(3),
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: '키 (cm)',
-                          suffixText: 'cm',
-                        ),
-                      ),
+                      _HeightRow(controller: _heightController),
+                      const _FactDivider(),
                       _EditPickerField(
                         label: '직업',
                         value: _jobDisplayText(),
                         onTap: _openJobPicker,
                       ),
+                      const _FactDivider(),
                       _EditPickerField(
                         label: '종교',
                         value: ProfileOptions.keyToLabel(
@@ -702,6 +781,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           onSelected: (k) => setState(() => _religion = k),
                         ),
                       ),
+                      const _FactDivider(),
                       _EditPickerField(
                         label: '흡연',
                         value: ProfileOptions.keyToLabel(
@@ -715,6 +795,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           onSelected: (k) => setState(() => _smoking = k),
                         ),
                       ),
+                      const _FactDivider(),
                       _EditPickerField(
                         label: '음주',
                         value: ProfileOptions.keyToLabel(
@@ -728,6 +809,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           onSelected: (k) => setState(() => _drinking = k),
                         ),
                       ),
+                      const _FactDivider(),
                       _EditPickerField(
                         label: '최종학력',
                         value: ProfileOptions.keyToLabel(
@@ -741,6 +823,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           onSelected: (k) => setState(() => _education = k),
                         ),
                       ),
+                      const _FactDivider(),
                       _EditPickerField(
                         label: 'MBTI',
                         value: _mbti,
@@ -754,17 +837,33 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 26),
 
-                // ── 태그 (관심사·성향·이상형) ────────────────────────────
-                PremiumSectionCard(
+                // ── 태그 (Identity Keywords Editor) ──────────────────────
+                const _StudioSectionHeader(
                   title: '태그',
                   subtitle: '나를 소개하고 원하는 상대를 알려주는 키워드예요',
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfacePrimary,
+                    borderRadius: BorderRadius.circular(AppRadius.surface),
+                    border: Border.all(color: AppColors.borderSubtle),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 18,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _TagSectionHeader(
+                      _TagSubSection(
                         title: '관심사',
+                        keys: _interests,
+                        options: ProfileOptions.interests,
+                        tone: _TagTone.interest,
+                        emptyText: '관심사를 추가해보세요',
                         onEdit: () => _openTagPage(
                           title: '관심사',
                           subtitle: '나의 취미·라이프스타일을 보여주세요',
@@ -773,16 +872,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           onSaved: (keys) => setState(() => _interests = keys),
                         ),
                       ),
-                      if (_interests.isEmpty)
-                        const _EmptyTagHint(text: '관심사를 추가해보세요')
-                      else
-                        _TagChipDisplay(
-                          keys: _interests,
-                          options: ProfileOptions.interests,
-                        ),
-                      const SizedBox(height: 20),
-                      _TagSectionHeader(
+                      const _TagSubDivider(),
+                      _TagSubSection(
                         title: '나를 표현하는 키워드',
+                        keys: _personalityTags,
+                        options: ProfileOptions.personalities,
+                        tone: _TagTone.personality,
+                        emptyText: '나를 표현하는 키워드를 추가해보세요',
                         onEdit: () => _openTagPage(
                           title: '성향 키워드',
                           subtitle: '나의 성격·스타일을 잘 나타내는 키워드를 골라보세요',
@@ -792,16 +888,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                               setState(() => _personalityTags = keys),
                         ),
                       ),
-                      if (_personalityTags.isEmpty)
-                        const _EmptyTagHint(text: '나를 표현하는 키워드를 추가해보세요')
-                      else
-                        _TagChipDisplay(
-                          keys: _personalityTags,
-                          options: ProfileOptions.personalities,
-                        ),
-                      const SizedBox(height: 20),
-                      _TagSectionHeader(
+                      const _TagSubDivider(),
+                      _TagSubSection(
                         title: '이런 친구를 원해요',
+                        keys: _idealTags,
+                        options: ProfileOptions.ideals,
+                        tone: _TagTone.ideal,
+                        emptyText: '원하는 친구 키워드를 추가해보세요',
                         onEdit: () => _openTagPage(
                           title: '이상형 키워드',
                           subtitle: '내가 선호하는 상대의 키워드를 선택해주세요',
@@ -810,21 +903,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           onSaved: (keys) => setState(() => _idealTags = keys),
                         ),
                       ),
-                      if (_idealTags.isEmpty)
-                        const _EmptyTagHint(text: '원하는 친구 키워드를 추가해보세요')
-                      else
-                        _TagChipDisplay(
-                          keys: _idealTags,
-                          options: ProfileOptions.ideals,
-                        ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 26),
 
-                // ── 찾는 관계 ─────────────────────────────────────────────
-                PremiumSectionCard(
-                  title: '찾는 관계',
+                // ── 찾는 관계 (Relationship Intent Surface) ──────────────
+                const _StudioSectionHeader(title: '찾는 관계'),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceMintSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.surface),
+                    border: Border.all(
+                      color: AppColors.mint.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _EditPickerField(
                     label: '어떤 인연을 찾나요?',
                     value: ProfileOptions.keyToLabel(
@@ -839,23 +934,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 26),
 
-                // ── 가치관 ────────────────────────────────────────────────
-                PremiumSectionCard(
+                // ── 가치관 (Values Preview Entry) ────────────────────────
+                const _StudioSectionHeader(
                   title: '가치관',
                   subtitle: '연애와 관계에서 중요하게 생각하는 방식을 알려주세요',
-                  child: _ValueAnswersSummary(
-                    answers: _valueAnswers,
-                    onTap: _openValueAnswersPage,
-                  ),
                 ),
-                const SizedBox(height: 32),
-
-                PrimaryButton(
-                  label: '저장',
-                  onPressed: _isLoading ? null : _save,
+                const SizedBox(height: 12),
+                _ValueAnswersSummary(
+                  answers: _valueAnswers,
+                  onTap: _openValueAnswersPage,
                 ),
+                const SizedBox(height: 28),
+                _SaveActionArea(onSave: _isLoading ? null : _save),
               ],
             ),
           ),
@@ -919,40 +1011,135 @@ class _EditPickerField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasValue = value != null && value!.isNotEmpty;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.button),
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Row(
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textStrong,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    hasValue ? value! : '선택',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: hasValue ? FontWeight.w700 : FontWeight.w500,
+                      color: hasValue
+                          ? AppColors.mintDeep
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const ExcludeSemantics(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 상세 정보 surface의 field 사이 subtle divider.
+class _FactDivider extends StatelessWidget {
+  const _FactDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, color: AppColors.borderSubtle);
+  }
+}
+
+/// 키 입력 row — label 좌측 + compact numeric field 우측. picker row와 높이를
+/// 맞춘다. controller·formatter·keyboardType·suffix 계약은 그대로 유지한다.
+class _HeightRow extends StatelessWidget {
+  final TextEditingController controller;
+
+  const _HeightRow({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            Text(
-              label,
-              style: const TextStyle(
+            const Text(
+              '키',
+              style: TextStyle(
                 fontSize: 15,
-                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textStrong,
               ),
             ),
             const Spacer(),
-            Flexible(
-              child: Text(
-                hasValue ? value! : '선택',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            SizedBox(
+              width: 118,
+              child: TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: hasValue
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(3),
+                ],
+                style: const TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textStrong,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: '선택',
+                  hintStyle: const TextStyle(color: AppColors.textMuted),
+                  suffixText: 'cm',
+                  filled: true,
+                  fillColor: AppColors.surfaceSecondary,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    borderSide: const BorderSide(
+                      color: AppColors.brandPrimaryStrong,
+                      width: 1.5,
+                    ),
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: AppColors.textSecondary,
             ),
           ],
         ),
@@ -961,16 +1148,128 @@ class _EditPickerField extends StatelessWidget {
   }
 }
 
+/// Editorial Choice Sheet의 옵션 행. 선택은 pale mint + mintDeep + check.
+class _ChoiceRow extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ChoiceRow({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 54),
+          color: selected ? AppColors.surfaceMintSoft : null,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    color: selected ? AppColors.mintDeep : AppColors.textStrong,
+                  ),
+                ),
+              ),
+              if (selected)
+                const Icon(
+                  Icons.check_rounded,
+                  size: 20,
+                  color: AppColors.mintDeep,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 바텀시트 상단 drag handle.
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 4,
+      decoration: BoxDecoration(
+        color: AppColors.borderStrong,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+    );
+  }
+}
+
 /// 태그 key 목록을 label로 변환해서 칩으로 표시한다.
+/// 태그 하위 영역별 색 역할. 관심사=옅은 민트, 성향=중립 아웃라인,
+/// 이상형=아주 옅은 coral. 데이터 처리는 tone과 무관하게 동일하다.
+enum _TagTone { interest, personality, ideal }
+
+class _TagChipStyle {
+  final Color background;
+  final Color border;
+  final Color text;
+
+  const _TagChipStyle({
+    required this.background,
+    required this.border,
+    required this.text,
+  });
+
+  static _TagChipStyle of(_TagTone tone) {
+    switch (tone) {
+      case _TagTone.interest:
+        return const _TagChipStyle(
+          background: AppColors.mintSoft,
+          border: AppColors.mintSoft,
+          text: AppColors.mintDeep,
+        );
+      case _TagTone.personality:
+        return const _TagChipStyle(
+          background: AppColors.surface,
+          border: AppColors.borderStrong,
+          text: AppColors.textStrong,
+        );
+      case _TagTone.ideal:
+        return const _TagChipStyle(
+          background: AppColors.expressiveAccentSoft,
+          border: AppColors.expressiveAccentSoft,
+          text: AppColors.expressiveAccent,
+        );
+    }
+  }
+}
+
 class _TagChipDisplay extends StatelessWidget {
   final List<String> keys;
   final List<TagOption> options;
+  final _TagTone tone;
 
-  const _TagChipDisplay({required this.keys, required this.options});
+  const _TagChipDisplay({
+    required this.keys,
+    required this.options,
+    this.tone = _TagTone.interest,
+  });
 
   @override
   Widget build(BuildContext context) {
     final labels = ProfileOptions.keysToLabels(options, keys);
+    final style = _TagChipStyle.of(tone);
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -979,18 +1278,16 @@ class _TagChipDisplay extends StatelessWidget {
             (label) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: style.background,
                 borderRadius: BorderRadius.circular(AppRadius.chip),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: style.border),
               ),
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w500,
+                  color: style.text,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -1000,8 +1297,120 @@ class _TagChipDisplay extends StatelessWidget {
   }
 }
 
-/// 가치관 카드 본문. 응답 수 요약 + 앞쪽 답변 미리보기 + 진입 버튼을 담는다.
-/// 카드 전체가 탭 영역이며, 탭하면 전용 편집 화면으로 이동한다.
+/// 태그 continuous surface 안에서 하위 영역(관심사/성향/이상형)을 나누는
+/// 얇은 구분선. 좌우 padding은 surface가 이미 가지므로 여기선 세로 여백만.
+class _TagSubDivider extends StatelessWidget {
+  const _TagSubDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 18),
+      child: Divider(height: 1, color: AppColors.borderSubtle),
+    );
+  }
+}
+
+/// 태그 한 하위 영역 — 소제목 + 편집 + 선택 chip(또는 빈 상태 문구).
+class _TagSubSection extends StatelessWidget {
+  final String title;
+  final List<String> keys;
+  final List<TagOption> options;
+  final _TagTone tone;
+  final String emptyText;
+  final VoidCallback onEdit;
+
+  const _TagSubSection({
+    required this.title,
+    required this.keys,
+    required this.options,
+    required this.tone,
+    required this.emptyText,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _TagSectionHeader(title: title, onEdit: onEdit),
+        if (keys.isEmpty)
+          _EmptyTagHint(text: emptyText)
+        else
+          _TagChipDisplay(keys: keys, options: options, tone: tone),
+      ],
+    );
+  }
+}
+
+/// 이야기·가치관 요약이 공통으로 쓰는 진입 surface. 밝은 흰 표면 전체가
+/// 탭 영역이며, ripple이 표면을 덮는다. [entryKey]는 InkWell에 부여해
+/// 부모 테스트가 진입 영역을 찾을 수 있게 한다.
+class _PreviewEntrySurface extends StatelessWidget {
+  final Key entryKey;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _PreviewEntrySurface({
+    required this.entryKey,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(AppRadius.surface);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.surfacePrimary,
+        borderRadius: radius,
+        border: Border.all(color: AppColors.borderSubtle),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: entryKey,
+          onTap: onTap,
+          borderRadius: radius,
+          child: Padding(padding: const EdgeInsets.all(16), child: child),
+        ),
+      ),
+    );
+  }
+}
+
+/// 요약 하단의 진입 CTA 행(라벨 + chevron). 실제 이동이 있는 유일한 action.
+class _PreviewCtaRow extends StatelessWidget {
+  final String label;
+
+  const _PreviewCtaRow({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            color: AppColors.mintDeep,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const Spacer(),
+        const Icon(
+          Icons.chevron_right_rounded,
+          size: 18,
+          color: AppColors.textMuted,
+        ),
+      ],
+    );
+  }
+}
+
+/// 가치관 요약(Values Preview Entry). 응답 수 요약 + 앞쪽 답변 미리보기 +
+/// 진입 CTA를 밝은 표면 하나에 담는다. 표면 전체가 탭 영역이다.
 class _ValueAnswersSummary extends StatelessWidget {
   final Map<String, String> answers;
   final VoidCallback onTap;
@@ -1028,75 +1437,109 @@ class _ValueAnswersSummary extends StatelessWidget {
     final preview = answered.take(maxPreview).toList();
     final remaining = count - preview.length;
 
-    return InkWell(
-      key: const ValueKey('value-answers-edit-entry'),
+    return _PreviewEntrySurface(
+      entryKey: const ValueKey('value-answers-edit-entry'),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.button),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (!hasAny)
-              const Text(
-                '아직 답변한 가치관 질문이 없어요',
-                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              )
-            else ...[
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!hasAny)
+            const Text(
+              '아직 답변한 가치관 질문이 없어요',
+              style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+            )
+          else ...[
+            _CountLabel(text: '$count / $total 답변'),
+            const SizedBox(height: 12),
+            for (var i = 0; i < preview.length; i++) ...[
+              if (i > 0) const _PreviewDivider(),
+              _ValuePreviewRow(
+                question: ValueQuestions.byKey(preview[i].key)!.profileLabel,
+                answer: ValueQuestions.answerLabel(
+                  preview[i].key,
+                  preview[i].value,
+                )!,
+              ),
+            ],
+            if (remaining > 0) ...[
+              const SizedBox(height: 6),
               Text(
-                '$count / $total 답변',
+                '외 $remaining개',
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.mintDeep,
+                  color: AppColors.textMuted,
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final entry in preview)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '${ValueQuestions.byKey(entry.key)!.profileLabel} · '
-                    '${ValueQuestions.answerLabel(entry.key, entry.value)!}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-              if (remaining > 0)
-                Text(
-                  '외 $remaining개',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  hasAny ? '수정하기' : '답변하기',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary,
-                ),
-              ],
-            ),
           ],
-        ),
+          const SizedBox(height: 14),
+          _PreviewCtaRow(label: hasAny ? '수정하기' : '답변하기'),
+        ],
       ),
+    );
+  }
+}
+
+/// 응답 수/작성 수 compact 민트 라벨.
+class _CountLabel extends StatelessWidget {
+  final String text;
+
+  const _CountLabel({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
+        color: AppColors.mintDeep,
+      ),
+    );
+  }
+}
+
+/// 요약 미리보기 항목 사이 얇은 구분선.
+class _PreviewDivider extends StatelessWidget {
+  const _PreviewDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 10),
+      child: Divider(height: 1, color: AppColors.borderSubtle),
+    );
+  }
+}
+
+/// 가치관 미리보기 한 줄 — 질문(textMuted) · 답변(textStrong).
+class _ValuePreviewRow extends StatelessWidget {
+  final String question;
+  final String answer;
+
+  const _ValuePreviewRow({required this.question, required this.answer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$question · ',
+            style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+          ),
+          TextSpan(
+            text: answer,
+            style: const TextStyle(
+              fontSize: 14,
+              color: AppColors.textStrong,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }
@@ -1135,90 +1578,63 @@ class _ProfileStoriesSummary extends StatelessWidget {
     final preview = visibleStories.take(maxPreview).toList();
     final remaining = count - preview.length;
 
-    return InkWell(
-      key: const ValueKey('profile-stories-edit-entry'),
+    return _PreviewEntrySurface(
+      entryKey: const ValueKey('profile-stories-edit-entry'),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.button),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (!hasAny)
-              const Text(
-                '아직 작성한 이야기가 없어요',
-                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              )
-            else ...[
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!hasAny)
+            const Text(
+              '아직 작성한 이야기가 없어요',
+              style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+            )
+          else ...[
+            _CountLabel(text: '$count / ${ProfileStoryPrompts.maxStories}개 작성'),
+            const SizedBox(height: 12),
+            for (var i = 0; i < preview.length; i++) ...[
+              if (i > 0) const _PreviewDivider(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ProfileStoryPrompts.labelFor(preview[i].promptKey) ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.expressiveAccent,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    preview[i].answer,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textStrong,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (remaining > 0) ...[
+              const SizedBox(height: 8),
               Text(
-                '$count / ${ProfileStoryPrompts.maxStories}개 작성',
+                '외 $remaining개',
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.mintDeep,
+                  color: AppColors.textMuted,
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final story in preview)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        ProfileStoryPrompts.labelFor(story.promptKey) ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        story.answer,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (remaining > 0)
-                Text(
-                  '외 $remaining개',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  hasAny ? '수정하기' : '작성하기',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: AppColors.textSecondary,
-                ),
-              ],
-            ),
           ],
-        ),
+          const SizedBox(height: 14),
+          _PreviewCtaRow(label: hasAny ? '수정하기' : '작성하기'),
+        ],
       ),
     );
   }
@@ -1235,6 +1651,137 @@ class _EmptyTagHint extends StatelessWidget {
       style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
     );
   }
+}
+
+/// 편집 studio의 섹션 헤더(제목 + 선택 subtitle). 반복 카드 대신 여백/타이포로
+/// 구분하는 상단 섹션(사진·기본 정보)에서 쓴다.
+class _StudioSectionHeader extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+
+  const _StudioSectionHeader({required this.title, this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            letterSpacing: -0.2,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 편집 화면의 마지막 저장 영역(Calm Save Closure). 얇은 상단 divider로 편집
+/// 흐름을 마무리하고, 기존 [PrimaryButton]과 저장 콜백·label을 그대로 쓴다.
+/// [onSave]가 null이면(저장 중) 버튼이 비활성화된다.
+class _SaveActionArea extends StatelessWidget {
+  final VoidCallback? onSave;
+
+  const _SaveActionArea({required this.onSave});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(height: 1, color: AppColors.borderSubtle),
+        const SizedBox(height: 20),
+        PrimaryButton(label: '저장', onPressed: onSave),
+      ],
+    );
+  }
+}
+
+/// 사진 옵션 시트의 action 행(대표 설정 / 변경 / 삭제). 반환값은 호출부가
+/// 그대로 pop 한다 — 삭제만 danger 톤이고, 행 전체 danger 배경은 쓰지 않는다.
+class _PhotoOptionRow extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final bool danger;
+  final VoidCallback onTap;
+
+  const _PhotoOptionRow({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 54),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, size: 21, color: iconColor),
+              const SizedBox(width: 14),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: danger ? AppColors.error : AppColors.textStrong,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 기본 정보 입력 데코레이션 — filled neutral + focus mint. error는 theme 유지.
+InputDecoration _studioInput(String label, {String? counterText}) {
+  return InputDecoration(
+    labelText: label,
+    counterText: counterText,
+    labelStyle: const TextStyle(color: AppColors.textMuted),
+    filled: true,
+    fillColor: AppColors.surfaceSecondary,
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      borderSide: BorderSide.none,
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      borderSide: const BorderSide(
+        color: AppColors.brandPrimaryStrong,
+        width: 1.5,
+      ),
+    ),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      borderSide: BorderSide.none,
+    ),
+  );
 }
 
 class _GenderSelector extends StatelessWidget {
@@ -1255,30 +1802,52 @@ class _GenderSelector extends StatelessWidget {
         return Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: GestureDetector(
-              onTap: () => onChanged(value),
-              child: AnimatedContainer(
-                duration: AppDurations.fast,
-                alignment: Alignment.center,
-                height: 44,
-                decoration: BoxDecoration(
-                  // 선택 상태 문법: 민트 fill + 다크 잉크 텍스트
-                  color: isSelected ? AppColors.mint : AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.button),
-                  border: Border.all(
-                    color: isSelected ? AppColors.mint : AppColors.border,
-                  ),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
+            child: Semantics(
+              selected: isSelected,
+              button: true,
+              label: label,
+              child: GestureDetector(
+                onTap: () => onChanged(value),
+                child: AnimatedContainer(
+                  duration: AppDurations.fast,
+                  alignment: Alignment.center,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    // 선택 상태: pale mint + mintDeep 텍스트 + check.
                     color: isSelected
-                        ? AppColors.onMint
-                        : AppColors.textPrimary,
-                    fontWeight: isSelected
-                        ? FontWeight.w600
-                        : FontWeight.normal,
-                    fontSize: 14,
+                        ? AppColors.surfaceMintSoft
+                        : AppColors.surfaceSecondary,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.mintDeep
+                          : AppColors.borderSubtle,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isSelected) ...[
+                        const Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: AppColors.mintDeep,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: isSelected
+                              ? AppColors.mintDeep
+                              : AppColors.textBody,
+                          fontWeight: isSelected
+                              ? FontWeight.w800
+                              : FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1342,71 +1911,100 @@ class _PhotoSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: busy ? null : onTap,
-      borderRadius: BorderRadius.circular(AppRadius.card),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (url != null)
-                Image.network(
-                  url!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const Icon(
-                    Icons.broken_image_rounded,
-                    color: AppColors.textSecondary,
+    final hasPhoto = url != null;
+    return Semantics(
+      button: true,
+      label: hasPhoto ? (isMain ? '대표 사진' : '사진') : '사진 추가',
+      child: InkWell(
+        onTap: busy ? null : onTap,
+        borderRadius: BorderRadius.circular(AppRadius.surface),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.surface),
+          child: Container(
+            decoration: BoxDecoration(
+              // 등록: 흰 배경 / 빈 슬롯: 옅은 mint로 "사진 추가" 자리임을 표현.
+              color: hasPhoto
+                  ? AppColors.surfacePrimary
+                  : AppColors.surfaceMintSoft,
+              border: Border.all(
+                color: hasPhoto
+                    ? AppColors.borderSubtle
+                    : AppColors.mint.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasPhoto)
+                  Image.network(
+                    url!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const ColoredBox(
+                      color: AppColors.surfaceSecondary,
+                      child: Icon(
+                        Icons.broken_image_rounded,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  )
+                else
+                  const Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        color: AppColors.mintDeep,
+                        size: 26,
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        '사진 추가',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.mintDeep,
+                        ),
+                      ),
+                    ],
                   ),
-                )
-              else
-                const Icon(
-                  Icons.add_photo_alternate_outlined,
-                  color: AppColors.textSecondary,
-                  size: 28,
-                ),
-              if (isMain && url != null)
-                Positioned(
-                  left: 6,
-                  top: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.ink.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(AppRadius.chip),
-                    ),
-                    child: const Text(
-                      '대표',
-                      style: TextStyle(
-                        color: AppColors.surface,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                if (isMain && hasPhoto)
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.ink.withValues(alpha: 0.62),
+                        borderRadius: BorderRadius.circular(AppRadius.chip),
+                      ),
+                      child: const Text(
+                        '대표',
+                        style: TextStyle(
+                          color: AppColors.surface,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              if (busy)
-                Container(
-                  color: AppColors.ink.withValues(alpha: 0.35),
-                  alignment: Alignment.center,
-                  child: const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.surface,
+                if (busy)
+                  Container(
+                    color: AppColors.ink.withValues(alpha: 0.32),
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.mint,
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

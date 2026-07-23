@@ -122,17 +122,17 @@ class PartyCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       key: ValueKey('party-card-${party.id}'),
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.card),
+      color: AppColors.surfacePrimary,
+      borderRadius: BorderRadius.circular(AppRadius.surface),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.card),
+        borderRadius: BorderRadius.circular(AppRadius.surface),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(AppRadius.surface),
+            border: Border.all(color: AppColors.borderSubtle),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,18 +143,14 @@ class PartyCard extends StatelessWidget {
                 avatarRadius: 14,
                 trailing: PartyStatusBadge(party: party),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.md),
               Text(
                 party.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
+                style: AppTextStyles.cardTitle.copyWith(fontSize: 15.5),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.md),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,

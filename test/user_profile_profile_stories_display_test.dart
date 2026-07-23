@@ -157,7 +157,7 @@ void main() {
       expect(find.text('happy_moment'), findsNothing);
     });
 
-    testWidgets('이야기 카드는 다크 배경용 semantic color를 사용한다', (tester) async {
+    testWidgets('이야기 카드는 밝은 배경용 semantic color를 사용한다', (tester) async {
       final profile = _profile(
         profileStories: const [
           ProfileStory(promptKey: 'happy_moment', answer: '맛있는 것을 먹을 때예요.'),
@@ -168,19 +168,18 @@ void main() {
       await tester.pumpAndSettle();
       await _scrollToStories(tester);
 
+      // Phase 4-B: 어두운 독립 카드 → 밝은 interview surface 항목으로 전환.
       final card = tester.widget<Container>(_card('happy_moment'));
       final decoration = card.decoration as BoxDecoration;
-      expect(decoration.color, AppColors.surfaceElevated);
-      final border = decoration.border as Border;
-      expect(border.top.color, AppColors.nightBorder);
+      expect(decoration.color, AppColors.surfacePrimary);
 
       final question = tester.widget<Text>(_promptLabel('happy_moment'));
-      expect(question.style?.color, AppColors.mint);
-      expect(question.style?.color, isNot(AppColors.textPrimary));
+      expect(question.style?.color, AppColors.expressiveAccent);
+      expect(question.style?.color, isNot(AppColors.textOnDark));
 
       final answer = tester.widget<Text>(_answerLabel('happy_moment'));
-      expect(answer.style?.color, AppColors.textOnDark);
-      expect(answer.style?.color, isNot(AppColors.textPrimary));
+      expect(answer.style?.color, AppColors.textStrong);
+      expect(answer.style?.color, isNot(AppColors.textOnDark));
 
       final sectionTitle = tester.widget<Text>(find.text('이 사람의 이야기'));
       expect(sectionTitle.style?.color, AppColors.textPrimary);

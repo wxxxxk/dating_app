@@ -35,93 +35,160 @@ class _JobCategoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('직업'),
+        title: const Text(
+          '직업',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            letterSpacing: -0.2,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: AppColors.background.withValues(alpha: 0),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textStrong,
         elevation: 0,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.fromLTRB(24, 16, 24, 20),
+            padding: EdgeInsets.fromLTRB(20, 12, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '어떤 일을 하고 있나요?',
                   style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textStrong,
+                    height: 1.2,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: 6),
                 Text(
                   '카테고리를 선택하면 세부 직업명을 입력할 수 있어요',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
+                  style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: ProfileOptions.jobCategoryOptions.length,
-              itemBuilder: (ctx, i) {
-                final opt = ProfileOptions.jobCategoryOptions[i];
-                final isSelected = opt.key == initialCategoryKey;
-                return ListTile(
-                  title: Text(
-                    opt.label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: isSelected
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.surfacePrimary,
+                  borderRadius: BorderRadius.circular(AppRadius.surface),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  itemCount: ProfileOptions.jobCategoryOptions.length,
+                  separatorBuilder: (_, _) => const Divider(
+                    height: 1,
+                    indent: 16,
+                    color: AppColors.borderSubtle,
                   ),
-                  trailing: isSelected
-                      ? const Icon(
-                          Icons.check_rounded,
-                          color: AppColors.primary,
-                        )
-                      : const Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppColors.textSecondary,
-                          size: 20,
-                        ),
-                  onTap: () async {
-                    final title = await Navigator.push<String>(
-                      ctx,
-                      MaterialPageRoute(
-                        builder: (_) => _JobTitlePage(
-                          categoryKey: opt.key,
-                          categoryLabel: opt.label,
-                          // 카테고리가 바뀌면 기존 직업명 초기화
-                          initialTitle: isSelected ? initialTitle : null,
-                        ),
-                      ),
+                  itemBuilder: (ctx, i) {
+                    final opt = ProfileOptions.jobCategoryOptions[i];
+                    final isSelected = opt.key == initialCategoryKey;
+                    return _JobCategoryRow(
+                      label: opt.label,
+                      selected: isSelected,
+                      onTap: () async {
+                        final title = await Navigator.push<String>(
+                          ctx,
+                          MaterialPageRoute(
+                            builder: (_) => _JobTitlePage(
+                              categoryKey: opt.key,
+                              categoryLabel: opt.label,
+                              // 카테고리가 바뀌면 기존 직업명 초기화
+                              initialTitle: isSelected ? initialTitle : null,
+                            ),
+                          ),
+                        );
+                        if (title != null && ctx.mounted) {
+                          // 선택 완료: 카테고리+직업명을 들고 카테고리 페이지도 닫는다
+                          Navigator.pop(ctx, (
+                            categoryKey: opt.key,
+                            title: title,
+                          ));
+                        }
+                      },
                     );
-                    if (title != null && ctx.mounted) {
-                      // 선택 완료: 카테고리+직업명을 들고 카테고리 페이지도 닫는다
-                      Navigator.pop(ctx, (categoryKey: opt.key, title: title));
-                    }
                   },
-                );
-              },
+                ),
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 직업 카테고리 목록의 한 행. 선택된 카테고리는 pale mint + mintDeep + check,
+/// 나머지는 deep charcoal + neutral chevron. label의 기존 장식 문자열은 그대로.
+class _JobCategoryRow extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _JobCategoryRow({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          color: selected ? AppColors.surfaceMintSoft : null,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    color: selected ? AppColors.mintDeep : AppColors.textStrong,
+                  ),
+                ),
+              ),
+              if (selected)
+                const Icon(
+                  Icons.check_rounded,
+                  size: 20,
+                  color: AppColors.mintDeep,
+                )
+              else
+                const ExcludeSemantics(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -173,64 +240,97 @@ class _JobTitlePageState extends State<_JobTitlePage> {
     final categoryName = spaceIdx != -1 ? label.substring(spaceIdx + 1) : label;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text('직업명'),
+        title: const Text(
+          '직업명',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textStrong,
+            letterSpacing: -0.2,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        backgroundColor: AppColors.background.withValues(alpha: 0),
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textStrong,
         elevation: 0,
       ),
       // SingleChildScrollView로 감싸서 키보드가 올라올 때 콘텐츠가 밀리지 않게
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 선택된 카테고리 뱃지
+            // 선택된 카테고리 뱃지 (pale mint)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: AppColors.surfaceMintSoft,
                 borderRadius: BorderRadius.circular(AppRadius.chip),
               ),
               child: Text(
                 categoryName,
                 style: const TextStyle(
-                  fontSize: 14,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 13.5,
+                  color: AppColors.mintDeep,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 22),
             const Text(
               '직업명은 무엇인가요?',
               style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+                fontSize: 23,
+                fontWeight: FontWeight.w900,
+                color: AppColors.textStrong,
+                height: 1.2,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             const Text(
               '구체적인 직업명을 입력해주세요',
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
             TextField(
               controller: _controller,
               autofocus: true,
               textInputAction: TextInputAction.done,
               maxLength: 30,
               onSubmitted: (_) => _save(),
+              style: const TextStyle(
+                fontSize: 15.5,
+                color: AppColors.textStrong,
+              ),
               decoration: InputDecoration(
                 hintText: _hintText(widget.categoryKey),
+                hintStyle: const TextStyle(color: AppColors.textMuted),
+                filled: true,
+                fillColor: AppColors.surfaceSecondary,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  borderSide: const BorderSide(
+                    color: AppColors.brandPrimaryStrong,
+                    width: 1.5,
+                  ),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.control),
+                  borderSide: BorderSide.none,
+                ),
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
             PrimaryButton(label: '저장', onPressed: _save),
           ],
         ),
